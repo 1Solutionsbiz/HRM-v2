@@ -1,0 +1,19 @@
+{
+  "name": "hrm-v2",
+  "private": true,
+  "description": "HRM V2 - 1Solutions. Not an npm workspace: apps/web and apps/api each keep their own independent node_modules and lockfile. These scripts are just convenience wrappers.",
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:api": "npm --prefix apps/api run start:dev",
+    "build:web": "npm --prefix apps/web run build",
+    "build:api": "npm --prefix apps/api run build",
+    "lint:web": "npm --prefix apps/web run lint",
+    "lint:api": "npm --prefix apps/api run lint",
+    "test:api": "npm --prefix apps/api run test",
+    "install:web": "npm --prefix apps/web install",
+    "install:api": "npm --prefix apps/api install",
+    "install:all": "npm run install:web && npm run install:api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  }
+}

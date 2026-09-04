@@ -1,0 +1,36 @@
+name: hrm-v2-dev
+
+# Local development infrastructure only.
+# Never point this compose file, or any service in it, at production data.
+# The application must never connect directly to the production HRM database.
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: hrm_v2_dev
+      MYSQL_USER: hrm_v2
+      MYSQL_PASSWORD: hrm_v2_dev_password
+      MYSQL_ROOT_PASSWORD: hrm_v2_dev_root_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - hrm_v2_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - hrm_v2_redis_data:/data
+
+volumes:
+  hrm_v2_mysql_data:
+  hrm_v2_redis_data:
