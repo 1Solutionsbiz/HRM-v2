@@ -4,19 +4,164 @@ Keep this file current at the end of every work session. It exists so any
 session (or person) can tell at a glance what exists, what's mid-flight, and
 what hasn't been started — without re-deriving it from git history.
 
-**Current phase:** Backend (`apps/api`), module-by-module build-out.
+**Current phase:** Live in production. Backend and frontend are both deployed
+on Hostinger and connected to a real MySQL database; real legacy-HRM data has
+been imported; the frontend is being wired to the real API screen-by-screen
+(Employees done, everything else still mock — see "Frontend ↔ API wiring"
+below).
+
+**⚠️ Superseded throughout this file:** every module note below that says
+"still nothing against real MySQL" / "no live database in this environment"
+was true when written (no Docker/MySQL in the dev sandbox) but is **no
+longer true as of 2026-09-05** — see "Deployment" and "Data migration"
+below. Those notes are left as-is because they accurately describe how each
+module was built and unit/e2e-tested in isolation; just don't read the MySQL
+caveat as current status.
 
 **Deployment constraint to not miss:** the API host's system timezone must
 match `CompanySettings.timezone` (default Asia/Kolkata). Attendance derives
 "today" and late/on-time classification from the process's local clock —
 see module 05's notes below for the specific failure mode on a mismatched
-host.
+host. (Hostinger's `hrm-api` host timezone has not been explicitly verified
+against this requirement — check before trusting any Attendance data.)
 
-## Frontend (`apps/web`) — done, mock-data only
+## Deployment (2026-09-05)
+
+Both apps are live on the user's existing Hostinger "Cloud Professional"
+account, as Node.js Web Apps, deployed via a GitHub App connected to
+`1Solutionsbiz/HRM-v2` (push to `main` → auto-redeploy):
+
+- **Frontend**: `https://hrm.1solutions.biz` (Next.js, custom `server.js`
+  entry point — `next start` doesn't fit Hostinger's "start file" model)
+- **API**: `https://hrm-api.1solutions.biz` (NestJS, `dist/main.js`)
+- **Database**: real MariaDB on Hostinger (`u447604075_hrmv2`), connected via
+  its literal IPv4 address (not hostname — the hostname resolves dual-stack
+  and IPv6 isn't in the Remote MySQL allowlist). The app server's own
+  outbound IP is allowlisted via "Any Host" on this specific database (not
+  the shadow database) — **this must stay enabled for the app to keep
+  working**, it's not a one-time migration step.
+- Four real deployment bugs found and fixed in the process (all committed):
+  build-command scoping (Hostinger's creation-wizard dropdown reads the
+  wrong `package.json`; fixed via the site's own "Settings and redeploy"
+  page), `NODE_ENV=production` making `npm install` skip devDependencies
+  (`@nestjs/cli` needed at build time — removed the env var), the generated
+  Prisma Client never being generated on a fresh checkout (added a
+  `postinstall` script), and a top-level `await` in `main.ts` breaking under
+  Hostinger's CommonJS `require()`-based loader (`bootstrap().catch(...)`
+  instead of `await bootstrap()`).
+- CORS is a single explicit origin (`WEB_ORIGIN=https://hrm.1solutions.biz`)
+  — this means the production API is **not reachable from a local dev
+  frontend** (`localhost:3100` gets no CORS headers, `/auth/me` fails
+  silently and clears stored tokens). To point local dev at the real API
+  for testing, set `NEXT_PUBLIC_API_URL=https://hrm-api.1solutions.biz` in
+  `apps/web/.env.local` (gitignored) and restart the dev server — but you
+  still can't log in from there due to CORS; that only works for
+  already-authenticated-elsewhere testing patterns, not a real login flow.
+
+## Data migration (2026-09-05)
+
+Real data from the legacy PHP HRM (`1Solutionsbiz/HRM`, live at
+`hrmpulse.com`) has been imported into the production database, via two
+idempotent scripts that parse a phpMyAdmin dump directly rather than
+executing it as SQL (`apps/api/prisma/import-legacy-spine.ts`,
+`import-legacy-phase2.ts` — safe to re-run against a newer dump; each wipes
+only the rows it owns before reimporting).
+
+**Imported and verified** (row counts independently confirmed via raw SQL,
+not just script output — a first Phase-1 run silently crashed partway
+through at 14/41 employees and was caught this way, not by trusting the
+script's own success message):
+
+| What | Count | Source |
+|---|---:|---|
+| Company profile | 1 | `companies` |
+| Departments | 5 | `hrm_department` |
+| Designations | 16 | `hrm_designation` (one resolved via actual employee data, not the placeholder `department_name` legacy had for it) |
+| Employees | 41 (25 active / 16 ex) | `hrm_employee` — passwords rehashed with the real `scrypt` hasher, not migrated in plaintext |
+| Manager links | 25 | `hrm_reporting_manager` |
+| Holidays | 9/9 | `hrm_holidays` |
+| Education records | 27/32 | `hrm_employee_education` (5 skipped: reference legacy employee ids that no longer exist anywhere in `hrm_employee`) |
+| Bank details (encrypted) | 25/29 | `hrm_bank_detail` (4 skipped: empty/corrupted rows or `emp_id=0`) |
+| Emergency contacts | 19 | `hrm_employee_family`, **not** `hrm_employee_emergency_contact` (that table is empty/unused in the live legacy app — confirmed by comparing against what the legacy profile page actually renders) |
+| Leave types | 3/3 | `hrm_leave_type` |
+| Leave requests | 176/176 | `hrm_leave_applied` |
+| Leave balances | 46 (computed) | derived from approved-request history, since legacy never had a balance table |
+| Expense categories | 21/21 | `expense_categories` |
+| Expense claims | 79/98 | `employee_expenses` (19 skipped: `employee_id = NULL` in legacy itself) |
+| Salary structures | 14 | `salary_managment` |
+| Salary revisions | 21 | `salary_managment` (full history, not just current) |
+| Payslips | 24/24 | `salary_slip_generate` |
+
+**Known, permanent structural gaps** (V2 schema can't represent these, not
+an import failure):
+- Legacy allows multiple emergency contacts per employee; V2's
+  `EmployeeEmergencyContact` is 1-per-employee (`@unique employeeId`). The
+  import keeps the best single contact per employee and drops the rest —
+  logged per employee in the run's report file.
+- Social media links, employee free-text history, internal transfer
+  history, sub-departments, family/dependent records beyond one emergency
+  contact, POSH complaints, advance salary/deductions, IT/HR tickets,
+  EOM/quiz gamification, chat, company policy documents, offboarding
+  checklists — none of these have a V2 model. Full inventory and legacy row
+  counts for each were audited against the live dump; ask if this list is
+  needed again.
+
+**Not yet imported** (V2 has the schema, data hasn't been pulled over):
+attendance history (`newuser_attendance` / the 72-col wide machine-import
+table / mismatch flags — the hardest transform, needs real work, not
+started), actual document files (`Asset` and `EmployeeDocument` models
+exist but have zero imported rows — `hrm_assets`/`hrm_asset_assignments`
+and the legacy document tables were never run through an import script),
+announcements, onboarding step progress, device/login history.
+
+**Schema additions made to close a gap against the legacy profile page**
+(migration `20260905142756_add_employee_personal_education_assets`,
+applied): `Employee.gender`/`nationality`/`religion`/`maritalStatus`/`bloodGroup`,
+plus new `EmployeeEducation` (list, normalized — legacy had one row per
+employee) and `Asset` (flat per-employee assignment, matching legacy's
+Assets tab exactly) models. This retroactively updates the "Not started"
+call above for modules 12/13 for the **Assets** half only: the schema now
+exists (unlike the original decision to defer it with "no schema model
+exists"), though the dedicated Assets *module* (CRUD endpoints beyond what
+`EmployeesService`'s `include` already returns) still doesn't. Complaints
+(13) remains fully deferred, no schema, no change.
+
+## Frontend ↔ API wiring (started 2026-09-05)
+
+The frontend was 100% mock-data-driven except auth (login/me/logout, wired
+earlier — see "Frontend auth wiring" below) until this pass. Wiring proceeds
+screen-by-screen; a screen isn't "done" until it's been clicked through live
+on `hrm.1solutions.biz` against real production data, not just typechecked.
+
+| Screen | Status |
+|---|---|
+| Login / auth | ✓ wired (see notes below) |
+| Employees (list + detail) | ✓ wired — `lib/api/employees.ts`, verified live: real names/departments/status, decrypted-and-masked bank details, real education records, correct empty states for not-yet-imported data (assets, documents, some emergency contacts) |
+| Everything else (Dashboard, Attendance, Leave, Expenses, Payslips, Documents, Performance, Announcements, Requests, Profile, Notifications, Settings, Onboarding, Resignations, Salary, Payroll, Admin, Audit) | ○ still mock |
+
+**Bug found and fixed while wiring Employees**: `EmployeesService`'s
+`findOne()` (`GET /employees/:id`) was missing `user` (so no work email at
+all on the detail view), `education`, `assets`, and `documents` from its
+Prisma `include` — only `findAll()`'s separate `select` had `user.email`.
+Fixed by extending `EMPLOYEE_INCLUDE`; this shipped as part of today's
+schema-addition deploy, not a separate one.
+
+**Verification method note for future wiring passes**: the production API's
+CORS restriction (see Deployment) blocks testing from a local dev frontend
+against the real API. What worked: mint a real `Session` row + matching
+JWT directly via Prisma/`jsonwebtoken` (same shape `AuthService.issueTokens`
+produces) for QA purposes, curl the endpoint to confirm the JSON contract,
+then deploy and click through the *actual* `hrm.1solutions.biz` site with an
+already-real, already-logged-in browser session — never the user's actual
+password, and the temporary session row is deleted after each round.
+
+## Frontend (`apps/web`) — mostly mock-data, wiring in progress
 
 - ✓ Design system (shadcn/ui "Nova" preset, Tailwind v4)
 - ✓ Navigation shell, topbar (dark/light toggle, live clock, last-login)
-- ✓ Login UI (`/login` — posts to `mockLogin`, no real backend yet)
+- ✓ Login UI (`/login` — posts to the real `POST /auth/login`, see "Frontend
+  auth wiring" below; redesigned 2026-09-05: split branding/form layout,
+  icon-only mark, password show/hide toggle, loading-spinner submit state)
 - ✓ Employee Experience UX — 16 screens against `lib/mock/fixtures.ts`
   (My Day, Attendance, Leave, Expenses, Payslips, Documents, Performance,
   Announcements, Requests, Profile, Notifications, Settings)
@@ -24,20 +169,34 @@ host.
   Onboarding, Resignations, Salary, Payroll, Company settings, Roles &
   permissions, System logs)
 
-The frontend still runs entirely on the in-memory mock API — none of it is
-wired to `apps/api` yet. Don't start that wiring until a module's real
-endpoints exist and this file marks it done.
+Except Employees (see "Frontend ↔ API wiring" above), the rest of the
+frontend still runs on the in-memory mock API — not wired to `apps/api` yet.
+Wire a module once its real endpoints exist (all 16 built modules do) and
+update the wiring table above when a screen moves over; don't do it all in
+one sweep.
 
 ## Database
 
-- ✓ Prisma schema designed (`apps/api/prisma/schema.prisma`, 41+ models) —
-  see `docs/database-design.md` for full rationale.
-- ○ Migration not yet applied to a live MySQL instance — no Docker/MySQL
-  available in the dev sandbox. DDL generated and spot-checked offline
-  (`prisma migrate diff --script`) but never executed. Whoever has Docker
-  needs to run `docker compose up -d && npm run prisma:migrate` (see that
-  doc's "Recommended next step").
-- ○ Seed script (roles/permissions/lookup tables) — not started.
+- ✓ Prisma schema designed (`apps/api/prisma/schema.prisma`, 43 models as of
+  2026-09-05 — see `docs/database-design.md` for the original rationale,
+  and "Data migration" above for the `gender`/`nationality`/`religion`/
+  `maritalStatus`/`bloodGroup`/`EmployeeEducation`/`Asset` additions made
+  since).
+- ✓ Migrations applied to the live production MariaDB on Hostinger (see
+  "Deployment" above) — `20260905112951_init` (the original 41-model
+  schema) and `20260905142756_add_employee_personal_education_assets`.
+  Local dev still has no Docker/MySQL; every migration so far has been
+  generated and applied directly against production
+  (`prisma migrate diff --to-config-datasource` + hand-placed migration
+  folder, since no shadow database credentials were available in this
+  session — the shadow DB itself was created earlier but its credentials
+  weren't persisted anywhere retrievable).
+- ✓ Minimal seed run against production: roles, permissions,
+  role-permission mappings, one real admin account
+  (`atul@1solutions.biz`) — **not** the full `prisma/seed.ts` (that script
+  is explicitly local-dev-only per its own header comment; company
+  settings/performance cycles/lookup tables came from the real legacy-data
+  import instead, see "Data migration").
 
 ## Backend (`apps/api`) — NestJS modules, built in this order
 
@@ -58,7 +217,7 @@ been run against real MySQL.
 | 09 | Expenses | ✓ done (submit/approve, monthly-cap enforcement, wired into Requests; see notes below) |
 | 10 | Performance | ✓ done (goals, reviews, recognitions; see notes below) |
 | 11 | Announcements | ✓ done (publish + per-viewer read state; see notes below) |
-| 12 | Assets | ○ not started — **no schema model exists** (deliberately deferred at the database-design phase: no approved frontend UX covers it yet, still a `PlaceholderPage` stub). Skipped by explicit user decision on 2026-09-05; revisit once real UX/requirements exist. |
+| 12 | Assets | ○ module not started, but **schema now exists** (`Asset`, added 2026-09-05 — see "Data migration") and the frontend Employee-detail Assets tab reads real `Employee.assets` through the Employees module's own `include`. No dedicated `/assets` CRUD endpoints, no real asset data imported yet (legacy `hrm_assets`/`hrm_asset_assignments` were never run through an import script), still a `PlaceholderPage` stub for the standalone Assets nav item. |
 | 13 | Complaints | ○ not started — same reason and same decision as Assets (12): no schema model, no approved UX, explicitly skipped for now. |
 | 14 | Resignation | ✓ done (submit/withdraw/decide; see notes below) |
 | 15 | Payroll | ✓ done (salary structure/revision, HR-entered payslip generation, trend/by-department aggregates; see notes below) |
@@ -710,22 +869,29 @@ switcher:**
   system with `payroll:manage` endpoints. `AuthService.me()`'s employee
   select now includes `designation` (`/my-day` already rendered it; the
   mock's `user.designation` had nothing backing it before).
-- **Verified live in a browser** (dev server on port 3100, API on 3001,
-  both actually running): the CORS preflight (`OPTIONS /auth/login` →
-  204) succeeds, the real `POST /auth/login` reaches the backend and its
-  error response renders correctly in the form, and visiting a protected
-  route (`/dashboard`) while signed out redirects to `/login`. **Not
-  verified**: an actual successful login — there's still no live MySQL in
-  this environment, so `/auth/login` fails at
-  `this.prisma.user.findUnique()` with the same "pool failed to retrieve
-  a connection" error documented everywhere else in this file. The
-  request/response path, CORS, and error handling are confirmed working;
-  the query path against real data is not.
+- **Verified live in a browser**, first against local dev only (CORS
+  preflight, error rendering, signed-out redirect — MySQL not connected
+  yet at that point), then **fully end-to-end after deployment
+  (2026-09-05)**: a real successful login on `hrm.1solutions.biz` as
+  `atul@1solutions.biz`, landing on `/dashboard` with "Signed in as
+  atul@1solutions.biz" and the real last-login timestamp — the one thing
+  the original note above said wasn't verified is now confirmed working
+  against real production data.
 - `mockLogin` deleted from `mock-api.ts` (dead code — nothing else in
   that file changed).
 
 ## Not started
 
-- ○ Deployment / hosting decision
+- ○ Frontend wiring for every module except Employees (see "Frontend ↔ API
+  wiring" above) — Dashboard, Attendance, Leave, Expenses, Payslips,
+  Documents, Performance, Announcements, Requests, Profile, Notifications,
+  Settings, Onboarding, Resignations, Salary, Payroll, Admin, Audit.
+- ○ Assets and Complaints backend modules (12/13) — Assets now has a schema
+  and passive read access via Employees; neither has real CRUD endpoints.
+- ○ Legacy attendance-history import (event history, not just the policy
+  config) — flagged as the hardest remaining migration transform.
+- ○ Real file storage for documents/receipts/payslip PDFs — no provider
+  wired anywhere; every "file" field in the schema is a URL string with
+  nothing populating it from a real upload yet.
 - ○ Workspace integration (whatever external system(s) this needs to talk to
   — not yet scoped)
