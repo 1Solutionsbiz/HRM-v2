@@ -7,6 +7,7 @@ import { useAsync } from "@/lib/use-async";
 import { getMyPayslips, monthName, type Payslip } from "@/lib/api/payroll";
 import { titleCase } from "@/lib/api/employees";
 import { formatDate, formatINR } from "@/lib/format";
+import { downloadPayslipPdf } from "@/lib/payslip-pdf";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -29,9 +30,8 @@ export default function PayslipsPage() {
   const [selected, setSelected] = React.useState<Payslip | null>(null);
 
   function handleDownload(p: Payslip) {
-    toast.success(`Downloading ${monthName(p.periodMonth)} ${p.periodYear} payslip`, {
-      description: "This is a UI preview - no file is actually generated.",
-    });
+    downloadPayslipPdf(p);
+    toast.success(`Downloaded ${monthName(p.periodMonth)} ${p.periodYear} payslip`);
   }
 
   return (

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Plus, Search, Wallet } from "lucide-react";
+import { CheckCircle2, Download, Plus, Search, Wallet } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -22,6 +22,7 @@ import {
   type PayslipLineItemInput,
 } from "@/lib/api/payroll";
 import { formatDate, formatINR } from "@/lib/format";
+import { downloadPayslipPdf } from "@/lib/payslip-pdf";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -275,6 +276,11 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
   const [selected, setSelected] = React.useState<Payslip | null>(null);
   const [marking, setMarking] = React.useState(false);
 
+  function handleDownload(p: Payslip) {
+    downloadPayslipPdf(p);
+    toast.success(`Downloaded ${monthName(p.periodMonth)} ${p.periodYear} payslip`);
+  }
+
   async function handleMarkPaid(p: Payslip) {
     setMarking(true);
     try {
@@ -338,7 +344,17 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
                         {p.paidAt ? ` · Paid ${formatDate(p.paidAt)}` : ""}
                       </p>
                     </button>
-                    <StatusBadge status={titleCase(p.status)} className="shrink-0" />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <StatusBadge status={titleCase(p.status)} />
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Download payslip"
+                        onClick={() => handleDownload(p)}
+                      >
+                        <Download className="size-4" />
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -375,7 +391,11 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
               <div className="px-4">
                 <PayslipDocument payslip={selected} />
               </div>
-              <SheetFooter>
+              <SheetFooter className="flex-row">
+                <Button variant="outline" onClick={() => handleDownload(selected)}>
+                  <Download />
+                  Download PDF
+                </Button>
                 {selected.status !== "PAID" && (
                   <Button onClick={() => handleMarkPaid(selected)} disabled={marking}>
                     <CheckCircle2 />
