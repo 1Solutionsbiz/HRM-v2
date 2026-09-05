@@ -132,7 +132,21 @@ export class PayrollService {
       actorEmail: actor.email,
       targetType: 'Employee',
       targetId: employeeId,
-      description: `Revised salary to ${dto.newAmount}, effective ${dto.effectiveDate}`,
+      // The amount deliberately does NOT go in `description` — that field
+      // is what GET /audit/logs (module 18, gated only by `audit:view`)
+      // returns to every caller, and `audit:view` is not scoped to
+      // payroll. `metadata` is written but never selected by that read
+      // path, so this is the compensation figure's only safe home in an
+      // audit row: readable by anyone who queries AuditLog directly with
+      // payroll:manage-equivalent trust, not by every audit:view holder.
+      description: `Revised salary, effective ${dto.effectiveDate}`,
+      metadata: {
+        newAmount: dto.newAmount,
+        previousAmount: revision.previousAmount
+          ? revision.previousAmount.toNumber()
+          : null,
+        effectiveDate: dto.effectiveDate,
+      },
     });
 
     return {

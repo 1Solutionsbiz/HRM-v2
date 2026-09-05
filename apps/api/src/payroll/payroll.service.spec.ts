@@ -163,6 +163,37 @@ describe('PayrollService', () => {
       );
       expect(result.revision.previousAmount).toBe(40000);
     });
+
+    it('keeps the salary amount out of the audit description — it goes in metadata instead', async () => {
+      prisma.salaryStructure.findUnique.mockResolvedValue(null);
+      prisma.salaryStructure.create.mockResolvedValue({
+        id: 'ss-1',
+        employeeId: 'emp-1',
+        currentAmount: decimal(50000),
+        status: 'ACTIVE',
+        lastRevisedAt: new Date('2026-09-01'),
+      });
+      prisma.salaryRevision.create.mockImplementation(({ data }) =>
+        Promise.resolve({
+          id: 'sr-1',
+          ...data,
+          newAmount: decimal(data.newAmount),
+        }),
+      );
+
+      await service.reviseSalary(
+        'emp-1',
+        { newAmount: 50000, effectiveDate: '2026-09-01' },
+        actor,
+      );
+
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: expect.not.stringContaining('50000'),
+          metadata: expect.objectContaining({ newAmount: 50000 }),
+        }),
+      );
+    });
   });
 
   describe('generatePayslip', () => {

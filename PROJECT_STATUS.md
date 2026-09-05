@@ -562,7 +562,7 @@ rather than guessing at a schema now.
   `payrollMonthlyTrend`/`payrollByDepartment` fixtures.
 - No payslip PDF/download path — no file-storage integration exists yet,
   same limitation already documented for Documents and Expenses receipts.
-- 16 unit tests + 4 e2e tests, including one asserting gross/net are
+- 17 unit tests + 4 e2e tests, including one asserting gross/net are
   correct numbers (not decimal-stringified) end to end through generate →
   mark-paid, and unit coverage for activeHeadcount, the trailing-months
   window, and getByDepartment's department-name join and no-data path.
@@ -640,15 +640,20 @@ rather than guessing at a schema now.
   already succeeded. That's an invariant nothing enforces, though: a
   future module that logs before confirming its write would silently
   read as `SUCCESS` here.
-- **`audit:view` transitively exposes compensation data.** Module 15's
-  audit descriptions embed real figures verbatim ("Revised salary to
-  60000, effective 2026-09-01"), so the System Logs feed carries salary
-  amounts to anyone holding `audit:view`. Harmless today since only admin
-  holds both `audit:view` and `payroll:manage` — but the coupling is
-  accidental, not designed. If a compliance-style role is ever granted
-  `audit:view` alone, it would inherit payroll visibility along with it;
-  revisit `AuditLog.description` sensitivity (or field-level redaction) if
-  that role shows up.
+- **Fixed: `audit:view` no longer transitively exposes compensation
+  data.** `reviseSalary`'s audit entry used to embed the amount verbatim
+  in `description` ("Revised salary to 60000, effective 2026-09-01") —
+  readable by anyone with `audit:view` via `GET /audit/logs`, a permission
+  never scoped to payroll. The amount now goes in `metadata`
+  (`{ newAmount, previousAmount, effectiveDate }`), a field `getLogs()`
+  never selects into its response; `description` is now
+  `"Revised salary, effective 2026-09-01"`. `generatePayslip`'s and
+  `markPayslipPaid`'s descriptions were already amount-free (payslip
+  number and period only), so no change was needed there. This is a
+  data-minimization fix, not a permission-based redaction layer — no new
+  plumbing of the actor's permissions into `AuditService`, just not
+  writing the sensitive figure into the field a broad-access endpoint
+  reads.
 - The mock's `action`/`target` two-column split isn't reproduced —
   `description` already reads as a full sentence for every module's
   events and splitting it back into pseudo-fields would mean guessing at
