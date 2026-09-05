@@ -124,6 +124,12 @@ export const navGroups: NavGroup[] = [
         roles: ["hr", "admin"],
       },
       {
+        title: "Payslips",
+        url: "/payroll/payslips",
+        icon: Wallet,
+        roles: ["hr", "admin"],
+      },
+      {
         title: "Payroll reports",
         url: "/payroll/reports",
         icon: BarChart3,

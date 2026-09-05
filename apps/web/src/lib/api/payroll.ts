@@ -77,6 +77,60 @@ export function reviseSalary(employeeId: string, payload: ReviseSalaryPayload) {
   });
 }
 
+export interface EmployeeSalaryStructure {
+  id: string;
+  employeeId: string;
+  currentAmount: number;
+  status: SalaryStatus;
+  lastRevisedAt: string | null;
+}
+
+export interface SalaryRevisionEntry {
+  id: string;
+  employeeId: string;
+  previousAmount: number | null;
+  newAmount: number;
+  effectiveDate: string;
+  reason: string | null;
+  revisedByUserId: string;
+}
+
+export interface EmployeeSalary {
+  structure: EmployeeSalaryStructure | null;
+  revisions: SalaryRevisionEntry[];
+}
+
+export function getEmployeeSalary(employeeId: string): Promise<EmployeeSalary> {
+  return apiFetch<EmployeeSalary>(`/payroll/employees/${employeeId}/salary`);
+}
+
+export function getEmployeePayslips(employeeId: string): Promise<Payslip[]> {
+  return apiFetch<Payslip[]>(`/payroll/employees/${employeeId}/payslips`);
+}
+
+export interface PayslipLineItemInput {
+  type: PayslipLineItemType;
+  label: string;
+  amount: number;
+}
+
+export interface GeneratePayslipPayload {
+  periodMonth: number;
+  periodYear: number;
+  lineItems: PayslipLineItemInput[];
+}
+
+export function generatePayslip(employeeId: string, payload: GeneratePayslipPayload): Promise<Payslip> {
+  return apiFetch<Payslip>(`/payroll/employees/${employeeId}/payslips`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function markPayslipPaid(payslipId: string): Promise<Payslip> {
+  return apiFetch<Payslip>(`/payroll/payslips/${payslipId}/mark-paid`, { method: "PATCH" });
+}
+
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
