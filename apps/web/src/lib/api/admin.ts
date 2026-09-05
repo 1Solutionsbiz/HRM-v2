@@ -1,9 +1,80 @@
 import { apiFetch } from "@/lib/api-client";
+import type { Role } from "@/types/role";
+
+export interface CompanySettings {
+  id: string;
+  legalName: string;
+  brandName: string;
+  website: string | null;
+  supportEmail: string;
+  phone: string | null;
+  address: string | null;
+  timezone: string;
+  updatedAt: string;
+  updatedByUserId: string | null;
+}
+
+export function getCompanySettings(): Promise<CompanySettings> {
+  return apiFetch<CompanySettings>("/admin/company-settings");
+}
+
+export interface UpdateCompanySettingsPayload {
+  legalName: string;
+  brandName: string;
+  website?: string;
+  supportEmail: string;
+  phone?: string;
+  address?: string;
+}
+
+export function updateCompanySettings(payload: UpdateCompanySettingsPayload): Promise<CompanySettings> {
+  return apiFetch<CompanySettings>("/admin/company-settings", { method: "PUT", body: payload });
+}
+
+export type RolePermissions = Record<Role, string[]>;
+
+export function getRolePermissions(): Promise<RolePermissions> {
+  return apiFetch<RolePermissions>("/admin/roles/permissions");
+}
+
+export interface EmployeeRoleRow {
+  employeeId: string;
+  userId: string;
+  name: string;
+  email: string;
+  department: string | null;
+  role: Role | null;
+}
+
+export function getEmployeeRoles(): Promise<EmployeeRoleRow[]> {
+  return apiFetch<EmployeeRoleRow[]>("/admin/roles/employees");
+}
+
+export function setEmployeeRole(employeeId: string, roleKey: Role): Promise<EmployeeRoleRow> {
+  return apiFetch<EmployeeRoleRow>(`/admin/roles/employees/${employeeId}`, {
+    method: "PATCH",
+    body: { roleKey },
+  });
+}
+
+export type AuditEventType =
+  | "LOGIN_SUCCESS"
+  | "LOGIN_FAILED"
+  | "LOGOUT"
+  | "ROLE_CHANGED"
+  | "PASSWORD_CHANGED"
+  | "DOCUMENT_UPDATED"
+  | "SETTINGS_UPDATED"
+  | "EMPLOYEE_CREATED"
+  | "EMPLOYEE_UPDATED"
+  | "USER_CREATED"
+  | "USER_STATUS_CHANGED"
+  | "OTHER";
 
 export interface AuditLogEntry {
   id: string;
   occurredAt: string;
-  eventType: string;
+  eventType: AuditEventType;
   description: string;
   actorName: string;
   actorEmail: string | null;
@@ -15,34 +86,6 @@ export interface AuditLogEntry {
 
 export function getAuditLogs(limit = 100): Promise<AuditLogEntry[]> {
   return apiFetch<AuditLogEntry[]>(`/audit/logs?limit=${limit}`);
-}
-
-export interface CompanySettings {
-  id: string;
-  legalName: string;
-  brandName: string;
-  website: string | null;
-  supportEmail: string;
-  phone: string | null;
-  address: string | null;
-  timezone: string;
-}
-
-export function getCompanySettings(): Promise<CompanySettings> {
-  return apiFetch<CompanySettings>("/admin/company-settings");
-}
-
-export interface EmployeeRoleRow {
-  employeeId: string;
-  userId: string;
-  name: string;
-  email: string;
-  department: string | null;
-  role: string | null;
-}
-
-export function getEmployeeRoles(): Promise<EmployeeRoleRow[]> {
-  return apiFetch<EmployeeRoleRow[]>("/admin/roles/employees");
 }
 
 export type ResignationStatus = "PENDING" | "APPROVED" | "DECLINED" | "WITHDRAWN";

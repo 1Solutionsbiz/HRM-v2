@@ -3,8 +3,8 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatTime } from "@/lib/format";
-import { getAuditLogs } from "@/lib/mock/mock-api";
-import type { AuditLogEntry } from "@/lib/mock/hr-fixtures";
+import { getAuditLogs, type AuditLogEntry } from "@/lib/api/admin";
+import { titleCase } from "@/lib/api/employees";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -14,29 +14,45 @@ import { Card, CardContent } from "@/components/ui/card";
 
 const columns: ColumnDef<AuditLogEntry>[] = [
   {
-    accessorKey: "timestamp",
+    accessorKey: "occurredAt",
     header: "When",
     cell: ({ row }) => (
       <span className="whitespace-nowrap">
-        {formatDate(row.original.timestamp)} · {formatTime(row.original.timestamp)}
+        {formatDate(row.original.occurredAt)} · {formatTime(row.original.occurredAt)}
       </span>
     ),
   },
-  { accessorKey: "actor", header: "Actor" },
-  { accessorKey: "action", header: "Action" },
-  { accessorKey: "target", header: "Target" },
-  { accessorKey: "ip", header: "IP address" },
+  { accessorKey: "actorName", header: "Actor" },
+  {
+    accessorKey: "eventType",
+    header: "Action",
+    cell: ({ row }) => titleCase(row.original.eventType),
+  },
+  {
+    id: "target",
+    header: "Target",
+    cell: ({ row }) =>
+      row.original.targetType ? `${row.original.targetType}${row.original.targetId ? ` · ${row.original.targetId.slice(0, 8)}` : ""}` : "—",
+  },
+  {
+    accessorKey: "ipAddress",
+    header: "IP address",
+    cell: ({ row }) => row.original.ipAddress ?? "—",
+  },
   {
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => (
-      <StatusBadge status={row.original.status} tone={row.original.status === "Success" ? "success" : "destructive"} />
+      <StatusBadge
+        status={titleCase(row.original.status)}
+        tone={row.original.status === "SUCCESS" ? "success" : "destructive"}
+      />
     ),
   },
 ];
 
 export default function SystemLogsPage() {
-  const { data, loading, error, refetch } = useAsync(getAuditLogs);
+  const { data, loading, error, refetch } = useAsync(() => getAuditLogs(200));
 
   return (
     <div className="space-y-6">
@@ -53,7 +69,7 @@ export default function SystemLogsPage() {
             <DataTable
               columns={columns}
               data={data ?? []}
-              searchColumn="actor"
+              searchColumn="actorName"
               searchPlaceholder="Search by actor…"
               pageSize={15}
             />

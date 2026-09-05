@@ -3,31 +3,68 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useAsync } from "@/lib/use-async";
-import { getCompanyProfile, updateCompanyProfile } from "@/lib/mock/mock-api";
-import type { CompanyProfile } from "@/lib/mock/hr-fixtures";
+import { ApiError } from "@/lib/api-client";
+import { getCompanySettings, updateCompanySettings, type CompanySettings } from "@/lib/api/admin";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton } from "@/components/hrm/loading-state";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+
+interface FormState {
+  legalName: string;
+  brandName: string;
+  website: string;
+  supportEmail: string;
+  phone: string;
+  address: string;
+  timezone: string;
+}
+
+function toForm(settings: CompanySettings): FormState {
+  return {
+    legalName: settings.legalName,
+    brandName: settings.brandName,
+    website: settings.website ?? "",
+    supportEmail: settings.supportEmail,
+    phone: settings.phone ?? "",
+    address: settings.address ?? "",
+    timezone: settings.timezone,
+  };
+}
 
 /**
  * A separate component so its `form` state can be initialized directly from
  * `initial` at mount time - it only mounts once the fetch has resolved, so
  * there's no need to sync state from a prop via an effect.
  */
-function CompanyProfileForm({ initial }: { initial: CompanyProfile }) {
-  const [form, setForm] = React.useState(initial);
+function CompanyProfileForm({ initial }: { initial: CompanySettings }) {
+  const [form, setForm] = React.useState(toForm(initial));
   const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await updateCompanyProfile(form);
-    setSaving(false);
-    toast.success("Company settings updated");
+    setSaveError(null);
+    try {
+      await updateCompanySettings({
+        legalName: form.legalName.trim(),
+        brandName: form.brandName.trim(),
+        website: form.website.trim() || undefined,
+        supportEmail: form.supportEmail.trim(),
+        phone: form.phone.trim() || undefined,
+        address: form.address.trim() || undefined,
+      });
+      toast.success("Company settings updated");
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save these changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -38,10 +75,15 @@ function CompanyProfileForm({ initial }: { initial: CompanyProfile }) {
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSave}>
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name">Legal name</Label>
-              <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input id="name" value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="brandName">Brand name</Label>
@@ -83,7 +125,7 @@ function CompanyProfileForm({ initial }: { initial: CompanyProfile }) {
 }
 
 export default function CompanySettingsPage() {
-  const { data, loading, error, refetch } = useAsync(getCompanyProfile);
+  const { data, loading, error, refetch } = useAsync(getCompanySettings);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

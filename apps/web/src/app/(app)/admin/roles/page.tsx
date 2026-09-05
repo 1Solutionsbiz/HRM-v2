@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { type ColumnDef } from "@tanstack/react-table";
 import { ShieldCheck } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getEmployeeRoles, getRolePermissions, updateEmployeeRole, type EmployeeRoleRow } from "@/lib/mock/mock-api";
+import { ApiError } from "@/lib/api-client";
+import { getEmployeeRoles, getRolePermissions, setEmployeeRole, type EmployeeRoleRow } from "@/lib/api/admin";
 import { ROLES, ROLE_LABELS, type Role } from "@/types/role";
 import { PageHeader } from "@/components/hrm/page-header";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
@@ -28,9 +29,14 @@ export default function RolesPermissionsPage() {
 
   async function handleConfirm() {
     if (!pendingChange) return;
-    await updateEmployeeRole(pendingChange.row.employeeId, pendingChange.newRole);
-    toast.success(`${pendingChange.row.name} is now ${ROLE_LABELS[pendingChange.newRole]}`);
-    refetch();
+    try {
+      await setEmployeeRole(pendingChange.row.employeeId, pendingChange.newRole);
+      toast.success(`${pendingChange.row.name} is now ${ROLE_LABELS[pendingChange.newRole]}`);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't change this employee's role.");
+      throw err;
+    }
   }
 
   const columns: ColumnDef<EmployeeRoleRow>[] = [
@@ -48,23 +54,26 @@ export default function RolesPermissionsPage() {
     {
       accessorKey: "role",
       header: "Role",
-      cell: ({ row }) => (
-        <Select
-          value={row.original.role}
-          onValueChange={(value) => setPendingChange({ row: row.original, newRole: value as Role })}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {ROLE_LABELS[r]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ),
+      cell: ({ row }) =>
+        row.original.role ? (
+          <Select
+            value={row.original.role}
+            onValueChange={(value) => setPendingChange({ row: row.original, newRole: value as Role })}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="text-muted-foreground text-xs">No role assigned</span>
+        ),
     },
   ];
 
