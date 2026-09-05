@@ -46,6 +46,13 @@ export class AttendanceController {
     return this.attendanceService.getPolicyOrThrow();
   }
 
+  /** Company-wide roster for one day (default today) — see AttendanceService.getCompanyAttendanceForDate. */
+  @Get('company')
+  @RequirePermissions('attendance:manage')
+  getCompanyAttendance(@Query('date') date?: string) {
+    return this.attendanceService.getCompanyAttendanceForDate(date);
+  }
+
   /** HR/admin manual correction — see AttendanceService.recordCorrection for the semantics. */
   @Post('employees/:employeeId/corrections')
   @RequirePermissions('attendance:manage')

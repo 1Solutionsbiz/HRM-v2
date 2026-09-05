@@ -64,3 +64,23 @@ export interface AttendancePolicy {
 export function getAttendancePolicy(): Promise<AttendancePolicy> {
   return apiFetch<AttendancePolicy>("/attendance/policy");
 }
+
+export type CompanyAttendanceStatus = AttendanceDayStatus | "NOT_MARKED";
+
+export interface CompanyAttendanceRow {
+  employeeId: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  department: { name: string } | null;
+  designation: { title: string } | null;
+  status: CompanyAttendanceStatus;
+  firstCheckInAt: string | null;
+  lastCheckOutAt: string | null;
+  workedMinutes: number | null;
+  lateMinutes: number;
+}
+
+export function getCompanyAttendance(date?: string): Promise<CompanyAttendanceRow[]> {
+  return apiFetch<CompanyAttendanceRow[]>(`/attendance/company${date ? `?date=${date}` : ""}`);
+}

@@ -258,6 +258,64 @@ export class AttendanceService {
     return result;
   }
 
+  /**
+   * One row per active employee for a single calendar date (default
+   * today) — the "who's in today" roster the Team attendance screen needs.
+   * Same synthesize-on-read reasoning as getHistoryForUser (a day with no
+   * AttendanceDay row gets classified from Holiday/AttendancePolicy rather
+   * than left blank), collapsed to one date across every employee instead
+   * of one employee across a date range.
+   */
+  async getCompanyAttendanceForDate(dateStr?: string) {
+    const today = companyToday();
+    const date = dateStr ? parseDateOnly(dateStr) : today;
+
+    const [employees, days, holiday, policy] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          employeeCode: true,
+          department: { select: { name: true } },
+          designation: { select: { title: true } },
+        },
+        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      }),
+      this.prisma.attendanceDay.findMany({ where: { date } }),
+      this.prisma.holiday.findFirst({ where: { isActive: true, date } }),
+      this.getPolicyOrThrow(),
+    ]);
+
+    const dayByEmployeeId = new Map(days.map((day) => [day.employeeId, day]));
+    const workingWeekdays = new Set(policy.workingWeekdays as number[]);
+    const isoWeekday = date.getUTCDay() === 0 ? 7 : date.getUTCDay();
+
+    let fallbackStatus: AttendanceDayStatus | 'NOT_MARKED';
+    if (holiday) fallbackStatus = 'HOLIDAY';
+    else if (!workingWeekdays.has(isoWeekday)) fallbackStatus = 'WEEKEND';
+    else if (date.getTime() >= today.getTime()) fallbackStatus = 'NOT_MARKED';
+    else fallbackStatus = 'ABSENT';
+
+    return employees.map((employee) => {
+      const day = dayByEmployeeId.get(employee.id);
+      return {
+        employeeId: employee.id,
+        employeeCode: employee.employeeCode,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        department: employee.department,
+        designation: employee.designation,
+        status: day?.status ?? fallbackStatus,
+        firstCheckInAt: day?.firstCheckInAt ?? null,
+        lastCheckOutAt: day?.lastCheckOutAt ?? null,
+        workedMinutes: day?.workedMinutes ?? null,
+        lateMinutes: day?.lateMinutes ?? 0,
+      };
+    });
+  }
+
   async recordCorrection(
     employeeId: string,
     dto: RecordCorrectionDto,

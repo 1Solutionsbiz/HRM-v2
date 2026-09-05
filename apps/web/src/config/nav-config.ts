@@ -65,7 +65,11 @@ export const navGroups: NavGroup[] = [
         title: "Team attendance",
         url: "/team/attendance",
         icon: Clock,
-        roles: ["manager", "hr", "admin"],
+        // Not "manager" - attendance:manage (this page's permission) is
+        // only granted to hr/admin in seed.ts's ROLE_PERMISSIONS, unlike
+        // leave:approve/expense:approve just below, which manager does
+        // hold. Showing this to a manager would 403 on load.
+        roles: ["hr", "admin"],
       },
       {
         title: "Leave approvals",
