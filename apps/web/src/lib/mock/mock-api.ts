@@ -333,6 +333,10 @@ export function getEmployeeDirectory(): Promise<DirectoryEmployee[]> {
   return simulate([...hr.employeeDirectory]);
 }
 
+export function getEmployeeById(id: string): Promise<hr.EmployeeFull | undefined> {
+  return simulate(hr.getEmployeeFullById(id));
+}
+
 let companyLeaveStore: CompanyLeaveRequest[] = [...hr.companyLeaveRequests];
 let companyExpenseStore: CompanyExpenseClaim[] = [...hr.companyExpenseClaims];
 
