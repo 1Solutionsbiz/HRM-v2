@@ -517,11 +517,28 @@ rather than guessing at a schema now.
   Employees-module action creates one) — `previousAmount` is `null` in
   that case, distinguishing "first-ever salary on record" from "no
   change."
+- **A revision's `effectiveDate` cannot be in the future** —
+  `reviseSalary` rejects it (400). Revisions take effect immediately on
+  record, not on `effectiveDate`; there's no scheduled-job infrastructure
+  (same gap already documented for Resignation approval not deferring
+  deactivation) to apply a future-dated change later, so silently making a
+  future date "current" today would misrepresent when the raise actually
+  took hold. If backdated/forward-dated revisions become a real
+  requirement, that needs actual scheduling, not a silent field.
+- **`SalaryStatus.UNDER_REVIEW` is unreachable.** The enum value exists in
+  the schema but nothing in this module (or anywhere else) transitions a
+  `SalaryStructure` into or out of it — same treatment as Performance's
+  deferred cycle CRUD. No UX or workflow for it exists yet; revisit if one
+  does.
 - **Money summed via integer paise** (`src/common/money.ts`), not floating
   `+` — avoids the classic `0.1 + 0.2` drift on a payslip total. Every
   `Decimal` field at the response boundary
   (`currentAmount`/`previousAmount`/`newAmount`/`grossAmount`/`netAmount`/line-item
   `amount`) is converted to a plain number.
+- **DTO money fields enforce `maxDecimalPlaces: 2`** (`ReviseSalaryDto.newAmount`,
+  `PayslipLineItemDto.amount`) — the columns are `Decimal(12, 2)`; rejecting
+  a third decimal place at the boundary is better than letting MySQL round
+  or reject it silently on insert.
 - **`payslipNumber` format is a documented guess**: `PS-{periodYear}-{5-digit
   sequence}` (e.g. `PS-2026-00001`) via a new `payslipCode`
   `SequenceCounter`. The schema comment already flags the format as
@@ -535,7 +552,7 @@ rather than guessing at a schema now.
   `payrollMonthlyTrend`/`payrollByDepartment` fixtures.
 - No payslip PDF/download path — no file-storage integration exists yet,
   same limitation already documented for Documents and Expenses receipts.
-- 11 new unit tests + 4 new e2e tests, including one asserting
+- 12 new unit tests + 4 new e2e tests, including one asserting
   gross/net are correct numbers (not decimal-stringified) end to end
   through generate → mark-paid. Still nothing against real MySQL.
 

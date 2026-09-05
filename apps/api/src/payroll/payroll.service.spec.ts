@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PayrollService } from './payroll.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 
@@ -73,6 +77,16 @@ describe('PayrollService', () => {
           actor,
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects a future effectiveDate — revisions take effect immediately, nothing schedules a later one', async () => {
+      await expect(
+        service.reviseSalary(
+          'emp-1',
+          { newAmount: 50000, effectiveDate: '2099-01-01' },
+          actor,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('records previousAmount as null when no structure exists yet', async () => {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -73,6 +74,17 @@ export class PayrollService {
   ) {
     await this.requireEmployee(employeeId);
     const effectiveDate = parseDateOnly(dto.effectiveDate);
+    // Revisions take effect immediately on record, not on `effectiveDate` —
+    // there's no scheduled-job infrastructure (same gap documented for
+    // Resignation) to apply a future-dated change later, so accepting one
+    // now and silently making it "current" today would misrepresent when
+    // the raise actually took hold. Reject it instead of guessing.
+    const today = parseDateOnly(new Date().toISOString().slice(0, 10));
+    if (effectiveDate > today) {
+      throw new BadRequestException(
+        'effectiveDate cannot be in the future — revisions take effect immediately, and there is no scheduling to apply one later',
+      );
+    }
 
     const { structure, revision } = await this.prisma.$transaction(
       async (tx) => {
