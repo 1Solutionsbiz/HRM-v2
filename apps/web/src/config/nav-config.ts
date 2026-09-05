@@ -19,6 +19,7 @@ import {
   ScrollText,
   Palette,
   TrendingUp,
+  PartyPopper,
 } from "lucide-react";
 import type { NavGroup } from "@/types/nav";
 import type { Role } from "@/types/role";
@@ -48,6 +49,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: "Attendance", url: "/attendance", icon: Clock },
       { title: "Leave", url: "/leave", icon: CalendarDays },
+      { title: "Holidays", url: "/holidays", icon: PartyPopper },
       { title: "Requests", url: "/requests", icon: ClipboardList },
       { title: "Expenses", url: "/expenses", icon: BadgeIndianRupee },
       { title: "Payslips", url: "/payslips", icon: Wallet },
