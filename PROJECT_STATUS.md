@@ -58,8 +58,8 @@ been run against real MySQL.
 | 09 | Expenses | ✓ done (submit/approve, monthly-cap enforcement, wired into Requests; see notes below) |
 | 10 | Performance | ✓ done (goals, reviews, recognitions; see notes below) |
 | 11 | Announcements | ✓ done (publish + per-viewer read state; see notes below) |
-| 12 | Assets | ○ not started |
-| 13 | Complaints | ○ not started |
+| 12 | Assets | ○ not started — **no schema model exists** (deliberately deferred at the database-design phase: no approved frontend UX covers it yet, still a `PlaceholderPage` stub). Skipped by explicit user decision on 2026-09-05; revisit once real UX/requirements exist. |
+| 13 | Complaints | ○ not started — same reason and same decision as Assets (12): no schema model, no approved UX, explicitly skipped for now. |
 | 14 | Resignation | ○ not started |
 | 15 | Payroll | ○ not started |
 | 16 | Reports | ○ not started |
