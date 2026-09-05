@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Building2 } from "lucide-react";
 import { navGroups } from "@/config/nav-config";
 import { useRole } from "@/lib/role-context";
 import {
@@ -30,8 +30,15 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard">
-                <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Building2 className="size-4" />
+                <div className="flex aspect-square size-8 shrink-0 items-center justify-center">
+                  <Image
+                    src="/hrm-icon.png"
+                    alt=""
+                    width={320}
+                    height={320}
+                    className="size-7 object-contain"
+                    priority
+                  />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">HRM V2</span>

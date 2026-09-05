@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Building2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useRole } from "@/lib/role-context";
 import { mockLogin } from "@/lib/mock/mock-api";
@@ -55,11 +56,16 @@ export default function LoginPage() {
     <div className="bg-muted/40 flex min-h-svh items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-lg">
-            <Building2 className="size-5" />
+          <div className="bg-primary flex items-center justify-center rounded-xl px-6 py-3">
+            <Image
+              src="/hrm-logo-white.png"
+              alt="1Solutions HRM"
+              width={400}
+              height={120}
+              className="h-12 w-auto"
+              priority
+            />
           </div>
-          <h1 className="text-lg font-semibold">HRM V2</h1>
-          <p className="text-muted-foreground text-sm">1Solutions</p>
         </div>
 
         <Card>
