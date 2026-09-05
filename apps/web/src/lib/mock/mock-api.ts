@@ -1,10 +1,22 @@
 import * as fixtures from "./fixtures";
+import * as hr from "./hr-fixtures";
 import type {
   AttendanceDay,
   ExpenseClaim,
   LeaveRequest,
   RequestStatus,
 } from "./fixtures";
+import type {
+  AuditLogEntry,
+  CompanyExpenseClaim,
+  CompanyLeaveRequest,
+  CompanyProfile,
+  DirectoryEmployee,
+  OnboardingCandidate,
+  ResignationRequest,
+  SalaryRecord,
+} from "./hr-fixtures";
+import type { Role } from "@/types/role";
 
 /**
  * Simulated backend. Every exported function here returns a Promise, the
@@ -325,4 +337,131 @@ export function mockLogin(email: string, password: string) {
       resolve({ ok: true });
     }, 700);
   });
+}
+
+// ---------------------------------------------------------------------------
+// HR / Admin: company-wide data
+// ---------------------------------------------------------------------------
+// Same simulate()/mutable-store pattern as above, sourced from hr-fixtures.ts
+// (company-wide) instead of fixtures.ts (current-employee-scoped).
+
+export function getCompanyHeadcountSummary() {
+  return simulate({ ...hr.companyHeadcountSummary });
+}
+
+export function getEmployeeDirectory(): Promise<DirectoryEmployee[]> {
+  return simulate([...hr.employeeDirectory]);
+}
+
+let companyLeaveStore: CompanyLeaveRequest[] = [...hr.companyLeaveRequests];
+let companyExpenseStore: CompanyExpenseClaim[] = [...hr.companyExpenseClaims];
+
+export function getCompanyLeaveRequests() {
+  return simulate(
+    [...companyLeaveStore].sort((a, b) => (a.submittedOn < b.submittedOn ? 1 : -1)),
+  );
+}
+
+export function decideCompanyLeaveRequest(id: string, decision: "Approved" | "Rejected") {
+  companyLeaveStore = companyLeaveStore.map((r) => (r.id === id ? { ...r, status: decision } : r));
+  return simulate(true, 500);
+}
+
+export function getCompanyExpenseClaims() {
+  return simulate(
+    [...companyExpenseStore].sort((a, b) => (a.submittedOn < b.submittedOn ? 1 : -1)),
+  );
+}
+
+export function decideCompanyExpenseClaim(id: string, decision: "Approved" | "Rejected") {
+  companyExpenseStore = companyExpenseStore.map((e) => (e.id === id ? { ...e, status: decision } : e));
+  return simulate(true, 500);
+}
+
+export function getNewJoiners() {
+  return simulate([...hr.newJoiners]);
+}
+
+export function getUpcomingBirthdays() {
+  return simulate([...hr.upcomingBirthdays]);
+}
+
+export function getOnboardingCandidates(): Promise<OnboardingCandidate[]> {
+  return simulate([...hr.onboardingCandidates]);
+}
+
+let resignationStore: ResignationRequest[] = [...hr.resignationRequests];
+
+export function getResignationRequests() {
+  return simulate(
+    [...resignationStore].sort((a, b) => (a.submittedOn < b.submittedOn ? 1 : -1)),
+  );
+}
+
+export function decideResignationRequest(id: string, decision: "Approved" | "Declined") {
+  resignationStore = resignationStore.map((r) => (r.id === id ? { ...r, status: decision } : r));
+  return simulate(true, 600);
+}
+
+export function getSalaryRecords(): Promise<SalaryRecord[]> {
+  return simulate([...hr.salaryRecords]);
+}
+
+export function getPayrollTrend() {
+  return simulate([...hr.payrollMonthlyTrend]);
+}
+
+export function getPayrollByDepartment() {
+  return simulate([...hr.payrollByDepartment]);
+}
+
+export interface EmployeeRoleRow {
+  employeeId: string;
+  name: string;
+  email: string;
+  department: string;
+  role: Role;
+}
+
+function seedRoleFor(employeeId: string): Role {
+  if (employeeId === "E7") return "admin"; // Karan Mehta - System Administrator
+  if (employeeId === "E6") return "hr"; // Priya Nair - HR Business Partner
+  if (employeeId === "E2") return "manager"; // Rahul Verma - Engineering Manager
+  return "employee";
+}
+
+let employeeRoleStore: EmployeeRoleRow[] = hr.employeeDirectory.map((e) => ({
+  employeeId: e.id,
+  name: e.name,
+  email: e.email,
+  department: e.department,
+  role: seedRoleFor(e.id),
+}));
+
+export function getEmployeeRoles() {
+  return simulate([...employeeRoleStore]);
+}
+
+export function updateEmployeeRole(employeeId: string, role: Role) {
+  employeeRoleStore = employeeRoleStore.map((r) => (r.employeeId === employeeId ? { ...r, role } : r));
+  return simulate(true, 500);
+}
+
+export function getRolePermissions() {
+  return simulate({ ...hr.rolePermissions });
+}
+
+export function getAuditLogs(): Promise<AuditLogEntry[]> {
+  return simulate([...hr.auditLogs]);
+}
+
+let companyProfileStore = { ...hr.companyProfile };
+
+export function getCompanyProfile() {
+  return simulate({ ...companyProfileStore });
+}
+
+export function updateCompanyProfile(payload: CompanyProfile) {
+  companyProfileStore = { ...payload };
+  return simulate({ ...companyProfileStore }, 600);
 }
