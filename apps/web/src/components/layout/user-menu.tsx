@@ -2,12 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import {
   LogOut,
-  Moon,
   Settings,
-  Sun,
   UserCircle,
   UserCog,
 } from "lucide-react";
@@ -37,7 +34,6 @@ import {
 
 export function UserMenu() {
   const { role, setRole, user } = useRole();
-  const { theme, setTheme } = useTheme();
   const router = useRouter();
 
   function handleLogout() {
@@ -103,15 +99,6 @@ export function UserMenu() {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                setTheme(theme === "dark" ? "light" : "dark");
-              }}
-            >
-              {theme === "dark" ? <Sun /> : <Moon />}
-              Toggle theme
-            </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <UserCog />

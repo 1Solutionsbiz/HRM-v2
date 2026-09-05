@@ -2,15 +2,15 @@ export function formatINR(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-export function formatDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" }) {
+export function formatDate(iso: string | Date, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" }) {
   return new Date(iso).toLocaleDateString("en-IN", opts);
 }
 
-export function formatDateShort(iso: string) {
+export function formatDateShort(iso: string | Date) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-export function formatTime(iso: string) {
+export function formatTime(iso: string | Date) {
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 }
 

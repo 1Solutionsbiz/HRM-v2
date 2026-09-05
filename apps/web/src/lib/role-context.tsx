@@ -10,6 +10,8 @@ interface MockUser {
   email: string;
   initials: string;
   designation: string;
+  /** The session before this one - not "now", which is this preview session. */
+  lastLogin: string;
 }
 
 const MOCK_USERS: Record<Role, MockUser> = {
@@ -18,24 +20,28 @@ const MOCK_USERS: Record<Role, MockUser> = {
     email: "aditi.sharma@1solutions.biz",
     initials: "AS",
     designation: "Software Engineer",
+    lastLogin: "2026-09-04T18:52:00",
   },
   manager: {
     name: "Rahul Verma",
     email: "rahul.verma@1solutions.biz",
     initials: "RV",
     designation: "Engineering Manager",
+    lastLogin: "2026-09-04T09:12:00",
   },
   hr: {
     name: "Priya Nair",
     email: "priya.nair@1solutions.biz",
     initials: "PN",
     designation: "HR Business Partner",
+    lastLogin: "2026-09-03T08:45:00",
   },
   admin: {
     name: "Karan Mehta",
     email: "karan.mehta@1solutions.biz",
     initials: "KM",
     designation: "System Administrator",
+    lastLogin: "2026-09-02T21:10:00",
   },
 };
 
