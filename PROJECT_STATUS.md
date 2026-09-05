@@ -6,10 +6,14 @@ what hasn't been started — without re-deriving it from git history.
 
 **Current phase:** Live in production. Backend and frontend are both deployed
 on Hostinger and connected to a real MySQL database; real legacy-HRM data has
-been imported; the frontend is fully wired to the real API — every module
-listed in "Frontend ↔ API wiring" below is done, as of 2026-09-06. What's
-left is net-new feature work (weekly email reports, real file storage,
-legacy attendance-history import), not wiring.
+been imported; most of the frontend is wired to the real API — see the
+"Frontend ↔ API wiring" table below for the current per-screen status (8
+screens — Dashboard, Performance, Announcements, Notifications, Settings,
+Onboarding, Resignations, Payroll reports — are still on mock data as of
+2026-09-06, corrected here after the previous claim of "every module is done"
+was found to be stale). See also "Legacy feature-parity audit (2026-09-06)"
+for what's still missing relative to the legacy hrmpulse.com system and what
+legacy data is genuinely still unmigrated.
 
 **⚠️ Superseded throughout this file:** every module note below that says
 "still nothing against real MySQL" / "no live database in this environment"
@@ -268,6 +272,111 @@ repeat every module's notes here, the load-bearing findings:
 - **Employee active/inactive was wrong for 18 people** — see the Data
   migration section's "Real misclassification found and fixed" note.
 
+## Legacy feature-parity audit (2026-09-06)
+
+Full pass comparing hrmpulse.com's live admin nav (extracted directly from
+its rendered sidebar, not guessed) against V2's actual built/wired feature
+set, plus a check of every legacy table that looked like it might still hold
+unmigrated data. Two-part ask: (1) what's missing in V2, (2) is any legacy
+data left behind.
+
+### 1. Feature gaps vs. legacy
+
+**Has no V2 equivalent at all (explicit deferrals, module 12/13 territory or
+new findings):**
+- **Tickets / HR Ticket Management** (`ticket.php` self-service,
+  `view-ticket.php` admin) — **44 real historical tickets exist in the
+  legacy dump** (`tickets` table — mostly attendance mispunch/correction
+  requests), none imported, no V2 model. This is genuine unmigrated data,
+  not an empty legacy feature — see part 2.
+- **POSH** (Guidelines/Committee/Complaint/All Complaints) — no V2 model.
+  Confirmed **0 rows** in legacy's `sexual_harassment_complaints` table, both
+  in the dump and live (`all_employee_complaints.php` shows "No data
+  available"). Nothing to migrate; the feature itself is just absent.
+- **1Sol Fun Time** (Quiz Board leaderboard + points-based Employee of the
+  Month, e.g. live: "Sonu Yadav — 71.42 Points — August 2026") — V2's
+  `/recognition` ("Employee of the month") is a bare `PlaceholderPage`, no
+  quiz/gamification/points system exists anywhere in the schema.
+- **Company Policies** document library (`company_policies.php`) — no V2
+  model. Confirmed empty in legacy too (dashboard's Company Policy widget
+  shows 5× "No Policies Available" placeholders) — nothing to migrate.
+- **Company Document** repository (`company_data.php`, company-wide files
+  distinct from the per-employee Documents module V2 already has) — no V2
+  model. Confirmed empty in legacy (no documents listed).
+- **Office Timing admin screen** — legacy has a dedicated settings page to
+  edit office hours/grace/half-day thresholds. V2's equivalent
+  (`AttendancePolicy`) is a DB row with no admin UI at all; it was seeded
+  manually via a one-off script this session (see "AttendancePolicy was
+  never seeded" above) and can currently only be changed by hand.
+- **Password Management** (admin-side generate/reset for any employee's
+  password) — no V2 equivalent found; V2 only has self-service Change
+  Password (`/settings`, wired, works).
+- **Notice Period step-tracking** (`employee_notice_period_steps`,
+  `notice_period_steps`, `notice_period_files` — a per-step checklist with
+  file uploads) — V2's Resignation module covers submit/withdraw/decide only,
+  no step tracking. Turns out moot for data purposes: see part 2, these
+  tables are empty in legacy.
+
+**Backend exists, frontend doesn't (or is still mock) — the closest thing to
+a "quick win" list:**
+- **`/people/resignations`** (legacy: Resignation Form / Notice Period) —
+  the backend module is fully done (`resignation:decide`, submit/withdraw/
+  decide), but the frontend page is still on mock data, not wired.
+- **Departments / Designations admin management** (`departments.php`,
+  `designations.php`) — `DepartmentsController`/`DesignationsController`
+  already exist with full CRUD in the API; there is no admin UI page for
+  either, so today they're only usable as read-only lookups inside the
+  Employees screens.
+- **Assets** — data is imported (8 real rows, see the Data migration
+  section and module 12 above) and visible read-only on an employee's
+  detail page, but there's no admin UI to assign/return an asset and the
+  standalone `/assets` ("My assets") page is still a bare `PlaceholderPage`.
+- **Onboarding candidates, Payroll reports, Announcements, Dashboard,
+  Performance** — backend modules are done; frontend pages still run on
+  `lib/mock/mock-api` per the wiring table above.
+- **Notifications** (`/notifications`, the bell-icon center) — still 100%
+  `lib/mock/mock-api` dummy data, reachable from the topbar for every user.
+  Worth calling out specifically since it's the same class of problem as the
+  `/admin/roles` dummy-data complaint fixed earlier this session.
+- **Team directory** — still a bare `PlaceholderPage`, not even mock data.
+
+**Already fully covered in V2** (confirmed live, not just assumed): Holidays,
+Team attendance (roster + per-employee history), Salary Slips (self-service
++ new admin generate/history), Salary Management, Announcement *publishing*
+(admin side works; the employee-facing feed is what's still mock, see
+above), Employees incl. Active/Past tabs, Company Details (`/admin/company`),
+Permission Management + Users role (`/admin/roles`), Expenses Management,
+Admin Logs, Leave (Admin).
+
+### 2. Legacy data completeness
+
+Row-count table in "Data migration" above is accurate as of Phase 3
+(2026-09-06) with one correction made today: Assets' module-status row said
+"no real asset data imported yet," which was stale — 8 rows are in
+production (verified directly against the live DB, not just the import
+report).
+
+**Newly confirmed still-unmigrated, real data** (not covered by the
+"Deliberately still not imported" list above, because these tables weren't
+on anyone's radar until this audit):
+- **44 support tickets** (`tickets` table) — real historical mispunch/leave-
+  correction requests from named employees (Aditya Srivastava, Sonu Yadav,
+  Chetan Pal, Kanchan Gupta, Rajat Kumar, Nikita, Deepak Kumar, …), dated
+  back to at least April 2025. No V2 ticket model exists to import them
+  into — this is the one real gap this audit found on the data side.
+
+**Confirmed genuinely empty in legacy — not a migration gap, just an unused
+feature** (checked the dump directly, 0 INSERT rows in each): 
+`employee_resignations`, `resignation_history`, `notice_period_steps`,
+`notice_period_files`, `employee_notice_period_steps`,
+`sexual_harassment_complaints`, `company_policies`. So the Notice Period /
+POSH / Company Policies feature gaps above cost nothing in migrated data —
+there was never any real data in those legacy tables to lose.
+
+Everything else (attendance history, login/device logs, mismatch-attendance)
+is exactly as already documented in "Deliberately still not imported" above
+— no changes from this audit.
+
 ## Frontend (`apps/web`)
 
 - ✓ Design system (shadcn/ui "Nova" preset, Tailwind v4)
@@ -327,7 +436,7 @@ been run against real MySQL.
 | 09 | Expenses | ✓ done (submit/approve, monthly-cap enforcement, wired into Requests; see notes below) |
 | 10 | Performance | ✓ done (goals, reviews, recognitions; see notes below) |
 | 11 | Announcements | ✓ done (publish + per-viewer read state; see notes below) |
-| 12 | Assets | ○ module not started, but **schema now exists** (`Asset`, added 2026-09-05 — see "Data migration") and the frontend Employee-detail Assets tab reads real `Employee.assets` through the Employees module's own `include`. No dedicated `/assets` CRUD endpoints, no real asset data imported yet (legacy `hrm_assets`/`hrm_asset_assignments` were never run through an import script), still a `PlaceholderPage` stub for the standalone Assets nav item. |
+| 12 | Assets | ○ dedicated module still not started, but **schema exists and data is imported**: `Asset` (added 2026-09-05) holds 8 real rows from the Phase 3 legacy import (6 legacy assets had no assignment row and were correctly skipped — see "Data migration"), and the frontend Employee-detail Assets tab reads real `Employee.assets` through the Employees module's own `include`. Still missing: dedicated `/assets` CRUD endpoints (assign/return/edit), and the standalone Assets nav item (`/assets`, "My assets") is still a bare `PlaceholderPage` — confirmed 2026-09-06, corrects this row's earlier "no real asset data imported yet," which was stale. |
 | 13 | Complaints | ○ not started — same reason and same decision as Assets (12): no schema model, no approved UX, explicitly skipped for now. |
 | 14 | Resignation | ✓ done (submit/withdraw/decide; see notes below) |
 | 15 | Payroll | ✓ done (salary structure/revision, HR-entered payslip generation, trend/by-department aggregates; see notes below) |
