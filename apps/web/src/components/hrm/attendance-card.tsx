@@ -9,17 +9,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { ErrorState } from "@/components/hrm/error-state";
 import { formatTime } from "@/lib/format";
+import { ApiError } from "@/lib/api-client";
 import {
   checkIn as apiCheckIn,
   checkOut as apiCheckOut,
   getTodayAttendance,
   type TodayAttendance,
-} from "@/lib/mock/mock-api";
+} from "@/lib/api/attendance";
 
 function elapsedLabel(sinceIso: string, nowMs: number) {
   const minutes = Math.max(0, Math.floor((nowMs - new Date(sinceIso).getTime()) / 60000));
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
+  return `${h}h ${m}m`;
+}
+
+function minutesLabel(totalMinutes: number) {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${h}h ${m}m`;
 }
 
@@ -45,26 +52,26 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
   }, []);
 
   React.useEffect(() => {
-    // Fetching from an external system (the mock API) on mount, not deriving
+    // Fetching from an external system (the API) on mount, not deriving
     // state from props/state - the sanctioned effect use case.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
   React.useEffect(() => {
-    if (attendance?.status !== "checked-in") return;
+    if (attendance?.punchState !== "CHECKED_IN") return;
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
-  }, [attendance?.status]);
+  }, [attendance?.punchState]);
 
   async function handleCheckIn() {
     setPending(true);
     try {
       const result = await apiCheckIn();
       setAttendance(result);
-      toast.success(`Checked in at ${formatTime(result.checkInTime!)}`);
-    } catch {
-      toast.error("Couldn't check you in. Please try again.");
+      toast.success(`Checked in at ${formatTime(result.firstCheckInAt!)}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't check you in. Please try again.");
     } finally {
       setPending(false);
     }
@@ -75,9 +82,9 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
     try {
       const result = await apiCheckOut();
       setAttendance(result);
-      toast.success(`Checked out at ${formatTime(result.checkOutTime!)}`);
-    } catch {
-      toast.error("Couldn't check you out. Please try again.");
+      toast.success(`Checked out at ${formatTime(result.lastCheckOutAt!)}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't check you out. Please try again.");
     } finally {
       setPending(false);
     }
@@ -112,13 +119,13 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
   }
 
   return (
-    <Card className={attendance.status === "checked-in" ? "border-success/30" : undefined}>
+    <Card className={attendance.punchState === "CHECKED_IN" ? "border-success/30" : undefined}>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Today&apos;s attendance</CardTitle>
         <Clock className="text-muted-foreground size-4" />
       </CardHeader>
       <CardContent>
-        {attendance.status === "not-checked-in" && (
+        {attendance.punchState === "NOT_CHECKED_IN" && (
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">You haven&apos;t checked in yet</p>
@@ -133,14 +140,14 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
           </div>
         )}
 
-        {attendance.status === "checked-in" && (
+        {attendance.punchState === "CHECKED_IN" && (
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-success text-sm font-medium">
-                Checked in at {formatTime(attendance.checkInTime!)}
+                Checked in at {formatTime(attendance.firstCheckInAt!)}
               </p>
               <p className="text-muted-foreground text-xs">
-                Worked so far: {elapsedLabel(attendance.checkInTime!, now)}
+                Worked so far: {elapsedLabel(attendance.firstCheckInAt!, now)}
               </p>
             </div>
             <Button
@@ -154,15 +161,15 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
           </div>
         )}
 
-        {attendance.status === "checked-out" && (
+        {attendance.punchState === "CHECKED_OUT" && (
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2">
               <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
               <div>
                 <p className="text-sm font-medium">Day complete</p>
                 <p className="text-muted-foreground text-xs">
-                  {formatTime(attendance.checkInTime!)} - {formatTime(attendance.checkOutTime!)}
-                  {variant === "full" && " · " + elapsedLabel(attendance.checkInTime!, new Date(attendance.checkOutTime!).getTime()) + " worked"}
+                  {formatTime(attendance.firstCheckInAt!)} - {formatTime(attendance.lastCheckOutAt!)}
+                  {variant === "full" && attendance.workedMinutes != null && ` · ${minutesLabel(attendance.workedMinutes)} worked`}
                 </p>
               </div>
             </div>
@@ -174,7 +181,7 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Check out for the day?"
-        description={`You checked in at ${formatTime(attendance.checkInTime ?? new Date().toISOString())}. This will stop your work timer for today.`}
+        description={`You checked in at ${formatTime(attendance.firstCheckInAt ?? new Date().toISOString())}. This will stop your work timer for today.`}
         confirmLabel="Check out"
         onConfirm={handleCheckOut}
       />

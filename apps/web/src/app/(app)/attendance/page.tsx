@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { History } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getAttendanceHistory } from "@/lib/mock/mock-api";
-import { formatDate } from "@/lib/format";
+import { getAttendanceHistory } from "@/lib/api/attendance";
+import { titleCase } from "@/lib/api/employees";
+import { formatDate, formatTime } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AttendanceCard } from "@/components/hrm/attendance-card";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -19,9 +20,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+function hoursLabel(workedMinutes: number | null) {
+  if (workedMinutes == null) return null;
+  return (workedMinutes / 60).toFixed(1);
+}
+
 export default function AttendancePage() {
-  const { data, loading, error, refetch } = useAsync(getAttendanceHistory);
-  const thisWeek = (data ?? []).slice(-7);
+  const { data, loading, error, refetch } = useAsync(() =>
+    getAttendanceHistory({ from: isoDaysAgo(6) }),
+  );
 
   return (
     <div className="space-y-6">
@@ -51,24 +58,24 @@ export default function AttendancePage() {
             onRetry={refetch}
             loadingFallback={<TableSkeleton rows={5} columns={4} />}
           >
-            {thisWeek.length === 0 ? (
+            {(data ?? []).length === 0 ? (
               <EmptyState size="sm" title="No attendance recorded this week" />
             ) : (
               <ul className="divide-y">
-                {thisWeek.map((day) => (
+                {(data ?? []).map((day) => (
                   <li key={day.date} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
                         {formatDate(day.date, { weekday: "short", day: "numeric", month: "short" })}
                       </p>
-                      {day.checkIn && (
+                      {day.firstCheckInAt && (
                         <p className="text-muted-foreground text-xs">
-                          {day.checkIn} - {day.checkOut ?? "—"}
-                          {day.hours ? ` · ${day.hours}h` : ""}
+                          {formatTime(day.firstCheckInAt)} - {day.lastCheckOutAt ? formatTime(day.lastCheckOutAt) : "—"}
+                          {hoursLabel(day.workedMinutes) ? ` · ${hoursLabel(day.workedMinutes)}h` : ""}
                         </p>
                       )}
                     </div>
-                    <StatusBadge status={day.status} />
+                    <StatusBadge status={titleCase(day.status)} />
                   </li>
                 ))}
               </ul>
@@ -78,4 +85,10 @@ export default function AttendancePage() {
       </Card>
     </div>
   );
+}
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
