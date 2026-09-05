@@ -1,7 +1,9 @@
 import { navGroups } from "@/config/nav-config";
 
 const TITLE_OVERRIDES: Record<string, string> = {
-  "/settings/profile": "Profile & settings",
+  "/attendance/history": "Attendance history",
+  "/leave/apply": "Apply leave",
+  "/expenses/add": "Add expense",
 };
 
 /** Looks up the sidebar title for a route, falling back to a humanized segment. */

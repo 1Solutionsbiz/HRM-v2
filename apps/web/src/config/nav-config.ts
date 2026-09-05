@@ -18,8 +18,10 @@ import {
   ShieldCheck,
   ScrollText,
   Palette,
+  TrendingUp,
 } from "lucide-react";
 import type { NavGroup } from "@/types/nav";
+import type { Role } from "@/types/role";
 
 /**
  * HRM V2 navigation, grouped by purpose rather than by role.
@@ -31,15 +33,26 @@ import type { NavGroup } from "@/types/nav";
 export const navGroups: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard }],
+    items: [
+      { title: "My Day", url: "/my-day", icon: LayoutDashboard, roles: ["employee"] },
+      {
+        title: "Dashboard",
+        url: "/dashboard",
+        icon: LayoutDashboard,
+        roles: ["manager", "hr", "admin"],
+      },
+    ],
   },
   {
     label: "My work",
     items: [
       { title: "Attendance", url: "/attendance", icon: Clock },
       { title: "Leave", url: "/leave", icon: CalendarDays },
+      { title: "Requests", url: "/requests", icon: ClipboardList },
+      { title: "Expenses", url: "/expenses", icon: BadgeIndianRupee },
       { title: "Payslips", url: "/payslips", icon: Wallet },
       { title: "Documents", url: "/documents", icon: FolderOpen },
+      { title: "Performance", url: "/performance", icon: TrendingUp },
       { title: "My assets", url: "/assets", icon: Laptop },
     ],
   },
@@ -148,11 +161,19 @@ export const navGroups: NavGroup[] = [
 /**
  * The subset of nav items surfaced as bottom-tab shortcuts on mobile.
  * Kept short and employee-first per the mobile design priority - the
- * remaining items are one tap away in the "More" sheet.
+ * remaining items are one tap away in the "More" sheet. Employees get the
+ * four things they touch most often day-to-day (attendance and leave beat
+ * payslips, which is a once-a-month check tucked into "More" instead).
  */
-export const mobilePrimaryNav = [
-  { title: "Home", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Attendance", url: "/attendance", icon: Clock },
-  { title: "Leave", url: "/leave", icon: CalendarDays },
-  { title: "Payslips", url: "/payslips", icon: Wallet },
-];
+export function getMobilePrimaryNav(role: Role) {
+  const home =
+    role === "employee"
+      ? { title: "My Day", url: "/my-day", icon: LayoutDashboard }
+      : { title: "Home", url: "/dashboard", icon: LayoutDashboard };
+  return [
+    home,
+    { title: "Attendance", url: "/attendance", icon: Clock },
+    { title: "Leave", url: "/leave", icon: CalendarDays },
+    { title: "Requests", url: "/requests", icon: ClipboardList },
+  ];
+}

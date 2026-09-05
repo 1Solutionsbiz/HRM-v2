@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Building2 } from "lucide-react";
+import { AlertCircle, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRole } from "@/lib/role-context";
+import { mockLogin } from "@/lib/mock/mock-api";
 import { ROLES, ROLE_LABELS, type Role } from "@/types/role";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -27,21 +29,26 @@ import {
 export default function LoginPage() {
   const router = useRouter();
   const { setRole } = useRole();
-  const [email, setEmail] = React.useState("");
+  const [email, setEmail] = React.useState("aditi.sharma@1solutions.biz");
   const [password, setPassword] = React.useState("");
   const [role, setLocalRole] = React.useState<Role>("employee");
   const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     setSubmitting(true);
-    // UI preview only - no backend exists yet. Signing in just previews the
-    // selected role's experience.
-    setTimeout(() => {
+    try {
+      await mockLogin(email, password);
       setRole(role);
       toast.success(`Signed in as ${ROLE_LABELS[role]} (preview)`);
-      router.push("/dashboard");
-    }, 400);
+      router.push(role === "employee" ? "/my-day" : "/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -59,12 +66,19 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
             <CardDescription>
-              This is a UI preview build - no account is checked yet. Pick a
+              UI preview build - no account is checked against a real
+              backend. Any password with 4+ characters signs you in; pick a
               role to preview that experience.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">Work email</Label>
                 <Input
@@ -82,6 +96,7 @@ export default function LoginPage() {
                   id="password"
                   type="password"
                   required
+                  placeholder="Try: preview"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />

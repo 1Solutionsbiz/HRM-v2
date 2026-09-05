@@ -99,7 +99,7 @@ export function DateRangePicker({
           mode="range"
           selected={value as { from: Date; to?: Date } | undefined}
           onSelect={onChange}
-          numberOfMonths={2}
+          numberOfMonths={1}
           autoFocus
         />
       </PopoverContent>

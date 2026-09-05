@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import { mobilePrimaryNav, navGroups } from "@/config/nav-config";
+import { getMobilePrimaryNav, navGroups } from "@/config/nav-config";
 import { useRole } from "@/lib/role-context";
 import { cn } from "@/lib/utils";
 import {
@@ -24,6 +24,7 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const { role } = useRole();
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const mobilePrimaryNav = getMobilePrimaryNav(role);
 
   return (
     <nav className="bg-background/95 supports-[backdrop-filter]:bg-background/80 fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch border-t backdrop-blur md:hidden">

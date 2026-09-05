@@ -11,6 +11,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // The mobile bottom nav is a fixed 4rem (h-16) bar - lift toasts clear
+      // of it there. Desktop has no such bar, so the default offset is fine.
+      mobileOffset={{ bottom: "5rem" }}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />
