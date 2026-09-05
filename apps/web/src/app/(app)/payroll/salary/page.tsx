@@ -4,7 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useAsync } from "@/lib/use-async";
-import { formatDate, formatINR } from "@/lib/format";
+import { formatDate, formatINR, toDateOnlyString } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import { getCompanySalaries, reviseSalary, type SalaryStructure } from "@/lib/api/payroll";
 import { employeeFullName, employeeInitials, titleCase } from "@/lib/api/employees";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return toDateOnlyString(new Date());
 }
 
 export default function SalaryManagementPage() {

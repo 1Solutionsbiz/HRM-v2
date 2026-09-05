@@ -2,6 +2,22 @@ export function formatINR(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
+/**
+ * A date-only "YYYY-MM-DD" string from a locally-constructed Date (e.g. one
+ * a Calendar/DatePicker returns, which is local midnight). Never use
+ * `date.toISOString().slice(0, 10)` for this — it reads the date in UTC,
+ * which silently shifts a day backward for any host west of... no, for any
+ * host at a *positive* UTC offset (IST included): local midnight minus the
+ * offset crosses into the previous UTC calendar day. Use local getters
+ * instead, same reasoning as the backend's date-only.ts.
+ */
+export function toDateOnlyString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function formatDate(iso: string | Date, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" }) {
   return new Date(iso).toLocaleDateString("en-IN", opts);
 }

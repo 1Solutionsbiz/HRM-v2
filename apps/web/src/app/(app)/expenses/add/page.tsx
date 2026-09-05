@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
+import { toDateOnlyString } from "@/lib/format";
 import { getExpenseCategories, submitExpenseClaim } from "@/lib/api/expenses";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ export default function AddExpensePage() {
       const claim = await submitExpenseClaim({
         categoryId: effectiveCategoryId,
         amount: Number(amount),
-        expenseDate: date!.toISOString().slice(0, 10),
+        expenseDate: toDateOnlyString(date!),
         description: description.trim(),
         receiptUrl: receiptUrl.trim() || undefined,
       });

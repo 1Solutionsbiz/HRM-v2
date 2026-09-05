@@ -5,7 +5,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { useAsync } from "@/lib/use-async";
 import { getAttendanceHistory, type AttendanceHistoryDay } from "@/lib/api/attendance";
 import { titleCase } from "@/lib/api/employees";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -53,7 +53,7 @@ const columns: ColumnDef<AttendanceHistoryDay>[] = [
 function isoDaysAgo(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return toDateOnlyString(d);
 }
 
 export default function AttendanceHistoryPage() {

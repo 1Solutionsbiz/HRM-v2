@@ -5,7 +5,7 @@ import { History } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { getAttendanceHistory } from "@/lib/api/attendance";
 import { titleCase } from "@/lib/api/employees";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AttendanceCard } from "@/components/hrm/attendance-card";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -90,5 +90,5 @@ export default function AttendancePage() {
 function isoDaysAgo(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return toDateOnlyString(d);
 }

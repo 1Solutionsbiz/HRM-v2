@@ -7,7 +7,7 @@ import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import { getHolidays, createHoliday, updateHoliday, deleteHoliday, type Holiday } from "@/lib/api/holidays";
-import { formatDate } from "@/lib/format";
+import { formatDate, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatCard } from "@/components/hrm/stat-card";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/dialog";
 
 function todayDateOnly(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toDateOnlyString(new Date());
 }
 
 interface HolidayFormState {
@@ -92,7 +92,7 @@ export default function HolidaysPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const payload = { name: form.name.trim(), date: form.date.toISOString().slice(0, 10) };
+      const payload = { name: form.name.trim(), date: toDateOnlyString(form.date) };
       if (target === "new") {
         await createHoliday(payload);
         toast.success(`${payload.name} added`);

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Info } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
+import { toDateOnlyString } from "@/lib/format";
 import {
   getLeaveBalances,
   getLeaveTypes,
@@ -68,9 +69,8 @@ export default function ApplyLeavePage() {
     if (!validate() || !effectiveLeaveTypeId) return;
     setSubmitting(true);
     try {
-      const toISO = (d: Date) => d.toISOString().slice(0, 10);
-      const startDate = dayType === "FULL_DAY" ? toISO(range!.from!) : toISO(singleDate!);
-      const endDate = dayType === "FULL_DAY" ? toISO(range!.to!) : toISO(singleDate!);
+      const startDate = dayType === "FULL_DAY" ? toDateOnlyString(range!.from!) : toDateOnlyString(singleDate!);
+      const endDate = dayType === "FULL_DAY" ? toDateOnlyString(range!.to!) : toDateOnlyString(singleDate!);
       const request = await applyLeave({
         leaveTypeId: effectiveLeaveTypeId,
         startDate,
