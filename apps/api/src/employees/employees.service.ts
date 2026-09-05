@@ -13,6 +13,7 @@ import type { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import type { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import type { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import type { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
+import type { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 
 const EMPLOYEE_INCLUDE = {
   user: { select: { email: true, isActive: true } },
@@ -326,6 +327,55 @@ export class EmployeesService {
       select: { id: true },
     });
     if (!employee) throw new NotFoundException('Employee not found');
+  }
+
+  async getMe(userId: string) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.findOne(employeeId);
+  }
+
+  /**
+   * Self-service update — deliberately does not go through the general
+   * update() (that method also handles status/dateOfExit/department/
+   * designation transitions no self-service caller should ever trigger).
+   * UpdateMyProfileDto's own field set is the real boundary here, but this
+   * stays a separate, minimal write rather than routing a narrower DTO
+   * through the wider method.
+   */
+  async updateMyProfile(userId: string, dto: UpdateMyProfileDto, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: {
+        ...dto,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: employeeId,
+      description: 'Updated own profile',
+    });
+
+    return this.findOne(employeeId);
+  }
+
+  private async requireEmployeeId(userId: string): Promise<string> {
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!employee) {
+      throw new NotFoundException(
+        'No employee profile is linked to this account',
+      );
+    }
+    return employee.id;
   }
 
   /**

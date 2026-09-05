@@ -85,6 +85,26 @@ export function getEmployee(id: string): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>(`/employees/${id}`);
 }
 
+export function getMyProfile(): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me");
+}
+
+export interface UpdateMyProfilePayload {
+  personalEmail?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  currentAddress?: string;
+  gender?: Gender;
+  nationality?: string;
+  religion?: string;
+  maritalStatus?: MaritalStatus;
+  bloodGroup?: string;
+}
+
+export function updateMyProfile(payload: UpdateMyProfilePayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me", { method: "PATCH", body: payload });
+}
+
 export function employeeFullName(e: { firstName: string; lastName: string }): string {
   return `${e.firstName} ${e.lastName}`.trim();
 }

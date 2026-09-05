@@ -7,17 +7,36 @@ import { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 
 /**
- * No self-service scope yet ("my own profile") — every route here requires
- * employee:manage. A future `/employees/me` for the Profile screen is a
- * separate, deliberately unbuilt concern (it needs "read your own record"
- * authorization, not "manage everyone's").
+ * Class-level employee:manage covers every route except the two /me ones
+ * below, which override it back to "just logged in" via a bare
+ * @RequirePermissions() — see PermissionsGuard's getAllAndOverride, method
+ * metadata wins over class metadata, and an empty array short-circuits the
+ * check entirely. Declared before the :id routes on purpose: Nest/Express
+ * match GET/PATCH /employees/me against whichever handler is registered
+ * first, and :id would otherwise swallow "me" as a literal id.
  */
 @Controller('employees')
 @RequirePermissions('employee:manage')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
+
+  @Get('me')
+  @RequirePermissions()
+  getMe(@CurrentUser() actor: AuthContext) {
+    return this.employeesService.getMe(actor.userId);
+  }
+
+  @Patch('me')
+  @RequirePermissions()
+  updateMe(
+    @Body() dto: UpdateMyProfileDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateMyProfile(actor.userId, dto, actor);
+  }
 
   @Post()
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() actor: AuthContext) {
