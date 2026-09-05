@@ -5,7 +5,8 @@ import Link from "next/link";
 import { CalendarPlus, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { useAsync } from "@/lib/use-async";
-import { getLeaveBalances, getLeaveRequests, cancelLeaveRequest } from "@/lib/mock/mock-api";
+import { getLeaveBalances, getMyLeaveRequests, cancelLeaveRequest } from "@/lib/api/leave";
+import { titleCase } from "@/lib/api/employees";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -19,7 +20,7 @@ import { Progress } from "@/components/ui/progress";
 
 export default function LeavePage() {
   const balances = useAsync(getLeaveBalances);
-  const requests = useAsync(getLeaveRequests);
+  const requests = useAsync(getMyLeaveRequests);
   const [cancelId, setCancelId] = React.useState<string | null>(null);
 
   async function handleCancel() {
@@ -58,22 +59,25 @@ export default function LeavePage() {
       >
         {balances.data && (
           <div className="grid gap-4 sm:grid-cols-3">
-            {balances.data.map((b) => (
-              <Card key={b.type}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">{b.type}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <p className="text-2xl font-semibold tabular-nums">
-                    {b.total - b.used}
-                    <span className="text-muted-foreground ml-1 text-sm font-normal">
-                      / {b.total} days left
-                    </span>
-                  </p>
-                  <Progress value={(b.used / b.total) * 100} />
-                </CardContent>
-              </Card>
-            ))}
+            {balances.data.map((b) => {
+              const total = b.allocatedDays + b.carriedOverDays;
+              return (
+                <Card key={b.leaveTypeId}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">{b.leaveTypeName}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <p className="text-2xl font-semibold tabular-nums">
+                      {b.remainingDays}
+                      <span className="text-muted-foreground ml-1 text-sm font-normal">
+                        / {total} days left
+                      </span>
+                    </p>
+                    <Progress value={total > 0 ? (b.usedDays / total) * 100 : 0} />
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </AsyncSection>
@@ -106,18 +110,18 @@ export default function LeavePage() {
                   <li key={r.id} className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
-                        {r.type} · {r.dayType}
+                        {r.leaveType.name} · {titleCase(r.dayType)}
                       </p>
                       <p className="text-muted-foreground text-xs">
                         {r.startDate === r.endDate
                           ? formatDate(r.startDate)
                           : `${formatDate(r.startDate)} - ${formatDate(r.endDate)}`}{" "}
-                        · {r.days} day{r.days !== 1 ? "s" : ""} · {r.reason}
+                        · {r.totalDays} day{r.totalDays !== 1 ? "s" : ""} · {r.reason}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <StatusBadge status={r.status} />
-                      {r.status === "Pending" && (
+                      <StatusBadge status={titleCase(r.status)} />
+                      {r.status === "PENDING" && (
                         <Button
                           variant="ghost"
                           size="icon-sm"

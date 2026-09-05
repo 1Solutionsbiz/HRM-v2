@@ -3,9 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Info } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getLeaveBalances, applyLeave } from "@/lib/mock/mock-api";
-import { leaveTypes } from "@/lib/mock/fixtures";
+import { ApiError } from "@/lib/api-client";
+import {
+  getLeaveBalances,
+  getLeaveTypes,
+  applyLeave,
+  type LeaveDayType,
+  type HalfDayPeriod,
+} from "@/lib/api/leave";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,25 +28,31 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Info } from "lucide-react";
 
 export default function ApplyLeavePage() {
   const router = useRouter();
   const { data: balances } = useAsync(getLeaveBalances);
+  const { data: leaveTypes } = useAsync(getLeaveTypes);
 
-  const [type, setType] = React.useState<string>(leaveTypes[0]);
-  const [dayType, setDayType] = React.useState<"Full Day" | "Half Day">("Full Day");
+  const [leaveTypeId, setLeaveTypeId] = React.useState<string>("");
+  const [dayType, setDayType] = React.useState<LeaveDayType>("FULL_DAY");
+  const [halfDayPeriod, setHalfDayPeriod] = React.useState<HalfDayPeriod>("MORNING");
   const [singleDate, setSingleDate] = React.useState<Date>();
   const [range, setRange] = React.useState<{ from?: Date; to?: Date }>();
   const [reason, setReason] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
-  const balance = balances?.find((b) => b.type === type);
+  // Derived rather than synced via effect: falls back to the first leave
+  // type once the list loads, without a setState-in-effect render cascade.
+  const effectiveLeaveTypeId = leaveTypeId || leaveTypes?.[0]?.id || "";
+  const balance = balances?.find((b) => b.leaveTypeId === effectiveLeaveTypeId);
+  const selectedType = leaveTypes?.find((t) => t.id === effectiveLeaveTypeId);
 
   function validate() {
     const next: Record<string, string> = {};
-    if (dayType === "Full Day") {
+    if (dayType === "FULL_DAY") {
       if (!range?.from || !range?.to) next.date = "Select a start and end date.";
     } else {
       if (!singleDate) next.date = "Select a date.";
@@ -51,19 +64,27 @@ export default function ApplyLeavePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    setSubmitError(null);
+    if (!validate() || !effectiveLeaveTypeId) return;
     setSubmitting(true);
     try {
       const toISO = (d: Date) => d.toISOString().slice(0, 10);
-      const startDate = dayType === "Full Day" ? toISO(range!.from!) : toISO(singleDate!);
-      const endDate = dayType === "Full Day" ? toISO(range!.to!) : toISO(singleDate!);
-      const request = await applyLeave({ type, startDate, endDate, dayType, reason: reason.trim() });
-      toast.success(`Leave request ${request.id} submitted`, {
-        description: "Rahul Verma will review it shortly.",
+      const startDate = dayType === "FULL_DAY" ? toISO(range!.from!) : toISO(singleDate!);
+      const endDate = dayType === "FULL_DAY" ? toISO(range!.to!) : toISO(singleDate!);
+      const request = await applyLeave({
+        leaveTypeId: effectiveLeaveTypeId,
+        startDate,
+        endDate,
+        dayType,
+        halfDayPeriod: dayType === "HALF_DAY" ? halfDayPeriod : undefined,
+        reason: reason.trim(),
+      });
+      toast.success(`Leave request ${request.code} submitted`, {
+        description: "Your manager will review it shortly.",
       });
       router.push("/leave");
-    } catch {
-      toast.error("Couldn't submit your request. Please try again.");
+    } catch (err) {
+      setSubmitError(err instanceof ApiError ? err.message : "Couldn't submit your request. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -80,23 +101,28 @@ export default function ApplyLeavePage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {submitError && (
+              <Alert variant="destructive">
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="leave-type">Leave type</Label>
-              <Select value={type} onValueChange={setType}>
+              <Select value={effectiveLeaveTypeId} onValueChange={setLeaveTypeId}>
                 <SelectTrigger id="leave-type" className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select a leave type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {leaveTypes.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
+                  {(leaveTypes ?? []).map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {balance && (
                 <p className="text-muted-foreground text-xs">
-                  {balance.total - balance.used} of {balance.total} days remaining
+                  {balance.remainingDays} of {balance.allocatedDays + balance.carriedOverDays} days remaining
                 </p>
               )}
             </div>
@@ -105,21 +131,39 @@ export default function ApplyLeavePage() {
               <Label>Duration</Label>
               <RadioGroup
                 value={dayType}
-                onValueChange={(v) => setDayType(v as "Full Day" | "Half Day")}
+                onValueChange={(v) => setDayType(v as LeaveDayType)}
                 className="flex gap-4"
               >
                 <label className="flex items-center gap-2 text-sm">
-                  <RadioGroupItem value="Full Day" /> Full day
+                  <RadioGroupItem value="FULL_DAY" /> Full day
                 </label>
                 <label className="flex items-center gap-2 text-sm">
-                  <RadioGroupItem value="Half Day" /> Half day
+                  <RadioGroupItem value="HALF_DAY" /> Half day
                 </label>
               </RadioGroup>
             </div>
 
+            {dayType === "HALF_DAY" && (
+              <div className="space-y-2">
+                <Label>Which half</Label>
+                <RadioGroup
+                  value={halfDayPeriod}
+                  onValueChange={(v) => setHalfDayPeriod(v as HalfDayPeriod)}
+                  className="flex gap-4"
+                >
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="MORNING" /> Morning
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="AFTERNOON" /> Afternoon
+                  </label>
+                </RadioGroup>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>{dayType === "Full Day" ? "Dates" : "Date"}</Label>
-              {dayType === "Full Day" ? (
+              <Label>{dayType === "FULL_DAY" ? "Dates" : "Date"}</Label>
+              {dayType === "FULL_DAY" ? (
                 <DateRangePicker value={range} onChange={setRange} />
               ) : (
                 <DatePicker value={singleDate} onChange={setSingleDate} />
@@ -139,12 +183,12 @@ export default function ApplyLeavePage() {
               {errors.reason && <p className="text-destructive text-xs">{errors.reason}</p>}
             </div>
 
-            {balance && balance.total - balance.used <= 0 && (
+            {balance && balance.remainingDays <= 0 && (
               <Alert variant="warning">
                 <Info />
                 <AlertDescription>
-                  You have no {type.toLowerCase()} remaining. You can still submit - your manager
-                  will review it as an exception.
+                  You have no {(selectedType?.name ?? "leave").toLowerCase()} remaining. You can
+                  still submit - your manager will review it as an exception.
                 </AlertDescription>
               </Alert>
             )}
@@ -153,7 +197,7 @@ export default function ApplyLeavePage() {
               <Button type="button" variant="outline" className="flex-1" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1" disabled={submitting}>
+              <Button type="submit" className="flex-1" disabled={submitting || !effectiveLeaveTypeId}>
                 {submitting ? "Submitting…" : "Submit request"}
               </Button>
             </div>
