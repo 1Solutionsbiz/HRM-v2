@@ -306,6 +306,12 @@ model Employee {
   currentAddress String?        @db.Text
   status         EmployeeStatus @default(ACTIVE)
   avatarUrl      String?
+  /// The day the employee actually left - set when status flips to
+  /// INACTIVE. Distinct from any Resignation.lastWorkingDay: not every
+  /// past employee went through the resignation workflow (most of the
+  /// legacy-imported ones didn't), so this is the one field the "Past
+  /// Employees" tab can always rely on.
+  dateOfExit     DateTime?      @db.Date
 
   /// Personal-details fields shown on the legacy HRM's profile page but
   /// absent from V2 until this addition (documented gap in

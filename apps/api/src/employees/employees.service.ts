@@ -107,6 +107,7 @@ export class EmployeesService {
         phone: true,
         status: true,
         dateOfJoining: true,
+        dateOfExit: true,
         avatarUrl: true,
         user: { select: { email: true } },
         department: { select: { id: true, name: true } },
@@ -132,11 +133,22 @@ export class EmployeesService {
 
     await this.validateReferences(dto, id);
 
+    // dateOfExit tracks a status transition, not a client-supplied value —
+    // set on ACTIVE->INACTIVE, cleared on INACTIVE->ACTIVE (a reactivation
+    // undoes it), left untouched otherwise (including a status-less update
+    // or INACTIVE->INACTIVE, which shouldn't overwrite an already-recorded
+    // exit date).
+    let dateOfExit: Date | null | undefined;
+    if (dto.status && dto.status !== existing.status) {
+      dateOfExit = dto.status === 'INACTIVE' ? new Date() : null;
+    }
+
     await this.prisma.employee.update({
       where: { id },
       data: {
         ...dto,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        dateOfExit,
       },
     });
 

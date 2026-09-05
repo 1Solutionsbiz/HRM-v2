@@ -20,6 +20,7 @@ export interface EmployeeListItem {
   phone: string | null;
   status: EmployeeStatus;
   dateOfJoining: string;
+  dateOfExit: string | null;
   avatarUrl: string | null;
   user: { email: string };
   department: { id: string; name: string } | null;
