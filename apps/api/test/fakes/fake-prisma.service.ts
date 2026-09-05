@@ -1007,4 +1007,112 @@ export class FakePrismaService {
       isActive: input.isActive ?? true,
     });
   }
+
+  // --- Documents ---------------------------------------------------------
+
+  documentTypes = new Map<
+    string,
+    { id: string; key: string; name: string; category: string }
+  >();
+  employeeDocuments = new Map<
+    string,
+    {
+      employeeId: string;
+      documentTypeId: string;
+      fileUrl: string | null;
+      status: string;
+      uploadedAt: Date | null;
+      verifiedByUserId: string | null;
+      verifiedAt: Date | null;
+      notes: string | null;
+    }
+  >();
+
+  private employeeDocumentKey(
+    employeeId: string,
+    documentTypeId: string,
+  ): string {
+    return `${employeeId}:${documentTypeId}`;
+  }
+
+  documentType = {
+    findMany: async () => [...this.documentTypes.values()],
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.documentTypes.get(where.id) ?? null,
+  };
+
+  employeeDocument = {
+    findMany: async ({ where }: { where: { employeeId: string } }) =>
+      [...this.employeeDocuments.values()].filter(
+        (doc) => doc.employeeId === where.employeeId,
+      ),
+    findUnique: async ({
+      where,
+    }: {
+      where: {
+        employeeId_documentTypeId: {
+          employeeId: string;
+          documentTypeId: string;
+        };
+      };
+    }) => {
+      const { employeeId, documentTypeId } = where.employeeId_documentTypeId;
+      return (
+        this.employeeDocuments.get(
+          this.employeeDocumentKey(employeeId, documentTypeId),
+        ) ?? null
+      );
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: {
+        employeeId_documentTypeId: {
+          employeeId: string;
+          documentTypeId: string;
+        };
+      };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    }) => {
+      const { employeeId, documentTypeId } = where.employeeId_documentTypeId;
+      const key = this.employeeDocumentKey(employeeId, documentTypeId);
+      const existing = this.employeeDocuments.get(key);
+      const record = existing
+        ? { ...existing, ...update }
+        : { employeeId, documentTypeId, ...create };
+      this.employeeDocuments.set(key, record as never);
+      return record;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: {
+        employeeId_documentTypeId: {
+          employeeId: string;
+          documentTypeId: string;
+        };
+      };
+      data: Record<string, unknown>;
+    }) => {
+      const { employeeId, documentTypeId } = where.employeeId_documentTypeId;
+      const key = this.employeeDocumentKey(employeeId, documentTypeId);
+      const existing = this.employeeDocuments.get(key);
+      if (!existing) throw new Error(`no fake employee document ${key}`);
+      Object.assign(existing, data);
+      return existing;
+    },
+  };
+
+  seedDocumentType(input: {
+    id: string;
+    key: string;
+    name: string;
+    category: string;
+  }): void {
+    this.documentTypes.set(input.id, input);
+  }
 }

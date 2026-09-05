@@ -48,6 +48,16 @@ const LEAVE_TYPES = [
   { key: 'earned', name: 'Earned Leave', defaultAnnualDays: 15 },
 ] as const;
 
+/** Matches the mock's `documents` fixture. */
+const DOCUMENT_TYPES = [
+  { key: 'aadhaar', name: 'Aadhaar card', category: 'IDENTITY' },
+  { key: 'pan', name: 'PAN card', category: 'IDENTITY' },
+  { key: 'marksheet-10', name: '10th marksheet', category: 'EDUCATION' },
+  { key: 'marksheet-12', name: '12th marksheet', category: 'EDUCATION' },
+  { key: 'bank-proof', name: 'Bank passbook / cancelled cheque', category: 'BANKING' },
+  { key: 'relieving-letter', name: 'Relieving letter (previous employer)', category: 'EMPLOYMENT' },
+] as const;
+
 function randomPassword(): string {
   return randomBytes(18).toString('base64url');
 }
@@ -116,6 +126,14 @@ async function main(): Promise<void> {
       where: { key: leaveType.key },
       create: leaveType,
       update: { name: leaveType.name, defaultAnnualDays: leaveType.defaultAnnualDays },
+    });
+  }
+
+  for (const documentType of DOCUMENT_TYPES) {
+    await prisma.documentType.upsert({
+      where: { key: documentType.key },
+      create: documentType,
+      update: { name: documentType.name, category: documentType.category },
     });
   }
 

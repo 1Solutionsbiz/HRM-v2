@@ -54,7 +54,7 @@ been run against real MySQL.
 | 05 | Attendance | ✓ done (event-sourced check-in/out, policy-driven late/half-day, history synthesis; see notes below) |
 | 06 | Leave | ✓ done (apply/approve, balance ledger, Attendance integration; see notes below) |
 | 07 | Requests | ✓ done (read-only aggregator over Leave; extend for Expenses at 09; see notes below) |
-| 08 | Documents | ○ not started |
+| 08 | Documents | ✓ done (submit/verify checklist, no real file storage yet; see notes below) |
 | 09 | Expenses | ○ not started |
 | 10 | Performance | ○ not started |
 | 11 | Announcements | ○ not started |
@@ -348,6 +348,33 @@ module so far, alongside 15 (Payroll) still to come:**
   (a pre-existing, unrelated `supertest/types` import error from the
   original scaffold is left alone).
 - 2 new unit tests + 2 new e2e tests. Still nothing against real MySQL.
+
+**Module 08 (Documents) notes:**
+- Self-service: `GET /documents/types`, `GET /documents/mine`, `POST
+  /documents/mine/:documentTypeId/submit`. HR-facing (reuses `employee:manage`
+  rather than minting a new permission — this is a subset of employee HR
+  management, not a distinct capability): `GET
+  /documents/employees/:employeeId`, `PATCH
+  /documents/employees/:employeeId/:documentTypeId/verify`.
+- **No real file storage integration** — no provider (S3 or otherwise) is
+  wired up anywhere in this project, and building one wasn't requested.
+  `POST .../submit` accepts a `fileUrl` string (the URL of a file uploaded
+  somewhere else) rather than a file body; the API only ever records the
+  URL. Documented as a real gap, not silently worked around.
+- Checklist rows synthesize `MISSING` on read for any active `DocumentType`
+  with no `EmployeeDocument` row yet — third module using this pattern
+  (Attendance's history gaps, Leave's balances, now this).
+- Resubmitting a document clears any prior `verifiedByUserId`/`verifiedAt`/
+  `notes` and resets to `PENDING_REVIEW` — a new file means the previous
+  review no longer applies to what's on file. Verifying/rejecting is only
+  allowed from `PENDING_REVIEW`; nothing can be verified before it's been
+  submitted at least once.
+- 8 new unit tests + 4 new e2e tests, including the full
+  submit-then-HR-verify round trip and the two 4xx paths (verifying an
+  unsubmitted document, an employee attempting to verify their own).
+  `npx tsc --noEmit -p tsconfig.json` re-run clean (aside from the
+  pre-existing unrelated `supertest/types` error). Still nothing against
+  real MySQL.
 
 ## Not started
 
