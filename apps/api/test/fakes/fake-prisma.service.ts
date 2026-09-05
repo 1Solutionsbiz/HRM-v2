@@ -52,7 +52,7 @@ export interface FakeEmployee {
   lastName: string;
   personalEmail?: string;
   phone?: string;
-  dateOfBirth: Date | null;
+  dateOfBirth?: Date | null;
   dateOfJoining: Date;
   employmentType: string;
   workLocation?: string;
@@ -78,6 +78,24 @@ interface FakeEmergencyContact {
   name: string;
   relationship: string;
   phone: string;
+}
+
+interface FakeLeaveRequest {
+  id: string;
+  code: string;
+  employeeId: string;
+  leaveTypeId: string;
+  startDate: Date;
+  endDate: Date;
+  dayType: string;
+  halfDayPeriod: string | null;
+  totalDays: { toNumber(): number };
+  reason: string;
+  status: string;
+  approverUserId: string | null;
+  decidedAt: Date | null;
+  decisionNote: string | null;
+  submittedAt: Date;
 }
 
 export class FakePrismaService {
@@ -759,26 +777,7 @@ export class FakePrismaService {
       carriedOverDays: { toNumber(): number };
     }
   >();
-  leaveRequests = new Map<
-    string,
-    {
-      id: string;
-      code: string;
-      employeeId: string;
-      leaveTypeId: string;
-      startDate: Date;
-      endDate: Date;
-      dayType: string;
-      halfDayPeriod: string | null;
-      totalDays: { toNumber(): number };
-      reason: string;
-      status: string;
-      approverUserId: string | null;
-      decidedAt: Date | null;
-      decisionNote: string | null;
-      submittedAt: Date;
-    }
-  >();
+  leaveRequests = new Map<string, FakeLeaveRequest>();
 
   private static decimalShim(value: number | { toNumber(): number }): {
     toNumber(): number;
@@ -887,6 +886,28 @@ export class FakePrismaService {
     },
   };
 
+  // Real Prisma's `include`/`select` would attach these joins on demand;
+  // this fake always attaches them so findMany's callers (LeaveService's
+  // getMyRequests/getCompanyRequests, both of which do `include`) get the
+  // shape they expect regardless of the exact include clause passed.
+  private leaveRequestWithRelations(request: FakeLeaveRequest) {
+    const leaveType = this.leaveTypes.get(request.leaveTypeId);
+    const employee = this.employees.get(request.employeeId);
+    return {
+      ...request,
+      leaveType: leaveType
+        ? { key: leaveType.key, name: leaveType.name }
+        : undefined,
+      employee: employee
+        ? {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          }
+        : undefined,
+    };
+  }
+
   leaveRequest = {
     findMany: async ({
       where,
@@ -897,15 +918,17 @@ export class FakePrismaService {
         status?: { in: string[] };
       };
     } = {}) =>
-      [...this.leaveRequests.values()].filter((request) => {
-        if (where?.employeeId && request.employeeId !== where.employeeId)
-          return false;
-        if (where?.leaveTypeId && request.leaveTypeId !== where.leaveTypeId)
-          return false;
-        if (where?.status?.in && !where.status.in.includes(request.status))
-          return false;
-        return true;
-      }),
+      [...this.leaveRequests.values()]
+        .filter((request) => {
+          if (where?.employeeId && request.employeeId !== where.employeeId)
+            return false;
+          if (where?.leaveTypeId && request.leaveTypeId !== where.leaveTypeId)
+            return false;
+          if (where?.status?.in && !where.status.in.includes(request.status))
+            return false;
+          return true;
+        })
+        .map((request) => this.leaveRequestWithRelations(request)),
     findFirst: async ({
       where,
     }: {

@@ -14,6 +14,7 @@ import { EmployeesModule } from './employees/employees.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { AttendanceModule } from './attendance/attendance.module.js';
 import { LeaveModule } from './leave/leave.module.js';
+import { RequestsModule } from './requests/requests.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -31,6 +32,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     NotificationsModule,
     AttendanceModule,
     LeaveModule,
+    RequestsModule,
   ],
   controllers: [AppController],
   providers: [

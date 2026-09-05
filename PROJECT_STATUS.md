@@ -53,7 +53,7 @@ been run against real MySQL.
 | 04 | Notifications | ✓ done (self-service list/read; see notes below) |
 | 05 | Attendance | ✓ done (event-sourced check-in/out, policy-driven late/half-day, history synthesis; see notes below) |
 | 06 | Leave | ✓ done (apply/approve, balance ledger, Attendance integration; see notes below) |
-| 07 | Requests | ○ not started |
+| 07 | Requests | ✓ done (read-only aggregator over Leave; extend for Expenses at 09; see notes below) |
 | 08 | Documents | ○ not started |
 | 09 | Expenses | ○ not started |
 | 10 | Performance | ○ not started |
@@ -328,6 +328,26 @@ module so far, alongside 15 (Payroll) still to come:**
   (balance updates, AttendanceDay gets marked ON_LEAVE) and a rejected
   self-cancel of an already-approved request. Still nothing against real
   MySQL.
+
+**Module 07 (Requests) notes:**
+- `GET /requests/mine` only — a read-only aggregator, not its own domain
+  (no `Request` table exists; matches the mock's `getMyRequests()`, which
+  merges `leaveRequestStore` + `expenseStore` client-side). Self-service,
+  no permission required beyond being authenticated.
+- Only Leave is wired in today (Expenses doesn't exist until module 09).
+  `RequestsService` injects `LeaveService` and maps its rows to the unified
+  `{ id, kind, title, detail, status, submittedOn }` shape; when Expenses
+  lands, add it the same way (inject `ExpensesModule`, map, merge, re-sort)
+  rather than redesigning this module.
+- Also fixed while extending the fake test double for this: `FakeEmployee`
+  test fixtures across three e2e spec files (attendance, leave, requests)
+  had been silently missing a required `dateOfBirth` field — invisible
+  because `vitest` doesn't type-check spec files. `npx tsc --noEmit -p
+  tsconfig.json` is the way to actually catch this (`npm run build`
+  excludes `test/` entirely); ran it and fixed the one real gap it found
+  (a pre-existing, unrelated `supertest/types` import error from the
+  original scaffold is left alone).
+- 2 new unit tests + 2 new e2e tests. Still nothing against real MySQL.
 
 ## Not started
 
