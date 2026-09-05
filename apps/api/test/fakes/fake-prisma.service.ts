@@ -278,9 +278,18 @@ export class FakePrismaService {
       where,
     }: { where?: { key?: { in?: string[] } } } = {}) => {
       const keys = where?.key?.in;
-      return [...this.roles.values()].filter(
-        (role) => !keys || keys.includes(role.key),
-      );
+      return [...this.roles.values()]
+        .filter((role) => !keys || keys.includes(role.key))
+        .map((role) => ({
+          ...role,
+          // Real Prisma would carry the seeded Permission.description here;
+          // the fake has no separate Permission entity (roles just flatten
+          // permissionKeys), so it stands in the key itself. Fine for e2e,
+          // which only needs the join to exist, not exact copy.
+          rolePermissions: role.permissionKeys.map((key) => ({
+            permission: { key, description: key },
+          })),
+        }));
     },
   };
 
@@ -463,7 +472,10 @@ export class FakePrismaService {
         ? (this.designations.get(employee.designationId) ?? null)
         : null,
       user: employee.userId
-        ? { email: this.users.get(employee.userId)?.email }
+        ? {
+            email: this.users.get(employee.userId)?.email,
+            userRoles: this.userRolesJoin(employee.userId),
+          }
         : undefined,
       manager: employee.managerId
         ? (() => {
@@ -683,6 +695,64 @@ export class FakePrismaService {
     fullDayHours: { toNumber: () => number };
     workingWeekdays: number[];
   } | null = null;
+  companySettings_: {
+    id: string;
+    legalName: string;
+    brandName: string;
+    website: string | null;
+    supportEmail: string;
+    phone: string | null;
+    address: string | null;
+    timezone: string;
+    updatedAt: Date;
+    updatedByUserId: string | null;
+  } | null = null;
+
+  companySettings = {
+    findUnique: async () => this.companySettings_,
+    update: async ({
+      data,
+    }: {
+      data: {
+        legalName: string;
+        brandName: string;
+        website: string | null;
+        supportEmail: string;
+        phone: string | null;
+        address: string | null;
+        updatedByUserId: string;
+      };
+    }) => {
+      if (!this.companySettings_)
+        throw new Error(
+          'no fake company settings — call seedCompanySettings() first',
+        );
+      this.companySettings_ = {
+        ...this.companySettings_,
+        ...data,
+        updatedAt: new Date(),
+      };
+      return this.companySettings_;
+    },
+  };
+
+  seedCompanySettings(
+    overrides: Partial<NonNullable<FakePrismaService['companySettings_']>> = {},
+  ): void {
+    this.companySettings_ = {
+      id: 'singleton',
+      legalName: '1Solutions Pvt. Ltd.',
+      brandName: '1Solutions',
+      website: 'https://1solutions.biz',
+      supportEmail: 'hr@1solutions.biz',
+      phone: '+91 11 4567 8900',
+      address: 'F Block, Laxmi Nagar, New Delhi, Delhi 110092',
+      timezone: 'Asia/Kolkata',
+      updatedAt: new Date(),
+      updatedByUserId: null,
+      ...overrides,
+    };
+  }
 
   private dateKey(date: Date): string {
     return date.toISOString().slice(0, 10);

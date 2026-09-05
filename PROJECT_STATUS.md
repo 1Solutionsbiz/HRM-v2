@@ -63,7 +63,7 @@ been run against real MySQL.
 | 14 | Resignation | ✓ done (submit/withdraw/decide; see notes below) |
 | 15 | Payroll | ✓ done (salary structure/revision, HR-entered payslip generation, trend/by-department aggregates; see notes below) |
 | 16 | Reports | ✓ done — **folded into module 15**, no separate endpoints. The only reports screen in the frontend (`/payroll/reports`) is Payroll's own trend/by-department view; `getTrend`/`getByDepartment` were sharpened (activeHeadcount, trailing-6-months window, department name join) to fully back it. See Module 15 notes. |
-| 17 | Admin | ○ not started |
+| 17 | Admin | ✓ done (company settings CRUD, live role→permission view, employee role assignment; see notes below) |
 | 18 | Audit | ○ not started (module 18 is a read-facing System Logs API over the `AuditLog` table already being written by every other module — not the write path itself) |
 
 Shared infra built alongside module 01 (used by every module after it, so
@@ -567,6 +567,43 @@ rather than guessing at a schema now.
   mark-paid, and unit coverage for activeHeadcount, the trailing-months
   window, and getByDepartment's department-name join and no-data path.
   Still nothing against real MySQL.
+
+**Module 17 (Admin) notes:**
+- `GET`/`PUT /admin/company-settings` (new `company:manage` permission,
+  admin-only — not granted to hr, matching the nav's `roles: ["admin"]`
+  restriction on that screen). `PUT` is a **full replace, not a merge**:
+  `website`/`phone`/`address` are always overwritten with the request's
+  value, `null` if omitted. Safe because the admin form is one page
+  submitting the whole record, not a per-field editor — if a genuine
+  partial-update caller shows up later, that needs its own PATCH, not this
+  method reused. `timezone` is excluded from the DTO entirely (the
+  frontend renders it disabled; the schema default is still the only
+  source).
+- `GET /admin/roles/permissions` (permission `user:manage`, already
+  admin-only per the seed) reads live `RolePermission`/`Permission` rows
+  keyed by role — **not a hand-maintained copy** the way the mock's
+  `getRolePermissions` fixture was, which could silently drift from what
+  routes actually enforce. This is a real improvement over the UI it
+  replaces, not just a port of it.
+- `GET /admin/roles/employees` / `PATCH
+  /admin/roles/employees/:employeeId` (`{ roleKey }`) back the "Employee
+  role assignments" table and its one-role-per-employee dropdown. The
+  PATCH **delegates to `UsersService.replaceRoles(userId, [roleKey],
+  actor)`** (module 02) rather than reimplementing role writes — it
+  inherits that method's existing `ROLE_CHANGED` audit log for free. A
+  user with more than one role only shows the first here (a UI
+  constraint, not a data one); `PUT /users/:id/roles` still exists for
+  true multi-role assignment.
+- **Administration nav is only two-thirds covered by this module.**
+  `/admin/logs` ("System logs") is module 18's read API over `AuditLog` —
+  intentionally not built here. `/style-guide` ("Design system") is a
+  static frontend page with no backend surface at all. The nav group is
+  fully accounted for once 18 lands.
+- 6 unit tests + 3 e2e tests, including one asserting a worker gets 403 on
+  all four gated routes — the mutating ones (`PUT company-settings`,
+  `PATCH roles/employees/:id`) matter most, since a permission gap on the
+  role-assignment route is a privilege-escalation path. Still nothing
+  against real MySQL.
 
 ## Not started
 

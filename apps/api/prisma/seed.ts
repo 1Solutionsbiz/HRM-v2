@@ -31,6 +31,7 @@ const PERMISSIONS = [
   { key: 'announcement:publish', description: 'Publish company-wide announcements' },
   { key: 'resignation:decide', description: 'Approve or decline any employee resignation' },
   { key: 'payroll:manage', description: 'View company-wide salary data, revise salaries, and generate payslips' },
+  { key: 'company:manage', description: 'Edit company profile settings (legal name, brand, contact details)' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
@@ -44,6 +45,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'announcement:publish',
     'resignation:decide',
     'payroll:manage',
+    'company:manage',
   ],
   hr: [
     'employee:manage',
@@ -202,6 +204,24 @@ async function main(): Promise<void> {
       update: { startDate: cycle.startDate, endDate: cycle.endDate, isActive: cycle.isActive },
     });
   }
+
+  // Matches the mock's `companyProfile` fixture. AdminService fails loudly
+  // rather than guessing if this row is missing, same stance as
+  // AttendancePolicy's singleton.
+  await prisma.companySettings.upsert({
+    where: { id: 'singleton' },
+    create: {
+      id: 'singleton',
+      legalName: '1Solutions Pvt. Ltd.',
+      brandName: '1Solutions',
+      website: 'https://1solutions.biz',
+      supportEmail: 'hr@1solutions.biz',
+      phone: '+91 11 4567 8900',
+      address: 'F Block, Laxmi Nagar, New Delhi, Delhi 110092',
+      timezone: 'Asia/Kolkata',
+    },
+    update: {},
+  });
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@1solutions.biz';
   const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
