@@ -1,25 +1,41 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { Plus, Receipt } from "lucide-react";
+import { toast } from "sonner";
+import { Ban, Plus, Receipt } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getExpenseClaims } from "@/lib/mock/mock-api";
+import { getMyExpenseClaims, cancelExpenseClaim } from "@/lib/api/expenses";
+import { titleCase } from "@/lib/api/employees";
 import { formatDate, formatINR } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { StatCard } from "@/components/hrm/stat-card";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function ExpensesPage() {
-  const { data, loading, error, refetch } = useAsync(getExpenseClaims);
+  const { data, loading, error, refetch } = useAsync(getMyExpenseClaims);
+  const [cancelId, setCancelId] = React.useState<string | null>(null);
 
-  const pending = (data ?? []).filter((e) => e.status === "Pending");
-  const approvedThisMonth = (data ?? []).filter((e) => e.status === "Approved");
-  const totalApproved = approvedThisMonth.reduce((sum, e) => sum + e.amount, 0);
+  const pending = (data ?? []).filter((e) => e.status === "PENDING");
+  const approved = (data ?? []).filter((e) => e.status === "APPROVED");
+  const totalApproved = approved.reduce((sum, e) => sum + e.amount, 0);
+
+  async function handleCancel() {
+    if (!cancelId) return;
+    try {
+      await cancelExpenseClaim(cancelId);
+      toast.success("Expense claim cancelled");
+      refetch();
+    } catch {
+      toast.error("Couldn't cancel this claim. Please try again.");
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -81,14 +97,24 @@ export default function ExpensesPage() {
                 {(data ?? []).map((e) => (
                   <li key={e.id} className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{e.category}</p>
+                      <p className="truncate text-sm font-medium">{e.category.name}</p>
                       <p className="text-muted-foreground truncate text-xs">
-                        {formatDate(e.date)} · {e.description}
+                        {formatDate(e.expenseDate)} · {e.description}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-2">
                       <span className="text-sm font-medium tabular-nums">{formatINR(e.amount)}</span>
-                      <StatusBadge status={e.status} />
+                      <StatusBadge status={titleCase(e.status)} />
+                      {e.status === "PENDING" && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Cancel claim"
+                          onClick={() => setCancelId(e.id)}
+                        >
+                          <Ban className="text-muted-foreground size-4" />
+                        </Button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -97,6 +123,16 @@ export default function ExpensesPage() {
           </AsyncSection>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!cancelId}
+        onOpenChange={(open) => !open && setCancelId(null)}
+        title="Cancel this expense claim?"
+        description="Your approver will no longer see this claim for review."
+        confirmLabel="Cancel claim"
+        variant="destructive"
+        onConfirm={handleCancel}
+      />
     </div>
   );
 }

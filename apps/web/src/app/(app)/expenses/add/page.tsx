@@ -3,14 +3,15 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Paperclip, X } from "lucide-react";
-import { addExpense } from "@/lib/mock/mock-api";
-import { expenseCategories } from "@/lib/mock/fixtures";
+import { useAsync } from "@/lib/use-async";
+import { ApiError } from "@/lib/api-client";
+import { getExpenseCategories, submitExpenseClaim } from "@/lib/api/expenses";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
@@ -23,15 +24,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 export default function AddExpensePage() {
   const router = useRouter();
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const { data: categories } = useAsync(getExpenseCategories);
 
-  const [category, setCategory] = React.useState<string>(expenseCategories[0]);
+  const [categoryId, setCategoryId] = React.useState("");
   const [amount, setAmount] = React.useState("");
   const [date, setDate] = React.useState<Date | undefined>(new Date());
   const [description, setDescription] = React.useState("");
-  const [receiptName, setReceiptName] = React.useState<string | null>(null);
+  const [receiptUrl, setReceiptUrl] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  // Derived rather than synced via effect - same pattern as Leave's apply
+  // form, falls back to the first category once the list loads.
+  const effectiveCategoryId = categoryId || categories?.[0]?.id || "";
 
   function validate() {
     const next: Record<string, string> = {};
@@ -45,22 +51,23 @@ export default function AddExpensePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    setSubmitError(null);
+    if (!validate() || !effectiveCategoryId) return;
     setSubmitting(true);
     try {
-      const claim = await addExpense({
-        category,
+      const claim = await submitExpenseClaim({
+        categoryId: effectiveCategoryId,
         amount: Number(amount),
-        date: date!.toISOString().slice(0, 10),
+        expenseDate: date!.toISOString().slice(0, 10),
         description: description.trim(),
-        receiptName: receiptName ?? undefined,
+        receiptUrl: receiptUrl.trim() || undefined,
       });
-      toast.success(`Expense claim ${claim.id} submitted`, {
-        description: "It's now pending manager approval.",
+      toast.success(`Expense claim ${claim.code} submitted`, {
+        description: "It's now pending approval.",
       });
       router.push("/expenses");
-    } catch {
-      toast.error("Couldn't submit your claim. Please try again.");
+    } catch (err) {
+      setSubmitError(err instanceof ApiError ? err.message : "Couldn't submit your claim. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -77,16 +84,21 @@ export default function AddExpensePage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {submitError && (
+              <Alert variant="destructive">
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
-              <Select value={category} onValueChange={setCategory}>
+              <Select value={effectiveCategoryId} onValueChange={setCategoryId}>
                 <SelectTrigger id="category" className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {expenseCategories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {(categories ?? []).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -127,43 +139,16 @@ export default function AddExpensePage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Receipt (optional)</Label>
-              {receiptName ? (
-                <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 truncate">
-                    <Paperclip className="text-muted-foreground size-4 shrink-0" />
-                    {receiptName}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setReceiptName(null)}
-                    aria-label="Remove receipt"
-                  >
-                    <X className="size-3.5" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Paperclip />
-                  Attach receipt
-                </Button>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={(e) => setReceiptName(e.target.files?.[0]?.name ?? null)}
+              <Label htmlFor="receipt-url">Receipt URL (optional)</Label>
+              <Input
+                id="receipt-url"
+                type="url"
+                placeholder="https://…"
+                value={receiptUrl}
+                onChange={(e) => setReceiptUrl(e.target.value)}
               />
               <p className="text-muted-foreground text-xs">
-                This is a UI preview - files aren&apos;t actually uploaded anywhere yet.
+                There&apos;s no file storage yet, so paste a link to your receipt instead of attaching a file.
               </p>
             </div>
 
@@ -171,7 +156,7 @@ export default function AddExpensePage() {
               <Button type="button" variant="outline" className="flex-1" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1" disabled={submitting}>
+              <Button type="submit" className="flex-1" disabled={submitting || !effectiveCategoryId}>
                 {submitting ? "Submitting…" : "Submit claim"}
               </Button>
             </div>

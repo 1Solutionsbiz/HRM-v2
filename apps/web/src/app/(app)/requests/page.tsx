@@ -4,7 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getMyRequests } from "@/lib/mock/mock-api";
+import { getMyRequests } from "@/lib/api/requests";
+import { titleCase } from "@/lib/api/employees";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -21,7 +22,7 @@ export default function RequestsPage() {
 
   const filtered = (data ?? []).filter((r) => {
     if (tab === "all") return true;
-    if (tab === "pending") return r.status === "Pending";
+    if (tab === "pending") return r.status === "PENDING";
     return r.kind.toLowerCase() === tab;
   });
 
@@ -76,7 +77,7 @@ export default function RequestsPage() {
                             {r.detail} · Submitted {formatDate(r.submittedOn)}
                           </p>
                         </div>
-                        <StatusBadge status={r.status} className="shrink-0" />
+                        <StatusBadge status={titleCase(r.status)} className="shrink-0" />
                       </li>
                     ))}
                   </ul>
