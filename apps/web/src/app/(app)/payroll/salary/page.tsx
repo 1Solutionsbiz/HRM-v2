@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatINR } from "@/lib/format";
-import { getSalaryRecords } from "@/lib/mock/mock-api";
-import type { SalaryRecord } from "@/lib/mock/hr-fixtures";
+import { ApiError } from "@/lib/api-client";
+import { getCompanySalaries, reviseSalary, type SalaryStructure } from "@/lib/api/payroll";
+import { employeeFullName, employeeInitials, titleCase } from "@/lib/api/employees";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -17,6 +18,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -26,60 +29,88 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-export default function SalaryManagementPage() {
-  const { data, loading, error, refetch } = useAsync(getSalaryRecords);
-  const [editing, setEditing] = React.useState<SalaryRecord | null>(null);
-  const [draftAmount, setDraftAmount] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-  function openEdit(record: SalaryRecord) {
+export default function SalaryManagementPage() {
+  const { data, loading, error, refetch } = useAsync(getCompanySalaries);
+  const [editing, setEditing] = React.useState<SalaryStructure | null>(null);
+  const [draftAmount, setDraftAmount] = React.useState("");
+  const [draftDate, setDraftDate] = React.useState(todayISO());
+  const [draftReason, setDraftReason] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  function openEdit(record: SalaryStructure) {
     setEditing(record);
-    setDraftAmount(String(record.currentSalary));
+    setDraftAmount(String(record.currentAmount));
+    setDraftDate(todayISO());
+    setDraftReason("");
+    setSaveError(null);
   }
 
   async function handleSave() {
     if (!editing) return;
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 500));
-    setSaving(false);
-    setEditing(null);
-    toast.success(`${editing.employeeName}'s salary updated to ${formatINR(Number(draftAmount))}`, {
-      description: "This is a UI preview - it isn't persisted anywhere yet.",
-    });
-    refetch();
+    setSaveError(null);
+    try {
+      await reviseSalary(editing.employeeId, {
+        newAmount: Number(draftAmount),
+        effectiveDate: draftDate,
+        reason: draftReason.trim() || undefined,
+      });
+      toast.success(
+        `${employeeFullName(editing.employee)}'s salary updated to ${formatINR(Number(draftAmount))}`,
+      );
+      setEditing(null);
+      refetch();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save this revision. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const columns: ColumnDef<SalaryRecord>[] = [
+  const columns: ColumnDef<SalaryStructure>[] = [
     {
-      accessorKey: "employeeName",
+      id: "employee",
+      accessorFn: (row) => employeeFullName(row.employee),
       header: "Employee",
       cell: ({ row }) => (
         <div className="flex items-center gap-2.5">
           <Avatar className="size-7 shrink-0">
-            <AvatarFallback className="text-[10px]">{row.original.avatarInitials}</AvatarFallback>
+            <AvatarFallback className="text-[10px]">{employeeInitials(row.original.employee)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{row.original.employeeName}</p>
-            <p className="text-muted-foreground truncate text-xs">{row.original.designation}</p>
+            <p className="truncate text-sm font-medium">{employeeFullName(row.original.employee)}</p>
+            <p className="text-muted-foreground truncate text-xs">
+              {row.original.employee.designation?.title ?? "—"}
+            </p>
           </div>
         </div>
       ),
     },
-    { accessorKey: "department", header: "Department" },
     {
-      accessorKey: "currentSalary",
-      header: "Current salary",
-      cell: ({ row }) => <span className="tabular-nums">{formatINR(row.original.currentSalary)}</span>,
+      id: "department",
+      accessorFn: (row) => row.employee.department?.name ?? "",
+      header: "Department",
+      cell: ({ row }) => row.original.employee.department?.name ?? "—",
     },
     {
-      accessorKey: "lastRevision",
+      accessorKey: "currentAmount",
+      header: "Current salary",
+      cell: ({ row }) => <span className="tabular-nums">{formatINR(row.original.currentAmount)}</span>,
+    },
+    {
+      accessorKey: "lastRevisedAt",
       header: "Last revised",
-      cell: ({ row }) => formatDate(row.original.lastRevision),
+      cell: ({ row }) => (row.original.lastRevisedAt ? formatDate(row.original.lastRevisedAt) : "—"),
     },
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      cell: ({ row }) => <StatusBadge status={titleCase(row.original.status)} />,
     },
     {
       id: "actions",
@@ -116,17 +147,46 @@ export default function SalaryManagementPage() {
               <DialogHeader>
                 <DialogTitle>Update salary</DialogTitle>
                 <DialogDescription>
-                  {editing.employeeName} · {editing.designation}
+                  {employeeFullName(editing.employee)} · {editing.employee.designation?.title ?? "—"}
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-2">
-                <Label htmlFor="new-salary">New monthly salary (₹)</Label>
-                <Input
-                  id="new-salary"
-                  type="number"
-                  value={draftAmount}
-                  onChange={(e) => setDraftAmount(e.target.value)}
-                />
+              <div className="space-y-4">
+                {saveError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{saveError}</AlertDescription>
+                  </Alert>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="new-salary">New monthly salary (₹)</Label>
+                  <Input
+                    id="new-salary"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={draftAmount}
+                    onChange={(e) => setDraftAmount(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="effective-date">Effective date</Label>
+                  <Input
+                    id="effective-date"
+                    type="date"
+                    max={todayISO()}
+                    value={draftDate}
+                    onChange={(e) => setDraftDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reason">Reason (optional)</Label>
+                  <Textarea
+                    id="reason"
+                    placeholder="e.g. Annual increment, role change…"
+                    value={draftReason}
+                    onChange={(e) => setDraftReason(e.target.value)}
+                    rows={2}
+                  />
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>

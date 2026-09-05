@@ -581,17 +581,33 @@ async function main() {
       },
     });
 
-    const lineItems: { type: 'EARNING' | 'DEDUCTION'; label: string; amount: number; sortOrder: number }[] = [
-      { type: 'EARNING', label: 'Basic Salary', amount: gross, sortOrder: 0 },
-    ];
+    // Matches salary_template.php's exact formula — the legacy PDF never
+    // stored this breakup, it computed it at render time from the single
+    // `salary` figure. Reproduced verbatim (not re-derived) so an imported
+    // payslip's earnings block matches a legacy-issued PDF exactly:
+    //   basic = salary * 0.4; hra = basic * 0.5;
+    //   medical = 800 (flat); conveyance = 1200 (flat);
+    //   specialAllowance = salary - (basic + medical + hra + conveyance)
+    const basic = gross * 0.4;
+    const hra = basic * 0.5;
+    const medical = 800;
+    const conveyance = 1200;
+    const specialAllowance = gross - (basic + medical + hra + conveyance);
     const leaveDeduction = Number(p.leave_deduction?.trim() || '0');
     const lateDeduction = Number(p.late_deduction?.trim() || '0');
-    if (leaveDeduction > 0) {
-      lineItems.push({ type: 'DEDUCTION', label: 'Leave Deduction', amount: leaveDeduction, sortOrder: 1 });
-    }
-    if (lateDeduction > 0) {
-      lineItems.push({ type: 'DEDUCTION', label: 'Late Deduction', amount: lateDeduction, sortOrder: 2 });
-    }
+
+    const lineItems: { type: 'EARNING' | 'DEDUCTION'; label: string; amount: number; sortOrder: number }[] = [
+      { type: 'EARNING', label: 'Basic', amount: basic, sortOrder: 0 },
+      { type: 'EARNING', label: 'HRA', amount: hra, sortOrder: 1 },
+      { type: 'EARNING', label: 'Medical', amount: medical, sortOrder: 2 },
+      { type: 'EARNING', label: 'Conveyance', amount: conveyance, sortOrder: 3 },
+      { type: 'EARNING', label: 'Special Allowance', amount: specialAllowance, sortOrder: 4 },
+      // Always present, even at ₹0 — the legacy template renders both rows
+      // unconditionally, so an imported payslip's Deduction column matches
+      // a legacy PDF row-for-row.
+      { type: 'DEDUCTION', label: 'Leave Deduction', amount: leaveDeduction, sortOrder: 0 },
+      { type: 'DEDUCTION', label: 'Late Deduction', amount: lateDeduction, sortOrder: 1 },
+    ];
     for (const li of lineItems) {
       await prisma.payslipLineItem.create({ data: { payslipId: payslip.id, ...li } });
     }

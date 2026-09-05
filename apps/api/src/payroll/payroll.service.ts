@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
+import { EncryptionService } from '../security/encryption.service.js';
 import { parseDateOnly } from '../common/date-only.js';
 import { sumAmounts } from '../common/money.js';
 import type { AuthContext } from '../common/auth-context.js';
@@ -15,12 +16,28 @@ import type { CreatePayslipDto } from './dto/create-payslip.dto.js';
 
 type DecimalLike = { toNumber(): number };
 
+const PAYSLIP_EMPLOYEE_INCLUDE = {
+  lineItems: true,
+  employee: {
+    select: {
+      firstName: true,
+      lastName: true,
+      employeeCode: true,
+      dateOfJoining: true,
+      department: { select: { name: true } },
+      designation: { select: { title: true } },
+      bankDetail: true,
+    },
+  },
+} as const;
+
 @Injectable()
 export class PayrollService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly sequenceService: SequenceService,
+    private readonly encryptionService: EncryptionService,
   ) {}
 
   async getMySalary(userId: string) {
@@ -50,7 +67,9 @@ export class PayrollService {
             id: true,
             firstName: true,
             lastName: true,
-            departmentId: true,
+            employeeCode: true,
+            department: { select: { name: true } },
+            designation: { select: { title: true } },
           },
         },
       },
@@ -164,7 +183,7 @@ export class PayrollService {
     const employeeId = await this.requireEmployeeId(userId);
     const payslip = await this.prisma.payslip.findUnique({
       where: { id: payslipId },
-      include: { lineItems: true },
+      include: PAYSLIP_EMPLOYEE_INCLUDE,
     });
     // NotFoundException rather than ForbiddenException — don't reveal that a
     // payslip with this id exists for someone else.
@@ -177,7 +196,7 @@ export class PayrollService {
   async getEmployeePayslips(employeeId: string) {
     const payslips = await this.prisma.payslip.findMany({
       where: { employeeId },
-      include: { lineItems: true },
+      include: PAYSLIP_EMPLOYEE_INCLUDE,
       orderBy: [{ periodYear: 'desc' }, { periodMonth: 'desc' }],
     });
     return payslips.map((payslip) => this.serializePayslip(payslip));
@@ -248,7 +267,7 @@ export class PayrollService {
 
       return tx.payslip.findUniqueOrThrow({
         where: { id: payslip.id },
-        include: { lineItems: true },
+        include: PAYSLIP_EMPLOYEE_INCLUDE,
       });
     });
 
@@ -267,7 +286,7 @@ export class PayrollService {
   async markPayslipPaid(payslipId: string, actor: AuthContext) {
     const payslip = await this.prisma.payslip.findUnique({
       where: { id: payslipId },
-      include: { lineItems: true },
+      include: PAYSLIP_EMPLOYEE_INCLUDE,
     });
     if (!payslip) throw new NotFoundException('Payslip not found');
     if (payslip.status === 'PAID') {
@@ -277,7 +296,7 @@ export class PayrollService {
     const updated = await this.prisma.payslip.update({
       where: { id: payslipId },
       data: { status: 'PAID', paidAt: new Date() },
-      include: { lineItems: true },
+      include: PAYSLIP_EMPLOYEE_INCLUDE,
     });
 
     await this.auditService.log({
@@ -431,7 +450,6 @@ export class PayrollService {
         id: string;
         firstName: string;
         lastName: string;
-        departmentId: string | null;
       };
     },
   >(structure: T) {
@@ -455,16 +473,42 @@ export class PayrollService {
       grossAmount: DecimalLike;
       netAmount: DecimalLike;
       lineItems: { amount: DecimalLike }[];
+      employee?: {
+        bankDetail: {
+          bankName: string;
+          accountNumberEncrypted: string;
+          ifscCode: string;
+          panNumberEncrypted: string | null;
+        } | null;
+        [key: string]: unknown;
+      } | null;
     },
   >(payslip: T) {
+    const { employee, ...rest } = payslip;
+    const { bankDetail, ...employeeRest } = employee ?? {};
+
     return {
-      ...payslip,
+      ...rest,
       grossAmount: payslip.grossAmount.toNumber(),
       netAmount: payslip.netAmount.toNumber(),
       lineItems: payslip.lineItems.map((item) => ({
         ...item,
         amount: item.amount.toNumber(),
       })),
+      employee: employee
+        ? {
+            ...employeeRest,
+            bankDetail: bankDetail
+              ? {
+                  bankName: bankDetail.bankName,
+                  accountNumber: this.encryptionService.decrypt(
+                    bankDetail.accountNumberEncrypted,
+                  ),
+                  ifscCode: bankDetail.ifscCode,
+                }
+              : null,
+          }
+        : null,
     };
   }
 
