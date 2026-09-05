@@ -44,7 +44,7 @@ been run against real MySQL.
 | 01 | Auth | ✓ done (login/refresh/logout/me/change-password; see notes below) |
 | 02 | Users | ✓ done (admin-provisioned accounts + role assignment; see notes below) |
 | 03 | Employees | ✓ done (onboarding, profile, encrypted bank detail, onboarding steps; see notes below) |
-| 04 | Notifications | ○ not started |
+| 04 | Notifications | ✓ done (self-service list/read; see notes below) |
 | 05 | Attendance | ○ not started |
 | 06 | Leave | ○ not started |
 | 07 | Requests | ○ not started |
@@ -194,6 +194,24 @@ alongside each module that adds lookup data, not all at once.
   which is the only test that actually proves encrypt and decrypt agree
   end-to-end rather than just in isolation. Still nothing against real
   MySQL.
+
+**Module 04 (Notifications) notes:**
+- Endpoints: `GET /notifications`, `PATCH /notifications/:id/read`, `PATCH
+  /notifications/read-all` — all scoped to the caller (`authContext.userId`),
+  no `:userId` param, no `@RequirePermissions()`. This is the first
+  self-service module (act on your own data) as opposed to 02/03's
+  admin-management pattern (act on anyone's, behind a permission) — worth
+  knowing before building 06/07/08/09, which are the same shape (a person's
+  own leave/requests/documents/expenses).
+- `create()` has no controller route — it's exported for other modules
+  (Leave, Expenses, ...) to call directly when something happens a user
+  should be notified about. Nothing calls it yet.
+- Marking someone else's notification returns 404, not 403 — matches the
+  same "don't confirm another record's existence" reasoning used in Auth's
+  login error messages.
+- 8 new unit tests + 3 new e2e tests, including cross-user isolation (listing
+  only returns your own; marking another user's notification 404s; marking
+  "all" read never touches another user's rows).
 
 ## Not started
 

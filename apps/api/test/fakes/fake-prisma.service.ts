@@ -480,4 +480,77 @@ export class FakePrismaService {
   seedSequenceCounter(key: string, value = 0): void {
     this.sequenceCounters.set(key, value);
   }
+
+  notifications = new Map<
+    string,
+    {
+      id: string;
+      userId: string;
+      type: string;
+      title: string;
+      description: string;
+      linkUrl?: string;
+      isRead: boolean;
+      createdAt: Date;
+    }
+  >();
+
+  notification = {
+    create: async ({
+      data,
+    }: {
+      data: {
+        userId: string;
+        type: string;
+        title: string;
+        description: string;
+        linkUrl?: string;
+      };
+    }) => {
+      const id = `notification-${this.notifications.size + 1}`;
+      const notification = {
+        id,
+        isRead: false,
+        createdAt: new Date(),
+        ...data,
+      };
+      this.notifications.set(id, notification);
+      return notification;
+    },
+    findMany: async ({ where }: { where: { userId: string } }) =>
+      [...this.notifications.values()].filter((n) => n.userId === where.userId),
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.notifications.get(where.id) ?? null,
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { isRead: boolean };
+    }) => {
+      const notification = this.notifications.get(where.id);
+      if (!notification) throw new Error(`no fake notification ${where.id}`);
+      Object.assign(notification, data);
+      return notification;
+    },
+    updateMany: async ({
+      where,
+      data,
+    }: {
+      where: { userId: string; isRead: boolean };
+      data: { isRead: boolean };
+    }) => {
+      let count = 0;
+      for (const notification of this.notifications.values()) {
+        if (
+          notification.userId !== where.userId ||
+          notification.isRead !== where.isRead
+        )
+          continue;
+        Object.assign(notification, data);
+        count++;
+      }
+      return { count };
+    },
+  };
 }
