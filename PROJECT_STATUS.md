@@ -62,7 +62,7 @@ been run against real MySQL.
 | 13 | Complaints | ○ not started — same reason and same decision as Assets (12): no schema model, no approved UX, explicitly skipped for now. |
 | 14 | Resignation | ✓ done (submit/withdraw/decide; see notes below) |
 | 15 | Payroll | ✓ done (salary structure/revision, HR-entered payslip generation, trend/by-department aggregates; see notes below) |
-| 16 | Reports | ○ not started |
+| 16 | Reports | ✓ done — **folded into module 15**, no separate endpoints. The only reports screen in the frontend (`/payroll/reports`) is Payroll's own trend/by-department view; `getTrend`/`getByDepartment` were sharpened (activeHeadcount, trailing-6-months window, department name join) to fully back it. See Module 15 notes. |
 | 17 | Admin | ○ not started |
 | 18 | Audit | ○ not started (module 18 is a read-facing System Logs API over the `AuditLog` table already being written by every other module — not the write path itself) |
 
@@ -544,17 +544,29 @@ rather than guessing at a schema now.
   `SequenceCounter`. The schema comment already flags the format as
   unconfirmed; the year is embedded for readability only — the underlying
   counter is global and never resets per year.
-- **`getTrend`/`getByDepartment` report `payslipCount`/`employeeCount`, not
-  `headcount`** — deliberately named to signal what's actually computable
-  from real data ("employees with a payslip that period"), which
-  undercounts anyone hired mid-period or missing a payslip. Both aggregate
-  real `Payslip` rows rather than reproducing the mock's
+- **`getTrend`/`getByDepartment` back the entire "Reports" module (16) —
+  no separate reports endpoints exist because `/payroll/reports` is the
+  only reports screen in the frontend.** Two headcount-shaped fields, kept
+  distinct because neither alone answers what the screen needs:
+  `payslipCount`/`employeeCount` — employees with a payslip that
+  period, undercounts anyone hired mid-period or missing a payslip — and
+  `activeHeadcount` (trend only) — currently-`ACTIVE` employees whose
+  `dateOfJoining` precedes the period end, a real headcount but only
+  accurate for the *current* roster, since `Employee` has no
+  termination-date field to exclude someone from a period after they
+  left. `getTrend` also now takes a `months` param (default 6, matching
+  the screen's "Last 6 months" chart) and returns only the trailing
+  window; `getByDepartment` joins `Department.name` as `departmentName`
+  since the frontend needs a label, not just an id. Both aggregate real
+  `Payslip` rows rather than reproducing the mock's
   `payrollMonthlyTrend`/`payrollByDepartment` fixtures.
 - No payslip PDF/download path — no file-storage integration exists yet,
   same limitation already documented for Documents and Expenses receipts.
-- 12 new unit tests + 4 new e2e tests, including one asserting
-  gross/net are correct numbers (not decimal-stringified) end to end
-  through generate → mark-paid. Still nothing against real MySQL.
+- 16 unit tests + 4 e2e tests, including one asserting gross/net are
+  correct numbers (not decimal-stringified) end to end through generate →
+  mark-paid, and unit coverage for activeHeadcount, the trailing-months
+  window, and getByDepartment's department-name join and no-data path.
+  Still nothing against real MySQL.
 
 ## Not started
 

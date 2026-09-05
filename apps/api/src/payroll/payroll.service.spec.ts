@@ -13,7 +13,8 @@ function decimal(value: number) {
 
 function buildPrismaMock() {
   const prisma = {
-    employee: { findUnique: vi.fn() },
+    employee: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    department: { findMany: vi.fn().mockResolvedValue([]) },
     salaryStructure: {
       findUnique: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
@@ -335,9 +336,124 @@ describe('PayrollService', () => {
       const result = await service.getTrend();
 
       expect(result).toEqual([
-        { periodMonth: 8, periodYear: 2026, cost: 500, payslipCount: 1 },
-        { periodMonth: 9, periodYear: 2026, cost: 3000, payslipCount: 2 },
+        {
+          periodMonth: 8,
+          periodYear: 2026,
+          cost: 500,
+          payslipCount: 1,
+          activeHeadcount: 0,
+        },
+        {
+          periodMonth: 9,
+          periodYear: 2026,
+          cost: 3000,
+          payslipCount: 2,
+          activeHeadcount: 0,
+        },
       ]);
+    });
+
+    it('counts activeHeadcount as ACTIVE employees who had joined by the period end, excluding INACTIVE ones', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        {
+          periodMonth: 9,
+          periodYear: 2026,
+          grossAmount: decimal(1000),
+          employeeId: 'emp-1',
+        },
+      ]);
+      prisma.employee.findMany.mockResolvedValue([
+        {
+          id: 'emp-1',
+          status: 'ACTIVE',
+          dateOfJoining: new Date('2026-01-01'),
+        },
+        {
+          id: 'emp-2',
+          status: 'ACTIVE',
+          dateOfJoining: new Date('2026-01-01'),
+        },
+        {
+          id: 'emp-3',
+          status: 'ACTIVE',
+          dateOfJoining: new Date('2099-01-01'),
+        },
+        {
+          id: 'emp-4',
+          status: 'INACTIVE',
+          dateOfJoining: new Date('2026-01-01'),
+        },
+      ]);
+
+      const [result] = await service.getTrend();
+
+      expect(result.activeHeadcount).toBe(2);
+    });
+
+    it('returns only the trailing `months` periods', async () => {
+      prisma.payslip.findMany.mockResolvedValue(
+        Array.from({ length: 8 }, (_, i) => ({
+          periodMonth: i + 1,
+          periodYear: 2026,
+          grossAmount: decimal(100),
+          employeeId: 'emp-1',
+        })),
+      );
+
+      const result = await service.getTrend(6);
+
+      expect(result).toHaveLength(6);
+      expect(result[0].periodMonth).toBe(3);
+      expect(result.at(-1)!.periodMonth).toBe(8);
+    });
+  });
+
+  describe('getByDepartment', () => {
+    it('joins the department name and falls back to the latest period when none is given', async () => {
+      prisma.payslip.findFirst.mockResolvedValue({
+        periodMonth: 9,
+        periodYear: 2026,
+      });
+      prisma.payslip.findMany.mockResolvedValue([
+        {
+          employeeId: 'emp-1',
+          grossAmount: decimal(1000),
+          employee: { departmentId: 'dept-1' },
+        },
+        {
+          employeeId: 'emp-2',
+          grossAmount: decimal(500),
+          employee: { departmentId: null },
+        },
+      ]);
+      prisma.department.findMany.mockResolvedValue([
+        { id: 'dept-1', name: 'Engineering' },
+      ]);
+
+      const result = await service.getByDepartment();
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          {
+            departmentId: 'dept-1',
+            departmentName: 'Engineering',
+            cost: 1000,
+            employeeCount: 1,
+          },
+          {
+            departmentId: null,
+            departmentName: null,
+            cost: 500,
+            employeeCount: 1,
+          },
+        ]),
+      );
+    });
+
+    it('returns an empty array when no payslip has ever been generated', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(null);
+      const result = await service.getByDepartment();
+      expect(result).toEqual([]);
     });
   });
 });

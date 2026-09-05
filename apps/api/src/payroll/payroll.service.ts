@@ -279,21 +279,34 @@ export class PayrollService {
   }
 
   /**
-   * Cost per month across all generated payslips — the only headcount
-   * figure computable from real data is "employees with a payslip that
-   * month," which is why the field is named `payslipCount`, not
-   * `headcount` (it undercounts anyone hired mid-month or missing a
-   * payslip for that period).
+   * Cost per month across all generated payslips, trailing `months`
+   * periods (the reports screen labels its chart "Last 6 months" — that
+   * window is this module's call, not the caller's).
+   *
+   * Two headcount figures, because one number can't answer both questions
+   * the reports screen asks:
+   * - `payslipCount`: employees with a payslip that period — undercounts
+   *   anyone hired mid-period or missing a payslip.
+   * - `activeHeadcount`: employees currently `ACTIVE` whose
+   *   `dateOfJoining` was on or before the period end — a real headcount,
+   *   but only for the *current* roster. `Employee` has no
+   *   termination-date field, only a current `status`, so anyone who has
+   *   since left is excluded from every period, not just the ones after
+   *   they left. Treat it as accurate for the most recent period and
+   *   directional for earlier ones.
    */
-  async getTrend() {
-    const payslips = await this.prisma.payslip.findMany({
-      select: {
-        periodMonth: true,
-        periodYear: true,
-        grossAmount: true,
-        employeeId: true,
-      },
-    });
+  async getTrend(months = 6) {
+    const [payslips, employees] = await Promise.all([
+      this.prisma.payslip.findMany({
+        select: {
+          periodMonth: true,
+          periodYear: true,
+          grossAmount: true,
+          employeeId: true,
+        },
+      }),
+      this.prisma.employee.findMany(),
+    ]);
 
     const byPeriod = new Map<
       string,
@@ -317,23 +330,36 @@ export class PayrollService {
       byPeriod.set(key, bucket);
     }
 
-    return [...byPeriod.values()]
-      .map((bucket) => ({
-        periodMonth: bucket.periodMonth,
-        periodYear: bucket.periodYear,
-        cost: sumAmounts(bucket.amounts),
-        payslipCount: bucket.employeeIds.size,
-      }))
+    const periods = [...byPeriod.values()]
+      .map((bucket) => {
+        const periodEnd = new Date(
+          Date.UTC(bucket.periodYear, bucket.periodMonth, 0),
+        );
+        const activeHeadcount = employees.filter(
+          (employee) =>
+            employee.status === 'ACTIVE' && employee.dateOfJoining <= periodEnd,
+        ).length;
+        return {
+          periodMonth: bucket.periodMonth,
+          periodYear: bucket.periodYear,
+          cost: sumAmounts(bucket.amounts),
+          payslipCount: bucket.employeeIds.size,
+          activeHeadcount,
+        };
+      })
       .sort((a, b) =>
         a.periodYear === b.periodYear
           ? a.periodMonth - b.periodMonth
           : a.periodYear - b.periodYear,
       );
+
+    return periods.slice(-months);
   }
 
   /**
-   * Same undercounting caveat as `getTrend` — `employeeCount` reflects who
-   * has a payslip for the period, not everyone on the books.
+   * Same `employeeCount` undercounting caveat as `getTrend`'s
+   * `payslipCount` — it reflects who has a payslip for the period, not
+   * everyone on the books.
    */
   async getByDepartment(periodMonth?: number, periodYear?: number) {
     let month = periodMonth;
@@ -348,10 +374,16 @@ export class PayrollService {
       year = latest.periodYear;
     }
 
-    const payslips = await this.prisma.payslip.findMany({
-      where: { periodMonth: month, periodYear: year },
-      include: { employee: { select: { departmentId: true } } },
-    });
+    const [payslips, departments] = await Promise.all([
+      this.prisma.payslip.findMany({
+        where: { periodMonth: month, periodYear: year },
+        include: { employee: { select: { departmentId: true } } },
+      }),
+      this.prisma.department.findMany(),
+    ]);
+    const departmentNames = new Map(
+      departments.map((department) => [department.id, department.name]),
+    );
 
     const byDepartment = new Map<
       string | null,
@@ -370,6 +402,9 @@ export class PayrollService {
 
     return [...byDepartment.entries()].map(([departmentId, bucket]) => ({
       departmentId,
+      departmentName: departmentId
+        ? (departmentNames.get(departmentId) ?? null)
+        : null,
       cost: sumAmounts(bucket.amounts),
       employeeCount: bucket.employeeIds.size,
     }));

@@ -79,8 +79,8 @@ export class PayrollController {
 
   @Get('trend')
   @RequirePermissions('payroll:manage')
-  getTrend() {
-    return this.payrollService.getTrend();
+  getTrend(@Query('months') months?: string) {
+    return this.payrollService.getTrend(months ? Number(months) : undefined);
   }
 
   @Get('by-department')
