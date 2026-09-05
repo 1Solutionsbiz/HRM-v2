@@ -735,4 +735,253 @@ export class FakePrismaService {
       ...overrides,
     };
   }
+
+  // --- Leave -----------------------------------------------------------
+
+  leaveTypes = new Map<
+    string,
+    {
+      id: string;
+      key: string;
+      name: string;
+      defaultAnnualDays: { toNumber(): number };
+      isActive: boolean;
+    }
+  >();
+  leaveBalances = new Map<
+    string,
+    {
+      employeeId: string;
+      leaveTypeId: string;
+      year: number;
+      allocatedDays: { toNumber(): number };
+      usedDays: { toNumber(): number };
+      carriedOverDays: { toNumber(): number };
+    }
+  >();
+  leaveRequests = new Map<
+    string,
+    {
+      id: string;
+      code: string;
+      employeeId: string;
+      leaveTypeId: string;
+      startDate: Date;
+      endDate: Date;
+      dayType: string;
+      halfDayPeriod: string | null;
+      totalDays: { toNumber(): number };
+      reason: string;
+      status: string;
+      approverUserId: string | null;
+      decidedAt: Date | null;
+      decisionNote: string | null;
+      submittedAt: Date;
+    }
+  >();
+
+  private static decimalShim(value: number | { toNumber(): number }): {
+    toNumber(): number;
+  } {
+    return typeof value === 'number' ? { toNumber: () => value } : value;
+  }
+
+  private leaveBalanceKey(
+    employeeId: string,
+    leaveTypeId: string,
+    year: number,
+  ): string {
+    return `${employeeId}:${leaveTypeId}:${year}`;
+  }
+
+  leaveType = {
+    findMany: async ({ where }: { where?: { isActive?: boolean } } = {}) =>
+      [...this.leaveTypes.values()].filter(
+        (leaveType) =>
+          where?.isActive === undefined ||
+          leaveType.isActive === where.isActive,
+      ),
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.leaveTypes.get(where.id) ?? null,
+    findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
+      const leaveType = this.leaveTypes.get(where.id);
+      if (!leaveType) throw new Error(`no fake leave type ${where.id}`);
+      return leaveType;
+    },
+  };
+
+  leaveBalance = {
+    findMany: async ({
+      where,
+    }: {
+      where: { employeeId: string; year: number };
+    }) =>
+      [...this.leaveBalances.values()].filter(
+        (balance) =>
+          balance.employeeId === where.employeeId &&
+          balance.year === where.year,
+      ),
+    findUnique: async ({
+      where,
+    }: {
+      where: {
+        employeeId_leaveTypeId_year: {
+          employeeId: string;
+          leaveTypeId: string;
+          year: number;
+        };
+      };
+    }) => {
+      const { employeeId, leaveTypeId, year } =
+        where.employeeId_leaveTypeId_year;
+      return (
+        this.leaveBalances.get(
+          this.leaveBalanceKey(employeeId, leaveTypeId, year),
+        ) ?? null
+      );
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: {
+        employeeId_leaveTypeId_year: {
+          employeeId: string;
+          leaveTypeId: string;
+          year: number;
+        };
+      };
+      create: {
+        allocatedDays: number | { toNumber(): number };
+        usedDays: number | { toNumber(): number };
+      };
+      update: { usedDays?: { increment: number | { toNumber(): number } } };
+    }) => {
+      const { employeeId, leaveTypeId, year } =
+        where.employeeId_leaveTypeId_year;
+      const key = this.leaveBalanceKey(employeeId, leaveTypeId, year);
+      const existing = this.leaveBalances.get(key);
+      if (existing) {
+        if (update.usedDays?.increment !== undefined) {
+          const increment =
+            typeof update.usedDays.increment === 'number'
+              ? update.usedDays.increment
+              : update.usedDays.increment.toNumber();
+          existing.usedDays = FakePrismaService.decimalShim(
+            existing.usedDays.toNumber() + increment,
+          );
+        }
+        return existing;
+      }
+      const record = {
+        employeeId,
+        leaveTypeId,
+        year,
+        allocatedDays: FakePrismaService.decimalShim(create.allocatedDays),
+        usedDays: FakePrismaService.decimalShim(create.usedDays),
+        carriedOverDays: FakePrismaService.decimalShim(0),
+      };
+      this.leaveBalances.set(key, record);
+      return record;
+    },
+  };
+
+  leaveRequest = {
+    findMany: async ({
+      where,
+    }: {
+      where?: {
+        employeeId?: string;
+        leaveTypeId?: string;
+        status?: { in: string[] };
+      };
+    } = {}) =>
+      [...this.leaveRequests.values()].filter((request) => {
+        if (where?.employeeId && request.employeeId !== where.employeeId)
+          return false;
+        if (where?.leaveTypeId && request.leaveTypeId !== where.leaveTypeId)
+          return false;
+        if (where?.status?.in && !where.status.in.includes(request.status))
+          return false;
+        return true;
+      }),
+    findFirst: async ({
+      where,
+    }: {
+      where: {
+        employeeId: string;
+        status: { in: string[] };
+        startDate: { lte: Date };
+        endDate: { gte: Date };
+      };
+    }) => {
+      for (const request of this.leaveRequests.values()) {
+        if (request.employeeId !== where.employeeId) continue;
+        if (!where.status.in.includes(request.status)) continue;
+        if (!(request.startDate <= where.startDate.lte)) continue;
+        if (!(request.endDate >= where.endDate.gte)) continue;
+        return request;
+      }
+      return null;
+    },
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.leaveRequests.get(where.id) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: {
+        code: string;
+        employeeId: string;
+        leaveTypeId: string;
+        startDate: Date;
+        endDate: Date;
+        dayType: string;
+        halfDayPeriod?: string;
+        totalDays: number;
+        reason: string;
+      };
+    }) => {
+      const id = `leave-request-${this.leaveRequests.size + 1}`;
+      const record = {
+        id,
+        ...data,
+        halfDayPeriod: data.halfDayPeriod ?? null,
+        totalDays: FakePrismaService.decimalShim(data.totalDays),
+        status: 'PENDING',
+        approverUserId: null,
+        decidedAt: null,
+        decisionNote: null,
+        submittedAt: new Date(),
+      };
+      this.leaveRequests.set(id, record);
+      return record;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }) => {
+      const request = this.leaveRequests.get(where.id);
+      if (!request) throw new Error(`no fake leave request ${where.id}`);
+      Object.assign(request, data);
+      return request;
+    },
+  };
+
+  seedLeaveType(input: {
+    id: string;
+    key: string;
+    name: string;
+    defaultAnnualDays: number;
+    isActive?: boolean;
+  }): void {
+    this.leaveTypes.set(input.id, {
+      ...input,
+      defaultAnnualDays: FakePrismaService.decimalShim(input.defaultAnnualDays),
+      isActive: input.isActive ?? true,
+    });
+  }
 }

@@ -25,17 +25,28 @@ const PERMISSIONS = [
   { key: 'user:manage', description: 'Create, deactivate, and assign roles to user accounts' },
   { key: 'employee:manage', description: 'Create and update employee HR profiles' },
   { key: 'attendance:manage', description: 'Record manual attendance corrections for any employee' },
+  { key: 'leave:approve', description: 'Approve or reject any employee leave request' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
-  admin: ['user:manage', 'employee:manage', 'attendance:manage'],
-  hr: ['employee:manage', 'attendance:manage'],
-  manager: [],
+  admin: ['user:manage', 'employee:manage', 'attendance:manage', 'leave:approve'],
+  hr: ['employee:manage', 'attendance:manage', 'leave:approve'],
+  // Manager approval isn't scoped to "my direct reports" yet (no reporting-
+  // chain enforcement exists) — granted anyway since some approver has to
+  // exist beyond hr/admin; documented gap in PROJECT_STATUS.md.
+  manager: ['leave:approve'],
   employee: [],
 };
 
 /** Every SequenceCounter key a module relies on for atomic code generation — see SequenceService. */
-const SEQUENCE_COUNTERS = ['employeeCode'] as const;
+const SEQUENCE_COUNTERS = ['employeeCode', 'leaveRequestCode'] as const;
+
+/** Matches the mock's `leaveBalances` fixture (Casual/Sick/Earned, with those day counts). */
+const LEAVE_TYPES = [
+  { key: 'casual', name: 'Casual Leave', defaultAnnualDays: 12 },
+  { key: 'sick', name: 'Sick Leave', defaultAnnualDays: 6 },
+  { key: 'earned', name: 'Earned Leave', defaultAnnualDays: 15 },
+] as const;
 
 function randomPassword(): string {
   return randomBytes(18).toString('base64url');
@@ -99,6 +110,14 @@ async function main(): Promise<void> {
     },
     update: {},
   });
+
+  for (const leaveType of LEAVE_TYPES) {
+    await prisma.leaveType.upsert({
+      where: { key: leaveType.key },
+      create: leaveType,
+      update: { name: leaveType.name, defaultAnnualDays: leaveType.defaultAnnualDays },
+    });
+  }
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@1solutions.biz';
   const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });

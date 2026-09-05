@@ -9,6 +9,12 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import {
+  addDays,
+  formatDateOnly,
+  parseDateOnly,
+  toDateOnly,
+} from '../common/date-only.js';
+import {
   AttendanceEventType,
   type AttendanceDayStatus,
 } from '../generated/prisma/enums.js';
@@ -34,38 +40,8 @@ interface RequestMeta {
  * erroring. This is a real deployment constraint, not just a code comment:
  * see PROJECT_STATUS.md.
  */
-function toDateOnly(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
-  );
-}
-
 function companyToday(): Date {
   return toDateOnly(new Date());
-}
-
-/**
- * For a plain "YYYY-MM-DD" string with no time-of-day component (the
- * `from`/`to` query params) — NOT for converting a real timestamp, which is
- * what `toDateOnly` is for. `new Date("2026-08-01")` parses as UTC midnight,
- * and re-reading it through local getters (as `toDateOnly` does) would shift
- * the calendar date on any host not running in UTC+0..UTC+something-that-
- * happens-to-round-trip — a real bug the naive `toDateOnly(new
- * Date(str))` version had.
- */
-function parseDateOnly(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
-
-function formatDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
 }
 
 type AttendanceEventRow = {

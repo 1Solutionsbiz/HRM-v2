@@ -52,7 +52,7 @@ been run against real MySQL.
 | 03 | Employees | ✓ done (onboarding, profile, encrypted bank detail, onboarding steps; see notes below) |
 | 04 | Notifications | ✓ done (self-service list/read; see notes below) |
 | 05 | Attendance | ✓ done (event-sourced check-in/out, policy-driven late/half-day, history synthesis; see notes below) |
-| 06 | Leave | ○ not started |
+| 06 | Leave | ✓ done (apply/approve, balance ledger, Attendance integration; see notes below) |
 | 07 | Requests | ○ not started |
 | 08 | Documents | ○ not started |
 | 09 | Expenses | ○ not started |
@@ -278,6 +278,56 @@ module so far, alongside 15 (Payroll) still to come:**
   `lateMinutes`, weekend/holiday/absent synthesis, and a correction
   overriding the original regardless of clock-time ordering. Still nothing
   against real MySQL.
+
+**Module 06 (Leave) notes:**
+- Self-service: `GET /leave/types`, `GET /leave/balances`, `GET
+  /leave/requests`, `POST /leave/requests` (apply), `PATCH
+  /leave/requests/:id/cancel` (PENDING-only, own requests only). HR/manager:
+  `GET /leave/requests/company`, `PATCH /leave/requests/:id/decide`
+  (approve/reject) — both behind a new `leave:approve` permission (granted
+  to admin/hr/manager in the seed — manager approval is **not** scoped to
+  "my direct reports," since no reporting-hierarchy enforcement exists yet;
+  documented gap, same shape as Employees' `managerId` limitation).
+- **Balances are synthesized on read, same pattern as Attendance's history
+  gaps**: no `LeaveBalance` row exists until a request is first approved, so
+  `GET /leave/balances` fills in `LeaveType.defaultAnnualDays` as the
+  allocation when no row exists — never persisted by the GET itself.
+- **Submission-time balance check is computed live**, not from the
+  persisted `usedDays` counter: available = allocation minus every
+  PENDING+APPROVED request's days, summed fresh from `LeaveRequest` rows.
+  This is deliberate — it catches double-booking across several pending
+  requests without needing to reserve/release a counter. `usedDays` itself
+  only updates on approval (see below), so it reflects approved
+  consumption, matching how the mock's balance widget reads ("used" = taken,
+  not "requested").
+- **New validations with no legacy rule behind them** (rule 13 doesn't
+  apply — legacy had no overlap check and computed remaining balance ad
+  hoc): overlapping PENDING/APPROVED requests are rejected, and a request
+  exceeding the available balance is rejected at submission, not left for
+  the approver to catch.
+- **Cross-module integration with Attendance (05)**: approving a leave
+  request sets `AttendanceDay.status = ON_LEAVE` and `leaveRequestId` for
+  every day it covers (creating the row if none exists yet) — this is the
+  one place outside Attendance's own event-sourced path that writes an
+  `AttendanceDay` directly, legitimate because a leave decision isn't
+  derived from punches. `AttendanceService.recomputeDay()` already treated
+  `leaveRequestId` as authoritative (built in module 05, unused until now).
+  Simplification: a half-day leave still marks the *whole* day `ON_LEAVE`,
+  even if the employee also punched in for the working half — not modeled.
+- Extracted `src/common/date-only.ts` (`toDateOnly`/`parseDateOnly`/
+  `addDays`/`formatDateOnly`) out of `AttendanceService` — Leave needed the
+  identical date-only semantics (and the identical local-vs-UTC pitfalls),
+  so module 05's helpers are now shared rather than duplicated.
+- Fixed on the way: `LeaveRequest.totalDays` is a Prisma `Decimal`, and
+  decimal.js's own `toJSON()` serializes as a **string** ("1", not 1) —
+  caught by an e2e assertion expecting a number. Every endpoint returning a
+  `LeaveRequest` now explicitly converts `totalDays` to a plain number
+  before responding, matching `getBalancesForUser()`'s fields instead of
+  silently disagreeing with them on type.
+- 16 new unit tests + 4 new e2e tests, including the full approve flow
+  (balance updates, AttendanceDay gets marked ON_LEAVE) and a rejected
+  self-cancel of an already-approved request. Still nothing against real
+  MySQL.
 
 ## Not started
 
