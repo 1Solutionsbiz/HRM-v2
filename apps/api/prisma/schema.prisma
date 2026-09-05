@@ -1,7 +1,16 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// HRM V2 — primary schema.
+//
+// Designed from four inputs (see docs/database-design.md for the full
+// rationale): the legacy audit (docs/legacy-*.md), the approved employee +
+// HR/Admin UX already built against apps/web/src/lib/mock/*.ts, the modular
+// monolith architecture, and the project's security requirements (no
+// plaintext passwords, no passwords in sessions/tokens/logs, backend-enforced
+// authorization, an audit trail).
+//
+// Deliberately NOT a port of the legacy MySQL tables — see
+// docs/database-design.md for what was changed and why, and for the open
+// UNKNOWNs (multi-tenancy, exact fine formula, etc.) carried over from the
+// audit rather than silently guessed into the schema.
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +19,950 @@ generator client {
 
 datasource db {
   provider = "mysql"
+}
+
+// =============================================================================
+// Identity & access — separated from the Employee/HR domain by design.
+// A User can exist without an Employee (future service/contractor accounts);
+// every Employee requires exactly one User. Roles are many-to-many on User
+// (not a single enum column) so a person can hold more than one role at once.
+// =============================================================================
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  passwordUpdatedAt DateTime  @default(now())
+  isActive          Boolean   @default(true)
+  // Failed-login tracking + lockout: the legacy app had neither (see
+  // legacy-security-audit.md, "No rate limiting or lockout on login").
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  employee Employee?
+
+  userRoles     UserRole[]
+  sessions      Session[]
+  devices       Device[]
+  notifications Notification[]
+
+  announcementReads      AnnouncementRead[]
+  approvedLeaveRequests  LeaveRequest[]       @relation("LeaveApprover")
+  approvedExpenseClaims  ExpenseClaim[]       @relation("ExpenseApprover")
+  decidedResignations    Resignation[]        @relation("ResignationDecider")
+  verifiedDocuments      EmployeeDocument[]   @relation("DocumentVerifier")
+  revisedSalaries        SalaryRevision[]     @relation("SalaryReviser")
+  conductedReviews       PerformanceReview[]  @relation("ReviewConductor")
+  publishedAnnouncements Announcement[]       @relation("AnnouncementPublisher")
+  generatedPayslips      Payslip[]            @relation("PayslipGenerator")
+  recordedAttendanceEvents AttendanceEvent[]  @relation("AttendanceRecorder")
+  assignedUserRoles      UserRole[]           @relation("UserRoleAssignedBy")
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  /// Stable machine key — "employee" | "manager" | "hr" | "admin" today, but
+  /// a table (not a hardcoded enum) so a new role doesn't require a migration.
+  key         String   @unique
+  label       String
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(cuid())
+  /// e.g. "leave:approve", "employee:manage", "payroll:view", "role:assign".
+  key         String @unique
+  description String
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId           String
+  roleId           String
+  assignedAt       DateTime @default(now())
+  assignedByUserId String?
+
+  user           User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedByUser User? @relation("UserRoleAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Device {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String
+  label       String?
+  userAgent   String?  @db.Text
+  platform    String?
+  trusted     Boolean  @default(false)
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions Session[]
+  attendanceEvents AttendanceEvent[]
+
+  @@unique([userId, fingerprint])
+  @@map("devices")
+}
+
+model Session {
+  id       String  @id @default(cuid())
+  userId   String
+  deviceId String?
+  /// Hash of the refresh token, never the raw value (rule: never store
+  /// passwords/tokens in sessions — this extends the same principle to
+  /// bearer tokens).
+  refreshTokenHash String    @unique
+  ipAddress        String?
+  issuedAt         DateTime  @default(now())
+  expiresAt        DateTime
+  lastUsedAt       DateTime  @default(now())
+  revokedAt        DateTime?
+  revokedReason    String?
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum AuditEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  ROLE_CHANGED
+  PASSWORD_CHANGED
+  DOCUMENT_UPDATED
+  SETTINGS_UPDATED
+  EMPLOYEE_CREATED
+  EMPLOYEE_UPDATED
+  OTHER
+}
+
+/// Deliberately not FK-linked to User: an audit row (including a failed
+/// login against an email with no account) must outlive and stay independent
+/// of the identity record's own lifecycle. actorEmail is a point-in-time
+/// snapshot, kept even if the user later changes their email.
+model AuditLog {
+  id          String         @id @default(cuid())
+  eventType   AuditEventType
+  actorUserId String?
+  actorEmail  String?
+  targetType  String?
+  targetId    String?
+  description String
+  ipAddress   String?
+  userAgent   String?        @db.Text
+  metadata    Json?
+  occurredAt  DateTime       @default(now())
+  /// Snapshot of the actor's display name alongside actorEmail, since the
+  /// System Logs screen shows a name and there's deliberately no FK to join
+  /// through.
+  actorName   String?
+
+  @@index([actorUserId])
+  @@index([occurredAt])
+  @@map("audit_logs")
+}
+
+/// Generic atomic counter backing every human-facing sequential code in the
+/// system (employee codes, leave/expense request codes, payslip numbers).
+/// Replaces legacy's per-entity counter tables (hrm_employee_sequence,
+/// invoice_numbers) with one mechanism: the application increments the row
+/// for a given key inside a transaction (e.g. `UPDATE ... SET value = value
+/// + 1 WHERE key = ? ` then read, or SELECT ... FOR UPDATE) and formats the
+/// returned value into the display code. Avoids the "max + 1" race a plain
+/// unique-code column with no backing counter would invite under concurrency.
+model SequenceCounter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("sequence_counters")
+}
+
+// =============================================================================
+// Organization
+// =============================================================================
+
+model Department {
+  id   String  @id @default(cuid())
+  name String  @unique
+  code String? @unique
+
+  designations Designation[]
+  employees    Employee[]
+
+  @@map("departments")
+}
+
+model Designation {
+  id           String @id @default(cuid())
+  title        String
+  departmentId String
+
+  department Department @relation(fields: [departmentId], references: [id])
+  employees  Employee[]
+
+  @@unique([title, departmentId])
+  @@map("designations")
+}
+
+// =============================================================================
+// Employee (HR profile) — deliberately separate from User (identity/auth).
+// =============================================================================
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+/// Only ACTIVE/INACTIVE are persisted. "On Leave" (shown as a directory
+/// status badge in the approved UX) is intentionally NOT a stored value here
+/// — it's a daily-changing fact, derived at query time from AttendanceDay /
+/// LeaveRequest, the same way "on notice" would derive from Resignation.
+/// Storing it as a static column (as the mock fixtures do, for demo
+/// convenience) would go stale the moment a leave ends.
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Employee {
+  id             String         @id @default(cuid())
+  userId         String         @unique
+  /// Human-facing code shown throughout the UI (e.g. "EXP-24-0118-OM").
+  /// Generated by application logic, not derived from the numeric id.
+  employeeCode   String         @unique
+  firstName      String
+  lastName       String
+  personalEmail  String?
+  phone          String?
+  /// Needed for the "Upcoming birthdays" HR dashboard widget even though the
+  /// employee Profile screen doesn't surface it directly.
+  dateOfBirth    DateTime?      @db.Date
+  dateOfJoining  DateTime       @db.Date
+  employmentType EmploymentType @default(FULL_TIME)
+  workLocation   String?
+  currentAddress String?        @db.Text
+  status         EmployeeStatus @default(ACTIVE)
+  avatarUrl      String?
+
+  departmentId  String?
+  designationId String?
+  managerId     String?
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  department  Department?  @relation(fields: [departmentId], references: [id])
+  designation Designation? @relation(fields: [designationId], references: [id])
+  manager     Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports     Employee[]   @relation("EmployeeManager")
+
+  emergencyContact EmployeeEmergencyContact?
+  bankDetail       EmployeeBankDetail?
+
+  attendanceDays     AttendanceDay[]
+  leaveBalances      LeaveBalance[]
+  leaveRequests      LeaveRequest[]
+  expenseClaims      ExpenseClaim[]
+  salaryStructure    SalaryStructure?
+  salaryRevisions    SalaryRevision[]
+  payslips           Payslip[]
+  documents          EmployeeDocument[]
+  onboardingSteps    EmployeeOnboardingStep[]
+  resignations       Resignation[]
+  goals              Goal[]
+  performanceReviews PerformanceReview[]
+  recognitions       Recognition[]
+  tasks              Task[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@map("employees")
+}
+
+/// Split out from Employee (1:1) rather than inlined, matching the approved
+/// Profile screen's "Bank & emergency" tab being a distinct sub-section.
+model EmployeeEmergencyContact {
+  id           String @id @default(cuid())
+  employeeId   String @unique
+  name         String
+  relationship String
+  phone        String
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_emergency_contacts")
+}
+
+/// accountNumber/panNumber must be encrypted by the application layer before
+/// write (and decrypted only on authorized read) — never logged, never
+/// returned in list views. Only bankLast4-equivalent display data is safe to
+/// show broadly; that's derived from accountNumberEncrypted at read time, not
+/// stored separately.
+model EmployeeBankDetail {
+  id                    String  @id @default(cuid())
+  employeeId            String  @unique
+  bankName              String
+  accountNumberEncrypted String
+  ifscCode              String
+  panNumberEncrypted    String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_bank_details")
+}
+
+// =============================================================================
+// Attendance — event-sourced, per explicit instruction. Replaces the legacy
+// date1..date31 wide table (hrm_attandance_machine_detail), the separate live
+// clock table (newuser_attendance), and the separate mismatch/correction
+// tables with one shape: a day-level rollup fed by an immutable event log.
+// =============================================================================
+
+enum AttendanceDayStatus {
+  PRESENT
+  LATE
+  HALF_DAY
+  ABSENT
+  ON_LEAVE
+  HOLIDAY
+  WEEKEND
+}
+
+enum AttendanceEventType {
+  CHECK_IN
+  CHECK_OUT
+  BREAK_START
+  BREAK_END
+  CORRECTION
+}
+
+enum AttendanceEventSource {
+  WEB
+  MOBILE
+  MANUAL_CORRECTION
+  BIOMETRIC_IMPORT
+}
+
+/// One row per employee per calendar date — a materialized summary kept in
+/// sync from AttendanceEvent rows, not hand-edited directly (a CORRECTION
+/// event is how a day's summary gets amended, preserving the "why").
+model AttendanceDay {
+  id              String              @id @default(cuid())
+  employeeId      String
+  date            DateTime            @db.Date
+  status          AttendanceDayStatus @default(PRESENT)
+  firstCheckInAt  DateTime?
+  lastCheckOutAt  DateTime?
+  workedMinutes   Int?
+  lateMinutes     Int                 @default(0)
+  leaveRequestId  String?
+  notes           String?             @db.Text
+
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  events       AttendanceEvent[]
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@map("attendance_days")
+}
+
+/// Append-only. A raw punch or correction. Nothing here is ever updated or
+/// deleted — a mistaken check-in is fixed by inserting a CORRECTION event,
+/// not by editing history.
+model AttendanceEvent {
+  id              String                @id @default(cuid())
+  attendanceDayId String
+  employeeId      String
+  type            AttendanceEventType
+  occurredAt      DateTime
+  source          AttendanceEventSource @default(WEB)
+  recordedByUserId String?
+  deviceId        String?
+  ipAddress       String?
+  note            String?               @db.Text
+
+  attendanceDay  AttendanceDay @relation(fields: [attendanceDayId], references: [id], onDelete: Cascade)
+  recordedByUser User?         @relation("AttendanceRecorder", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  device         Device?       @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, occurredAt])
+  @@map("attendance_events")
+}
+
+/// Company holidays — required to resolve AttendanceDayStatus.HOLIDAY.
+/// Replaces legacy's hrm_holidays (year/name/date/no_of_days/added_by) with
+/// the same shape, minus added_by (audited via AuditLog instead).
+model Holiday {
+  id       String   @id @default(cuid())
+  name     String
+  date     DateTime @db.Date
+  isActive Boolean  @default(true)
+
+  @@unique([date])
+  @@map("holidays")
+}
+
+/// Singleton (one row, fixed id) replacing the legacy office_timing global
+/// row — kept as its own table rather than folded into CompanySettings since
+/// it's operationally distinct (payroll/attendance calculation reads it, not
+/// company profile display). Per-department schedules are not modeled: no
+/// approved UX or audited business rule calls for them.
+model AttendancePolicy {
+  id                    String   @id @default("singleton")
+  standardStartTime     DateTime @db.Time(0)
+  standardEndTime       DateTime @db.Time(0)
+  graceMinutes          Int      @default(15)
+  halfDayThresholdHours Decimal  @default(4.5) @db.Decimal(4, 2)
+  fullDayHours          Decimal  @default(9) @db.Decimal(4, 2)
+  /// ISO weekday numbers (1=Mon .. 7=Sun) that count as working days.
+  workingWeekdays       Json
+  updatedAt             DateTime @updatedAt
+  updatedByUserId       String?
+
+  @@map("attendance_policies")
+}
+
+// =============================================================================
+// Leave
+// =============================================================================
+
+enum LeaveDayType {
+  FULL_DAY
+  HALF_DAY
+}
+
+enum HalfDayPeriod {
+  MORNING
+  AFTERNOON
+}
+
+/// Shared by LeaveRequest and ExpenseClaim — both are simple submit/approve
+/// workflows with the same lifecycle. Resignation keeps its own status enum
+/// (adds DECLINED, not REJECTED/CANCELLED) since its workflow differs.
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model LeaveType {
+  id                   String  @id @default(cuid())
+  key                  String  @unique
+  name                 String
+  defaultAnnualDays    Decimal @db.Decimal(4, 1)
+  isPaid               Boolean @default(true)
+  requiresApproval     Boolean @default(true)
+  carryForwardAllowed  Boolean @default(false)
+  carryForwardMaxDays  Decimal? @db.Decimal(4, 1)
+  isActive             Boolean @default(true)
+
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+/// A real balance ledger — the legacy schema had none (remaining balance was
+/// computed ad hoc from LeaveType.number_of_leave minus a sum over
+/// hrm_leave_applied in application code, undocumented and unauditable).
+model LeaveBalance {
+  id              String  @id @default(cuid())
+  employeeId      String
+  leaveTypeId     String
+  year            Int
+  allocatedDays   Decimal @db.Decimal(4, 1)
+  usedDays        Decimal @default(0) @db.Decimal(4, 1)
+  carriedOverDays Decimal @default(0) @db.Decimal(4, 1)
+  updatedAt       DateTime @updatedAt
+
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  employeeId     String
+  leaveTypeId    String
+  startDate      DateTime      @db.Date
+  endDate        DateTime      @db.Date
+  dayType        LeaveDayType  @default(FULL_DAY)
+  halfDayPeriod  HalfDayPeriod?
+  totalDays      Decimal       @db.Decimal(4, 1)
+  reason         String        @db.Text
+  status         RequestStatus @default(PENDING)
+  approverUserId String?
+  decidedAt      DateTime?
+  decisionNote   String?       @db.Text
+  submittedAt    DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType       @relation(fields: [leaveTypeId], references: [id])
+  approverUser User?           @relation("LeaveApprover", fields: [approverUserId], references: [id], onDelete: SetNull)
+  attendanceDays AttendanceDay[]
+
+  @@index([status])
+  @@map("leave_requests")
+}
+
+// =============================================================================
+// Expenses
+// =============================================================================
+
+model ExpenseCategory {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String?
+  /// Makes a legacy hardcoded-in-a-policy-doc rule ("internet cap ₹5,000/mo")
+  /// an actual enforceable, editable value instead.
+  monthlyCapAmount  Decimal? @db.Decimal(10, 2)
+  isActive          Boolean  @default(true)
+
+  claims ExpenseClaim[]
+
+  @@map("expense_categories")
+}
+
+model ExpenseClaim {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  employeeId     String
+  categoryId     String
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("INR")
+  expenseDate    DateTime      @db.Date
+  description    String        @db.Text
+  receiptUrl     String?
+  status         RequestStatus @default(PENDING)
+  approverUserId String?
+  decidedAt      DateTime?
+  decisionNote   String?       @db.Text
+  submittedAt    DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  category     ExpenseCategory @relation(fields: [categoryId], references: [id])
+  approverUser User?           @relation("ExpenseApprover", fields: [approverUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("expense_claims")
+}
+
+// =============================================================================
+// Payroll — replaces the legacy's two competing salary tables
+// (hrm_salary_management / salary_managment) with one current-state table
+// plus one append-only revision history, and replaces fixed
+// earnings/deductions columns with flexible line items.
+// =============================================================================
+
+enum SalaryStatus {
+  ACTIVE
+  UNDER_REVIEW
+}
+
+model SalaryStructure {
+  id             String       @id @default(cuid())
+  employeeId     String       @unique
+  currentAmount  Decimal      @db.Decimal(12, 2)
+  status         SalaryStatus @default(ACTIVE)
+  lastRevisedAt  DateTime?    @db.Date
+  updatedAt      DateTime     @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("salary_structures")
+}
+
+/// Compensation changes are exactly the kind of thing that needs a
+/// tamper-evident trail for compliance — added for that reason even though
+/// no approved screen renders this history yet (see database-design.md).
+model SalaryRevision {
+  id              String   @id @default(cuid())
+  employeeId      String
+  previousAmount  Decimal? @db.Decimal(12, 2)
+  newAmount       Decimal  @db.Decimal(12, 2)
+  effectiveDate   DateTime @db.Date
+  revisedByUserId String
+  reason          String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  revisedByUser  User     @relation("SalaryReviser", fields: [revisedByUserId], references: [id])
+
+  @@map("salary_revisions")
+}
+
+enum PayslipStatus {
+  PROCESSING
+  PAID
+}
+
+model Payslip {
+  id               String        @id @default(cuid())
+  /// Stable sequential number (via SequenceCounter), independent of id —
+  /// legacy's invoice_numbers table suggests payslips need one for financial
+  /// record-keeping/compliance, not just internal identification.
+  payslipNumber    String        @unique
+  employeeId       String
+  periodMonth      Int
+  periodYear       Int
+  grossAmount      Decimal       @db.Decimal(12, 2)
+  netAmount        Decimal       @db.Decimal(12, 2)
+  status           PayslipStatus @default(PROCESSING)
+  paidAt           DateTime?
+  generatedByUserId String?
+  generatedAt      DateTime      @default(now())
+
+  employee        Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  generatedByUser User?              @relation("PayslipGenerator", fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  lineItems       PayslipLineItem[]
+
+  @@unique([employeeId, periodMonth, periodYear])
+  @@map("payslips")
+}
+
+enum PayslipLineItemType {
+  EARNING
+  DEDUCTION
+}
+
+model PayslipLineItem {
+  id        String              @id @default(cuid())
+  payslipId String
+  type      PayslipLineItemType
+  label     String
+  amount    Decimal             @db.Decimal(12, 2)
+  sortOrder Int                 @default(0)
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@map("payslip_line_items")
+}
+
+// =============================================================================
+// Documents — one clean table replacing three overlapping legacy systems
+// (hrm_employee_documents, emp_documents' fixed columns, and the disconnected
+// hrm_employee_document_proof).
+// =============================================================================
+
+enum DocumentCategory {
+  IDENTITY
+  EDUCATION
+  BANKING
+  EMPLOYMENT
+}
+
+model DocumentType {
+  id       String           @id @default(cuid())
+  key      String           @unique
+  name     String
+  category DocumentCategory
+
+  employeeDocuments EmployeeDocument[]
+
+  @@map("document_types")
+}
+
+enum EmployeeDocumentStatus {
+  VERIFIED
+  PENDING_REVIEW
+  MISSING
+  REJECTED
+}
+
+model EmployeeDocument {
+  id               String                 @id @default(cuid())
+  employeeId       String
+  documentTypeId   String
+  fileUrl          String?
+  status           EmployeeDocumentStatus @default(MISSING)
+  uploadedAt       DateTime?
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+  notes            String?                @db.Text
+
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
+  verifiedByUser User?        @relation("DocumentVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, documentTypeId])
+  @@map("employee_documents")
+}
+
+// =============================================================================
+// Onboarding — the legacy checklist-with-attachments pattern here was
+// already reasonably modeled; kept, minus the file-attachment table (no
+// approved UX surfaces per-step file uploads yet).
+// =============================================================================
+
+model OnboardingStepTemplate {
+  id        String  @id @default(cuid())
+  name      String
+  sortOrder Int
+  isActive  Boolean @default(true)
+
+  employeeSteps EmployeeOnboardingStep[]
+
+  @@map("onboarding_step_templates")
+}
+
+model EmployeeOnboardingStep {
+  id              String    @id @default(cuid())
+  employeeId      String
+  stepTemplateId  String
+  isCompleted     Boolean   @default(false)
+  completedAt     DateTime?
+
+  employee     Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  stepTemplate OnboardingStepTemplate @relation(fields: [stepTemplateId], references: [id])
+
+  @@unique([employeeId, stepTemplateId])
+  @@map("employee_onboarding_steps")
+}
+
+// =============================================================================
+// Resignation — own status enum (adds DECLINED). Offboarding step checklists
+// are not modeled: no approved UX covers them yet (see database-design.md).
+// =============================================================================
+
+enum ResignationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+model Resignation {
+  id               String            @id @default(cuid())
+  employeeId       String
+  reason           String            @db.Text
+  submittedAt      DateTime          @default(now())
+  lastWorkingDay   DateTime          @db.Date
+  noticePeriodDays Int
+  status           ResignationStatus @default(PENDING)
+  decidedByUserId  String?
+  decidedAt        DateTime?
+  decisionNote     String?           @db.Text
+
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  decidedByUser User?    @relation("ResignationDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("resignations")
+}
+
+// =============================================================================
+// Performance
+// =============================================================================
+
+model PerformanceCycle {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isActive  Boolean  @default(true)
+
+  goals   Goal[]
+  reviews PerformanceReview[]
+
+  @@map("performance_cycles")
+}
+
+model Goal {
+  id              String   @id @default(cuid())
+  employeeId      String
+  cycleId         String
+  title           String
+  progressPercent Int      @default(0)
+  dueDate         DateTime? @db.Date
+
+  employee Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycle    PerformanceCycle @relation(fields: [cycleId], references: [id])
+
+  @@map("goals")
+}
+
+model PerformanceReview {
+  id               String   @id @default(cuid())
+  employeeId       String
+  cycleId          String
+  rating           Decimal  @db.Decimal(3, 2)
+  maxRating        Int      @default(5)
+  summary          String   @db.Text
+  reviewedByUserId String
+  reviewedAt       DateTime @default(now())
+
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycle          PerformanceCycle @relation(fields: [cycleId], references: [id])
+  reviewedByUser User             @relation("ReviewConductor", fields: [reviewedByUserId], references: [id])
+
+  @@map("performance_reviews")
+}
+
+/// source is free text ("Peer nomination", a person's name) rather than an
+/// FK — the approved Performance screen mixes program-level and
+/// person-given recognitions, and modeling a full nomination/voting system
+/// (as the legacy eom/eom_votes tables did) is out of scope: no approved UX
+/// calls for it.
+model Recognition {
+  id         String   @id @default(cuid())
+  employeeId String
+  title      String
+  source     String
+  awardedAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("recognitions")
+}
+
+// =============================================================================
+// Tasks — explicitly required My Day content ("Today's tasks", with a done
+// checkbox in the built UI, so this is per-employee actionable state, not a
+// purely derived value). "Today's meetings" is deliberately NOT modeled here
+// — see database-design.md: it plausibly belongs to a calendar integration
+// (Google Calendar/Outlook), not a locally-authored table.
+// =============================================================================
+
+model Task {
+  id         String    @id @default(cuid())
+  employeeId String
+  title      String
+  dueDate    DateTime? @db.Date
+  isDone     Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, isDone])
+  @@map("tasks")
+}
+
+// =============================================================================
+// Announcements & notifications
+// =============================================================================
+
+enum AnnouncementCategory {
+  HOLIDAY
+  POLICY
+  EVENT
+  GENERAL
+}
+
+model Announcement {
+  id               String               @id @default(cuid())
+  title            String
+  body             String               @db.Text
+  category         AnnouncementCategory
+  publishedByUserId String
+  publishedAt      DateTime             @default(now())
+
+  publishedByUser User               @relation("AnnouncementPublisher", fields: [publishedByUserId], references: [id])
+  reads           AnnouncementRead[]
+
+  @@map("announcements")
+}
+
+/// Per-viewer read state — the legacy `announcement.status`-style single
+/// boolean is wrong because "read" is a fact about a reader, not the
+/// announcement; this table makes that explicit instead of reproducing it.
+model AnnouncementRead {
+  id             String   @id @default(cuid())
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@map("announcement_reads")
+}
+
+enum NotificationType {
+  LEAVE
+  EXPENSE
+  ATTENDANCE
+  ANNOUNCEMENT
+  SYSTEM
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  description String           @db.Text
+  linkUrl     String?
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// =============================================================================
+// Company settings — single-tenant by deliberate decision (see
+// database-design.md: the legacy schema had three unrelated, inconsistently
+// wired "company" tables and the audit flagged multi-tenancy as an
+// unconfirmed requirement; a real Company/tenant root is not added on
+// speculation). updatedByUserId is a plain reference, not an FK, to avoid a
+// singleton-table back-relation array on User for a field with no
+// integrity-critical downstream use.
+// =============================================================================
+
+model CompanySettings {
+  id              String   @id @default("singleton")
+  legalName       String
+  brandName       String
+  website         String?
+  supportEmail    String
+  phone           String?
+  address         String?  @db.Text
+  timezone        String   @default("Asia/Kolkata")
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+
+  @@map("company_settings")
 }
