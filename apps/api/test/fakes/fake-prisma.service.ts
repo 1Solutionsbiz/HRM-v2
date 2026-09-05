@@ -307,10 +307,51 @@ export class FakePrismaService {
     },
   };
 
-  // Present so AuditService.log() (called on nearly every mutation) has
-  // something to write to instead of logging a swallowed failure.
+  auditLogs: {
+    id: string;
+    eventType: string;
+    actorUserId: string | null;
+    actorEmail: string | null;
+    actorName: string | null;
+    targetType: string | null;
+    targetId: string | null;
+    description: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    occurredAt: Date;
+  }[] = [];
+
   auditLog = {
-    create: async () => ({}),
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      const entry = {
+        id: `audit-${this.auditLogs.length + 1}`,
+        actorUserId: null,
+        actorEmail: null,
+        actorName: null,
+        targetType: null,
+        targetId: null,
+        ipAddress: null,
+        userAgent: null,
+        occurredAt: new Date(),
+        ...data,
+      } as (typeof this.auditLogs)[number];
+      this.auditLogs.push(entry);
+      return entry;
+    },
+    findMany: async ({ take }: { take?: number } = {}) => {
+      // Mirrors the service's `orderBy: [{ occurredAt: 'desc' }, { id:
+      // 'desc' }]` — tie-break by insertion order (array index) so two
+      // entries created in the same millisecond don't get shuffled.
+      const sorted = this.auditLogs
+        .map((entry, index) => ({ entry, index }))
+        .sort((a, b) => {
+          const byTime =
+            b.entry.occurredAt.getTime() - a.entry.occurredAt.getTime();
+          return byTime !== 0 ? byTime : b.index - a.index;
+        })
+        .map(({ entry }) => entry);
+      return take ? sorted.slice(0, take) : sorted;
+    },
   };
 
   session = {

@@ -32,6 +32,7 @@ const PERMISSIONS = [
   { key: 'resignation:decide', description: 'Approve or decline any employee resignation' },
   { key: 'payroll:manage', description: 'View company-wide salary data, revise salaries, and generate payslips' },
   { key: 'company:manage', description: 'Edit company profile settings (legal name, brand, contact details)' },
+  { key: 'audit:view', description: 'View the system-wide audit log (logins, role changes, and every administrative action)' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
@@ -46,6 +47,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'resignation:decide',
     'payroll:manage',
     'company:manage',
+    'audit:view',
   ],
   hr: [
     'employee:manage',

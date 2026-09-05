@@ -64,7 +64,7 @@ been run against real MySQL.
 | 15 | Payroll | ✓ done (salary structure/revision, HR-entered payslip generation, trend/by-department aggregates; see notes below) |
 | 16 | Reports | ✓ done — **folded into module 15**, no separate endpoints. The only reports screen in the frontend (`/payroll/reports`) is Payroll's own trend/by-department view; `getTrend`/`getByDepartment` were sharpened (activeHeadcount, trailing-6-months window, department name join) to fully back it. See Module 15 notes. |
 | 17 | Admin | ✓ done (company settings CRUD, live role→permission view, employee role assignment; see notes below) |
-| 18 | Audit | ○ not started (module 18 is a read-facing System Logs API over the `AuditLog` table already being written by every other module — not the write path itself) |
+| 18 | Audit | ✓ done (`GET /audit/logs`, read-facing over the `AuditLog` table every other module already writes; see notes below) |
 
 Shared infra built alongside module 01 (used by every module after it, so
 listed once here rather than per-module): `PrismaModule` (global, MySQL via
@@ -604,6 +604,67 @@ rather than guessing at a schema now.
   `PATCH roles/employees/:id`) matter most, since a permission gap on the
   role-assignment route is a privilege-escalation path. Still nothing
   against real MySQL.
+
+**Module 18 (Audit) notes:**
+- `GET /audit/logs?limit=` (new `audit:view` permission, admin-only),
+  most-recent-first, tie-broken by `id` — `DateTime` on MySQL is
+  millisecond-precision, and a burst of same-millisecond rows (concurrent
+  logins, a multi-step admin action) needs a stable secondary sort or
+  ordering among them is whatever the storage engine feels like. `limit`
+  clamps to [1, 500]; no cursor pagination, matching every other list
+  endpoint in this codebase (Expenses, Resignation, etc.) and the mock's
+  own unpaginated `getAuditLogs()`.
+- **Actor display name is resolved at read time, not write time — fixed
+  here instead of touching the 17 existing `.log()` call sites.**
+  `AuditService.log()`'s `actorName` field is only ever populated by
+  `AuthService`'s login events; every other module's call (documents,
+  expenses, performance, announcements, resignation, payroll, admin, …)
+  passes `actorUserId` + `actorEmail` only, since `AuthContext` itself
+  carries no name and threading one through every service's audit call
+  wasn't worth the touch count for a display concern. `getLogs()` instead
+  joins `actorUserId` → `Employee` per batch and falls back through
+  write-time `actorName` → `actorEmail` → `'Unknown'` (an unrecognized
+  login attempt has no user to join against at all) — this fixes the
+  display gap without changing any write path.
+- **`ipAddress` is populated only on login rows.** The mock's fixture
+  shows IPs on non-login actions too ("Role changed", "Company settings
+  updated"), but unlike the actor-name gap, this genuinely can't be fixed
+  at read time — `AuthContext` doesn't carry the request IP into every
+  service, so there's nothing stored to join against for non-login rows.
+  Threading it through the guard and 17 call sites is a bigger change than
+  this module warrants on its own; left as a known, empty column rather
+  than fabricated.
+- **`status` (`SUCCESS`/`FAILED`) is derived from `eventType`, not stored**
+  — `LOGIN_FAILED` is the only event type that represents a failure by
+  definition; every other type is only ever logged after its action
+  already succeeded. That's an invariant nothing enforces, though: a
+  future module that logs before confirming its write would silently
+  read as `SUCCESS` here.
+- **`audit:view` transitively exposes compensation data.** Module 15's
+  audit descriptions embed real figures verbatim ("Revised salary to
+  60000, effective 2026-09-01"), so the System Logs feed carries salary
+  amounts to anyone holding `audit:view`. Harmless today since only admin
+  holds both `audit:view` and `payroll:manage` — but the coupling is
+  accidental, not designed. If a compliance-style role is ever granted
+  `audit:view` alone, it would inherit payroll visibility along with it;
+  revisit `AuditLog.description` sensitivity (or field-level redaction) if
+  that role shows up.
+- The mock's `action`/`target` two-column split isn't reproduced —
+  `description` already reads as a full sentence for every module's
+  events and splitting it back into pseudo-fields would mean guessing at
+  a delimiter that was never real structure. The response instead returns
+  the schema's real fields (`eventType`, `description`, `targetType`,
+  `targetId`); the frontend's column mapping is left to the eventual
+  wiring pass, not invented here.
+- 4 unit tests + 2 e2e tests, including one that fires a failed login, two
+  successful ones, and asserts both the resolved name and the derived
+  status through a real HTTP round trip. Still nothing against real
+  MySQL.
+
+**Modules 12/13 (Assets, Complaints) remain the two skipped modules** —
+deferred by explicit user decision (2026-09-05), not built. Every other
+module in the 01–18 order is done: 16 of 18 shipped, 2 deliberately
+deferred pending real UX/schema, none silently skipped.
 
 ## Not started
 
