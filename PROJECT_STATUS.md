@@ -6,9 +6,10 @@ what hasn't been started — without re-deriving it from git history.
 
 **Current phase:** Live in production. Backend and frontend are both deployed
 on Hostinger and connected to a real MySQL database; real legacy-HRM data has
-been imported; the frontend is being wired to the real API screen-by-screen
-(Employees done, everything else still mock — see "Frontend ↔ API wiring"
-below).
+been imported; the frontend is fully wired to the real API — every module
+listed in "Frontend ↔ API wiring" below is done, as of 2026-09-06. What's
+left is net-new feature work (weekly email reports, real file storage,
+legacy attendance-history import), not wiring.
 
 **⚠️ Superseded throughout this file:** every module note below that says
 "still nothing against real MySQL" / "no live database in this environment"
@@ -77,7 +78,7 @@ script's own success message):
 | Company profile | 1 | `companies` |
 | Departments | 5 | `hrm_department` |
 | Designations | 16 | `hrm_designation` (one resolved via actual employee data, not the placeholder `department_name` legacy had for it) |
-| Employees | 41 (25 active / 16 ex) | `hrm_employee` — passwords rehashed with the real `scrypt` hasher, not migrated in plaintext |
+| Employees | 41 (7 active / 34 ex — corrected 2026-09-06, was 25/16) | `hrm_employee` — passwords rehashed with the real `scrypt` hasher, not migrated in plaintext |
 | Manager links | 25 | `hrm_reporting_manager` |
 | Holidays | 9/9 | `hrm_holidays` |
 | Education records | 27/32 | `hrm_employee_education` (5 skipped: reference legacy employee ids that no longer exist anywhere in `hrm_employee`) |
@@ -106,13 +107,53 @@ an import failure):
   counts for each were audited against the live dump; ask if this list is
   needed again.
 
-**Not yet imported** (V2 has the schema, data hasn't been pulled over):
-attendance history (`newuser_attendance` / the 72-col wide machine-import
-table / mismatch flags — the hardest transform, needs real work, not
-started), actual document files (`Asset` and `EmployeeDocument` models
-exist but have zero imported rows — `hrm_assets`/`hrm_asset_assignments`
-and the legacy document tables were never run through an import script),
-announcements, onboarding step progress, device/login history.
+**Phase 3 import (2026-09-06, `import-legacy-phase3.ts`)** closed most of the
+above: Assets (8/14 — 6 legacy assets have no assignment row, skipped),
+Announcements (2/2, both made company-wide — legacy's per-employee
+`show_to` targeting has no V2 equivalent), Onboarding (11 step templates +
+209/209 progress rows), and 2 real Documents (the only `emp_documents` rows
+with both a resolvable employee and a URL that actually returns 200 —
+`hrm_employee_documents`/`hrm_employee_document_proof` were skipped: they
+reference a `document_type_id` that doesn't exist in the legacy type table,
+and most rows belong to a legacy employee id that doesn't exist anywhere in
+`hrm_employee`).
+
+**Deliberately still not imported**, with reasons (so "done" is a real
+claim, not an oversight):
+- Attendance history — `newuser_attendance` (238 rows, Dec 2024–Feb 2025,
+  clean numeric employee ids) is queued but not yet run. The 72-col wide
+  `hrm_attandance_machine_detail` table (Sep–Dec 2024, the real historical
+  bulk) identifies employees by first-name string, not id — 3 of 18 distinct
+  names are ambiguous or unresolvable (two different "Shivam"s, "sonali" vs
+  "sonali~seo", "punit" doesn't exist in `hrm_employee` at all), so an
+  automated import would misattribute real people's attendance. `newuser_
+  attendance` alone is safe to import when someone picks this back up;
+  the machine-detail table needs manual disambiguation first, not a script.
+- `mismatch_attendance` — superseded by design, not skipped for convenience:
+  V2's event-sourced `AttendanceDay`/`AttendanceEvent` (see the schema's own
+  comment) replaces the whole class of problem this table tracked.
+- `device_info` / `hrm_login_detail` / `hrm_login_logs` / `admin_login_logs`
+  — no V2 model, and backfilling into `AuditLog` would pollute a table
+  whose whole purpose is recording V2's own actions, not historical import.
+- Real document/receipt/payslip file storage — still no provider wired
+  anywhere (see "Not started" at the bottom).
+
+**Real misclassification found and fixed (2026-09-06)**: Phase 1's employee
+import used `hrm_employee.status` ('1'/'3') for `Employee.status`
+(ACTIVE/INACTIVE) — that field is actually a login-enabled flag, not
+employment status. The legacy app's own UI (Employees / Board Members /
+Former Employees pages) is driven by a separate `archive_status` column,
+confirmed three independent ways: `archive_status='0'` (7 rows) exactly
+matches employees.php's 6 + the 1 Board Member; `archive_status='1'` (34
+rows) exactly matches archived_employees.php's own stated "34 Total
+Former"; and every one of the resulting 18 previously-misclassified rows
+had a real `doe` on file. Fixed by flipping those 18 from ACTIVE to
+INACTIVE with their real `dateOfExit` backfilled — see git history for the
+one-off script (deleted after running, matching this project's convention
+for migration scripts that touch real data once and don't need to persist).
+V2's active count is now 7, matching the legacy system's real roster
+exactly (Ritika Rajan, Sumit Kumar, Aditya Srivastava, Nikita, Shivam
+Singhaniya, Sonu Yadav, Atul Chaudhary).
 
 **Schema additions made to close a gap against the legacy profile page**
 (migration `20260905142756_add_employee_personal_education_assets`,
@@ -136,8 +177,22 @@ on `hrm.1solutions.biz` against real production data, not just typechecked.
 | Screen | Status |
 |---|---|
 | Login / auth | ✓ wired (see notes below) |
-| Employees (list + detail) | ✓ wired — `lib/api/employees.ts`, verified live: real names/departments/status, decrypted-and-masked bank details, real education records, correct empty states for not-yet-imported data (assets, documents, some emergency contacts) |
-| Everything else (Dashboard, Attendance, Leave, Expenses, Payslips, Documents, Performance, Announcements, Requests, Profile, Notifications, Settings, Onboarding, Resignations, Salary, Payroll, Admin, Audit) | ○ still mock |
+| Employees (list + detail, Active/Past Employees tabs) | ✓ wired |
+| Leave (self-service + Team → Leave approvals) | ✓ wired |
+| Payslips (self-service view + new admin generate/history at `/payroll/payslips`) | ✓ wired |
+| Documents (self-service submit + admin verify/reject) | ✓ wired |
+| Expenses (self-service + Team → Expense approvals, new admin page) | ✓ wired |
+| Requests (aggregator) | ✓ wired |
+| Attendance (self-service check-in/out/history + Team attendance roster + per-employee day/week/month/quarter search) | ✓ wired |
+| Holidays (new module + page, admin add/edit/delete) | ✓ wired |
+| Salary management | ✓ wired |
+| Admin (Roles & permissions, Company settings, System logs) | ✓ wired |
+| Profile (self-service view + edit) | ✓ wired |
+| Dashboard, Performance, Announcements, Notifications, Settings, Onboarding, Resignations, Payroll reports | ○ still mock — not touched this pass |
+
+Every "✓ wired" row above has been clicked through live on `hrm.1solutions.biz`
+against real production data, not just typechecked — see the 2026-09-06
+session notes below for what was found and fixed along the way.
 
 **Bug found and fixed while wiring Employees**: `EmployeesService`'s
 `findOne()` (`GET /employees/:id`) was missing `user` (so no work email at
@@ -155,19 +210,74 @@ then deploy and click through the *actual* `hrm.1solutions.biz` site with an
 already-real, already-logged-in browser session — never the user's actual
 password, and the temporary session row is deleted after each round.
 
-## Frontend (`apps/web`) — mostly mock-data, wiring in progress
+## Session notes (2026-09-06)
+
+Continued the wiring pass from 2026-09-05 through to "everything except
+Dashboard/Performance/Announcements/Notifications/Settings/Onboarding/
+Resignations/Payroll-reports is wired" (see the table above). Rather than
+repeat every module's notes here, the load-bearing findings:
+
+- **Team attendance was a bare `PlaceholderPage`**, not mock data — the
+  2026-09-05 pass deliberately skipped it (no company-wide roster endpoint
+  existed yet). Built `GET /attendance/company` (one day, every active
+  employee) and `GET /attendance/employees/:id/history` (any employee,
+  day/week/month/quarter), both `attendance:manage`-gated. Also fixed a real
+  permission mismatch this surfaced: the nav item was visible to "manager,"
+  but `attendance:manage` is only granted to hr/admin in `seed.ts` — a
+  manager opening the old page would have 403'd.
+- **`/profile` was still 100% mock** (`lib/mock/fixtures.ts`'s
+  `currentEmployee`) — edits "saved" into local React state only, so they
+  reverted on every reload. This is the kind of gap easy to miss precisely
+  because the mock UI looks finished. New `GET`/`PATCH /employees/me`
+  (overrides the controller's class-level `employee:manage` via a bare
+  `@RequirePermissions()` — method metadata wins over class metadata in
+  `PermissionsGuard`'s `getAllAndOverride`), with a deliberately narrow
+  `UpdateMyProfileDto` — identity/employment fields stay HR-only via the
+  existing `PATCH /employees/:id`.
+- **Payslip generation and admin payslip history didn't exist in the
+  frontend at all**, despite the backend having both endpoints since the
+  Payroll module was built. New `/payroll/payslips`: employee search, that
+  employee's salary + full history, and a generate dialog that pre-fills
+  the real legacy earnings formula (basic 40% of salary, HRA 50% of basic,
+  medical/conveyance flat 800/1200, special allowance as the remainder —
+  verified byte-for-byte against a real issued payslip on 2026-09-05, not
+  invented). Leave/Late deduction default to 0 and are dropped from the
+  payload if left there (the backend requires every line item's amount to
+  be positive).
+- **New Holidays module** (backend + `/holidays` page) — the legacy system
+  has a full Holidays admin screen; V2 had the `Holiday` data (imported,
+  used internally by Attendance) but no way to see or manage it directly.
+- **A real, previously-shipped data-corruption bug**: every date picked via
+  the shadcn Calendar/DatePicker (Leave apply, Expense add, Holidays
+  add/edit) was silently saving one day earlier than what was picked -
+  `date.toISOString().slice(0, 10)` reads a locally-constructed midnight
+  Date in UTC, which crosses into the previous calendar day for any
+  positive UTC offset (IST included). Caught live while testing Holidays.
+  Checked for real damage: none found (zero real leave requests existed
+  yet; the one real expense claim landed correctly by time-of-day
+  coincidence). Fixed everywhere via `lib/format.ts`'s `toDateOnlyString()`.
+- **`AttendancePolicy` was never seeded in production** (same class of gap
+  as `DocumentType` below) — was actively throwing on `/attendance` and
+  would have broken check-in/out. Seeded with the real legacy
+  `office_timing` values (09:00–18:00, 15min grace, 3h half-day), not the
+  mock-fixture defaults `seed.ts` would have used.
+- **`DocumentType` lookup rows were never seeded in production** either —
+  every employee's document checklist came back empty. Same root cause as
+  `AttendancePolicy`: only a minimal manual seed (roles/permissions/admin)
+  ever ran against production, not the full `seed.ts`.
+- **Employee active/inactive was wrong for 18 people** — see the Data
+  migration section's "Real misclassification found and fixed" note.
+
+## Frontend (`apps/web`)
 
 - ✓ Design system (shadcn/ui "Nova" preset, Tailwind v4)
 - ✓ Navigation shell, topbar (dark/light toggle, live clock, last-login)
 - ✓ Login UI (`/login` — posts to the real `POST /auth/login`, see "Frontend
   auth wiring" below; redesigned 2026-09-05: split branding/form layout,
   icon-only mark, password show/hide toggle, loading-spinner submit state)
-- ✓ Employee Experience UX — 16 screens against `lib/mock/fixtures.ts`
-  (My Day, Attendance, Leave, Expenses, Payslips, Documents, Performance,
-  Announcements, Requests, Profile, Notifications, Settings)
-- ✓ HR/Admin UX against `lib/mock/hr-fixtures.ts` (dashboards, Employees,
-  Onboarding, Resignations, Salary, Payroll, Company settings, Roles &
-  permissions, System logs)
+- ✓ Every screen listed as "✓ wired" in the Frontend ↔ API wiring table
+  above runs against the real API. `lib/mock/fixtures.ts` / `hr-fixtures.ts`
+  still exist and still back the screens listed as "still mock" there.
 
 Except Employees (see "Frontend ↔ API wiring" above), the rest of the
 frontend still runs on the in-memory mock API — not wired to `apps/api` yet.
@@ -882,14 +992,14 @@ switcher:**
 
 ## Not started
 
-- ○ Frontend wiring for every module except Employees (see "Frontend ↔ API
-  wiring" above) — Dashboard, Attendance, Leave, Expenses, Payslips,
-  Documents, Performance, Announcements, Requests, Profile, Notifications,
-  Settings, Onboarding, Resignations, Salary, Payroll, Admin, Audit.
+- ○ Frontend wiring for Dashboard, Performance, Announcements, Notifications,
+  Settings, Onboarding, Resignations, Payroll reports — everything else
+  (see "Frontend ↔ API wiring" above) is wired as of 2026-09-06.
 - ○ Assets and Complaints backend modules (12/13) — Assets now has a schema
   and passive read access via Employees; neither has real CRUD endpoints.
-- ○ Legacy attendance-history import (event history, not just the policy
-  config) — flagged as the hardest remaining migration transform.
+- ○ Legacy attendance-history import — see the Data migration section's
+  "Deliberately still not imported" note for exactly why (name-based
+  ambiguity in the historical bulk table, not a "hasn't gotten to it" gap).
 - ○ Real file storage for documents/receipts/payslip PDFs — no provider
   wired anywhere; every "file" field in the schema is a URL string with
   nothing populating it from a real upload yet.
