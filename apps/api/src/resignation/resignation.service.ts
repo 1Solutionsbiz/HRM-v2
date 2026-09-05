@@ -109,7 +109,14 @@ export class ResignationService {
   getCompanyResignations() {
     return this.prisma.resignation.findMany({
       include: {
-        employee: { select: { id: true, firstName: true, lastName: true } },
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            designation: { select: { title: true } },
+          },
+        },
       },
       orderBy: { submittedAt: 'desc' },
     });

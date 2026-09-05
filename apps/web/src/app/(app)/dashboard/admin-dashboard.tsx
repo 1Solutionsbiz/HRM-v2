@@ -3,24 +3,28 @@
 import Link from "next/link";
 import {
   Building2,
+  ClipboardList,
   ScrollText,
   ShieldCheck,
-  UserMinus,
+  Users,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatRelativeTime } from "@/lib/format";
+import { getEmployees, titleCase } from "@/lib/api/employees";
 import {
   getAuditLogs,
-  getCompanyProfile,
+  getCompanySettings,
   getEmployeeRoles,
-  getResignationRequests,
-} from "@/lib/mock/mock-api";
-import { getDashboardStats } from "./dashboard-data";
+  getCompanyResignations,
+  getCompanyLeaveRequests,
+  getCompanyExpenseClaims,
+  getDepartments,
+} from "@/lib/api/admin";
 import { StatCard } from "@/components/hrm/stat-card";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
-import { CardSkeleton } from "@/components/hrm/loading-state";
+import { CardSkeleton, StatGridSkeleton } from "@/components/hrm/loading-state";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ROLE_LABELS, ROLES } from "@/types/role";
@@ -50,31 +54,46 @@ function WidgetHeader({
 }
 
 export function AdminDashboard({ firstName }: { firstName: string }) {
-  const stats = getDashboardStats("admin");
-  const logs = useAsync(getAuditLogs);
+  const employees = useAsync(getEmployees);
+  const departments = useAsync(getDepartments);
+  const logs = useAsync(() => getAuditLogs(4));
   const roles = useAsync(getEmployeeRoles);
-  const profile = useAsync(getCompanyProfile);
-  const resignations = useAsync(getResignationRequests);
+  const profile = useAsync(getCompanySettings);
+  const resignations = useAsync(getCompanyResignations);
+  const leaveRequests = useAsync(getCompanyLeaveRequests);
+  const expenseClaims = useAsync(getCompanyExpenseClaims);
 
   const roleCounts = ROLES.map((r) => ({
     role: r,
     count: (roles.data ?? []).filter((row) => row.role === r).length,
   }));
   const maxCount = Math.max(1, ...roleCounts.map((r) => r.count));
-  const pendingResignations = (resignations.data ?? []).filter((r) => r.status === "Pending");
+  const activeRoleCount = roleCounts.filter((r) => r.count > 0).length;
+  const pendingResignations = (resignations.data ?? []).filter((r) => r.status === "PENDING");
+
+  const statsLoading = employees.loading || roles.loading || leaveRequests.loading || expenseClaims.loading || resignations.loading || departments.loading;
+  const pendingApprovals =
+    (leaveRequests.data ?? []).filter((r) => r.status === "PENDING").length +
+    (expenseClaims.data ?? []).filter((e) => e.status === "PENDING").length +
+    pendingResignations.length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Good to see you, ${firstName}`}
-        description="System Administrator · Viewing as Admin (preview)"
+        description="System Administrator"
       />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {stats.map((s) => (
-          <StatCard key={s.label} label={s.label} value={s.value} icon={s.icon} tone={s.tone} description={s.description} trend={s.trend} />
-        ))}
-      </div>
+      {statsLoading ? (
+        <StatGridSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Total employees" value={String((employees.data ?? []).length)} icon={Users} tone="teal" />
+          <StatCard label="Active roles" value={String(activeRoleCount)} icon={ShieldCheck} tone="violet" />
+          <StatCard label="Pending approvals" value={String(pendingApprovals)} icon={ClipboardList} tone="warning" />
+          <StatCard label="Departments" value={String((departments.data ?? []).length)} icon={Building2} tone="success" />
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <Card>
@@ -90,16 +109,14 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
                 <EmptyState size="sm" icon={ScrollText} title="No recent activity" />
               ) : (
                 <ul className="space-y-3">
-                  {(logs.data ?? []).slice(0, 4).map((l) => (
+                  {(logs.data ?? []).map((l) => (
                     <li key={l.id} className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium">
-                          {l.actor} · {l.action}
-                        </p>
-                        <p className="text-muted-foreground truncate text-[11px]">{l.target}</p>
+                        <p className="truncate text-xs font-medium">{l.actorName}</p>
+                        <p className="text-muted-foreground truncate text-[11px]">{l.description}</p>
                       </div>
                       <span className="text-muted-foreground shrink-0 text-[10px]">
-                        {formatRelativeTime(l.timestamp)}
+                        {formatRelativeTime(l.occurredAt)}
                       </span>
                     </li>
                   ))}
@@ -151,11 +168,11 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
                 <dl className="space-y-2 text-xs">
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Legal name</dt>
-                    <dd className="truncate font-medium">{profile.data.name}</dd>
+                    <dd className="truncate font-medium">{profile.data.legalName}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Website</dt>
-                    <dd className="truncate font-medium">{profile.data.website}</dd>
+                    <dd className="truncate font-medium">{profile.data.website ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Support email</dt>
@@ -172,7 +189,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         <Card>
-          <WidgetHeader title="Pending resignations" icon={UserMinus} href="/people/resignations" />
+          <WidgetHeader title="Pending resignations" icon={Users} href="/people/resignations" />
           <CardContent>
             <AsyncSection
               loading={resignations.loading}
@@ -181,16 +198,20 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
               loadingFallback={<CardSkeleton lines={3} />}
             >
               {pendingResignations.length === 0 ? (
-                <EmptyState size="sm" icon={UserMinus} title="No pending resignations" />
+                <EmptyState size="sm" icon={Users} title="No pending resignations" />
               ) : (
                 <ul className="space-y-3">
                   {pendingResignations.map((r) => (
                     <li key={r.id} className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium">{r.employeeName}</p>
-                        <p className="text-muted-foreground truncate text-[11px]">{r.designation}</p>
+                        <p className="truncate text-xs font-medium">
+                          {r.employee.firstName} {r.employee.lastName}
+                        </p>
+                        <p className="text-muted-foreground truncate text-[11px]">
+                          {r.employee.designation?.title ?? "No designation"}
+                        </p>
                       </div>
-                      <StatusBadge status={r.status} className="shrink-0" />
+                      <StatusBadge status={titleCase(r.status)} className="shrink-0" />
                     </li>
                   ))}
                 </ul>
