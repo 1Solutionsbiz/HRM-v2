@@ -15,11 +15,15 @@ import type { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import type { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 
 const EMPLOYEE_INCLUDE = {
+  user: { select: { email: true, isActive: true } },
   department: true,
   designation: true,
   manager: { select: { id: true, firstName: true, lastName: true } },
   emergencyContact: true,
   bankDetail: true,
+  education: { orderBy: { startDate: 'desc' } },
+  assets: { orderBy: { issuedDate: 'desc' } },
+  documents: { include: { documentType: true } },
 } as const;
 
 @Injectable()

@@ -263,6 +263,30 @@ enum EmployeeStatus {
   INACTIVE
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
 model Employee {
   id             String         @id @default(cuid())
   userId         String         @unique
@@ -283,6 +307,16 @@ model Employee {
   status         EmployeeStatus @default(ACTIVE)
   avatarUrl      String?
 
+  /// Personal-details fields shown on the legacy HRM's profile page but
+  /// absent from V2 until this addition (documented gap in
+  /// database-design.md, closed on explicit request). All optional — none
+  /// of them gate any workflow, and legacy data quality for these was mixed.
+  gender        Gender?
+  nationality   String?
+  religion      String?
+  maritalStatus MaritalStatus?
+  bloodGroup    BloodGroup?
+
   departmentId  String?
   designationId String?
   managerId     String?
@@ -295,6 +329,8 @@ model Employee {
 
   emergencyContact EmployeeEmergencyContact?
   bankDetail       EmployeeBankDetail?
+  education        EmployeeEducation[]
+  assets           Asset[]
 
   attendanceDays     AttendanceDay[]
   leaveBalances      LeaveBalance[]
@@ -348,6 +384,47 @@ model EmployeeBankDetail {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("employee_bank_details")
+}
+
+/// One row per qualification. Legacy had no education table of its own —
+/// it stored a single institution/field/date-range per employee directly
+/// on the profile — so this is normalized into a list from the start.
+model EmployeeEducation {
+  id           String    @id @default(cuid())
+  employeeId   String
+  institution  String
+  fieldOfStudy String?
+  startDate    DateTime? @db.Date
+  endDate      DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("employee_education")
+}
+
+/// Flat per-employee assignment record, matching the legacy Assets tab
+/// exactly (Image / Asset ID / Asset Name / Issued date / Return date) —
+/// not split into a separate asset catalog + assignment history, since
+/// nothing in the approved UX needs to track an asset independent of who
+/// currently holds it.
+model Asset {
+  id          String    @id @default(cuid())
+  employeeId  String
+  assetTag    String    @unique
+  name        String
+  imageUrl    String?
+  issuedDate  DateTime  @db.Date
+  returnDate  DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assets")
 }
 
 // =============================================================================
