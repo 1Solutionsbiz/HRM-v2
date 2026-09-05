@@ -36,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="bg-primary flex min-h-svh items-center justify-center p-4">
+    <div className="flex min-h-svh items-center justify-center p-4" style={{ backgroundColor: "#114171" }}>
       <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl sm:p-10 dark:bg-neutral-900">
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
           <Image

@@ -4,9 +4,9 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Download, Wallet } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getPayslips } from "@/lib/mock/mock-api";
+import { getMyPayslips, monthName, type Payslip } from "@/lib/api/payroll";
+import { titleCase } from "@/lib/api/employees";
 import { formatDate, formatINR } from "@/lib/format";
-import type { Payslip } from "@/lib/mock/fixtures";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -25,14 +25,17 @@ import {
 } from "@/components/ui/sheet";
 
 export default function PayslipsPage() {
-  const { data, loading, error, refetch } = useAsync(getPayslips);
+  const { data, loading, error, refetch } = useAsync(getMyPayslips);
   const [selected, setSelected] = React.useState<Payslip | null>(null);
 
   function handleDownload(p: Payslip) {
-    toast.success(`Downloading ${p.month} ${p.year} payslip`, {
+    toast.success(`Downloading ${monthName(p.periodMonth)} ${p.periodYear} payslip`, {
       description: "This is a UI preview - no file is actually generated.",
     });
   }
+
+  const earnings = selected?.lineItems.filter((i) => i.type === "EARNING") ?? [];
+  const deductions = selected?.lineItems.filter((i) => i.type === "DEDUCTION") ?? [];
 
   return (
     <div className="space-y-6">
@@ -61,15 +64,15 @@ export default function PayslipsPage() {
                       onClick={() => setSelected(p)}
                     >
                       <p className="text-sm font-medium hover:underline">
-                        {p.month} {p.year}
+                        {monthName(p.periodMonth)} {p.periodYear}
                       </p>
                       <p className="text-muted-foreground text-xs">
-                        Net pay {formatINR(p.netPay)}
-                        {p.paidOn ? ` · Paid ${formatDate(p.paidOn)}` : ""}
+                        Net pay {formatINR(p.netAmount)}
+                        {p.paidAt ? ` · Paid ${formatDate(p.paidAt)}` : ""}
                       </p>
                     </button>
                     <div className="flex shrink-0 items-center gap-2">
-                      <StatusBadge status={p.status} />
+                      <StatusBadge status={titleCase(p.status)} />
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -93,10 +96,14 @@ export default function PayslipsPage() {
             <>
               <SheetHeader>
                 <SheetTitle>
-                  {selected.month} {selected.year}
+                  {monthName(selected.periodMonth)} {selected.periodYear}
                 </SheetTitle>
                 <SheetDescription>
-                  {selected.paidOn ? `Paid on ${formatDate(selected.paidOn)}` : "Processing"}
+                  {selected.status === "PAID"
+                    ? selected.paidAt
+                      ? `Paid on ${formatDate(selected.paidAt)}`
+                      : "Paid"
+                    : "Processing"}
                 </SheetDescription>
               </SheetHeader>
               <div className="space-y-4 px-4">
@@ -105,32 +112,36 @@ export default function PayslipsPage() {
                     Earnings
                   </p>
                   <div className="space-y-1.5">
-                    {selected.earnings.map((e) => (
-                      <div key={e.label} className="flex justify-between text-sm">
+                    {earnings.map((e) => (
+                      <div key={e.id} className="flex justify-between text-sm">
                         <span className="text-muted-foreground">{e.label}</span>
                         <span className="tabular-nums">{formatINR(e.amount)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <Separator />
-                <div>
-                  <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
-                    Deductions
-                  </p>
-                  <div className="space-y-1.5">
-                    {selected.deductions.map((d) => (
-                      <div key={d.label} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{d.label}</span>
-                        <span className="tabular-nums">- {formatINR(d.amount)}</span>
+                {deductions.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
+                        Deductions
+                      </p>
+                      <div className="space-y-1.5">
+                        {deductions.map((d) => (
+                          <div key={d.id} className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">{d.label}</span>
+                            <span className="tabular-nums">- {formatINR(d.amount)}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  </>
+                )}
                 <Separator />
                 <div className="flex justify-between text-sm font-semibold">
                   <span>Net pay</span>
-                  <span className="tabular-nums">{formatINR(selected.netPay)}</span>
+                  <span className="tabular-nums">{formatINR(selected.netAmount)}</span>
                 </div>
               </div>
               <SheetFooter>
