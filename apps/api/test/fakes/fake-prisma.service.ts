@@ -115,7 +115,58 @@ interface FakeExpenseClaim {
   submittedAt: Date;
 }
 
+interface FakeSalaryStructure {
+  id: string;
+  employeeId: string;
+  currentAmount: { toNumber(): number };
+  status: string;
+  lastRevisedAt: Date | null;
+  updatedAt: Date;
+}
+
+interface FakeSalaryRevision {
+  id: string;
+  employeeId: string;
+  previousAmount: { toNumber(): number } | null;
+  newAmount: { toNumber(): number };
+  effectiveDate: Date;
+  revisedByUserId: string;
+  reason: string | null;
+  createdAt: Date;
+}
+
+interface FakePayslip {
+  id: string;
+  payslipNumber: string;
+  employeeId: string;
+  periodMonth: number;
+  periodYear: number;
+  grossAmount: { toNumber(): number };
+  netAmount: { toNumber(): number };
+  status: string;
+  paidAt: Date | null;
+  generatedByUserId: string | null;
+  generatedAt: Date;
+}
+
+interface FakePayslipLineItem {
+  id: string;
+  payslipId: string;
+  type: string;
+  label: string;
+  amount: { toNumber(): number };
+  sortOrder: number;
+}
+
 export class FakePrismaService {
+  // No real atomicity — the fake is single-threaded and in-memory, so a
+  // transaction is just "run the callback against this same instance." Good
+  // enough to exercise the calling code's shape; it can't catch a real
+  // partial-write race, only a wrong sequence of calls.
+  async $transaction<T>(fn: (tx: this) => Promise<T>): Promise<T> {
+    return fn(this);
+  }
+
   users = new Map<string, FakeUser>();
   sessions = new Map<string, FakeSession>();
   roles = new Map<string, FakeRole>();
@@ -1616,6 +1667,262 @@ export class FakePrismaService {
       if (!resignation) throw new Error(`no fake resignation ${where.id}`);
       Object.assign(resignation, data);
       return resignation;
+    },
+  };
+
+  // --- Payroll -------------------------------------------------------
+
+  salaryStructures = new Map<string, FakeSalaryStructure>(); // keyed by employeeId (schema: @unique)
+  salaryRevisions = new Map<string, FakeSalaryRevision>();
+  payslips = new Map<string, FakePayslip>();
+  payslipLineItems = new Map<string, FakePayslipLineItem[]>(); // keyed by payslipId
+
+  private payslipWithLineItems(payslip: FakePayslip) {
+    return {
+      ...payslip,
+      lineItems: this.payslipLineItems.get(payslip.id) ?? [],
+    };
+  }
+
+  private salaryStructureWithEmployee(structure: FakeSalaryStructure) {
+    const employee = this.employees.get(structure.employeeId);
+    return {
+      ...structure,
+      employee: employee
+        ? {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            departmentId: employee.departmentId,
+          }
+        : undefined,
+    };
+  }
+
+  salaryStructure = {
+    findUnique: async ({ where }: { where: { employeeId: string } }) =>
+      this.salaryStructures.get(where.employeeId) ?? null,
+    findMany: async () =>
+      [...this.salaryStructures.values()].map((structure) =>
+        this.salaryStructureWithEmployee(structure),
+      ),
+    create: async ({
+      data,
+    }: {
+      data: {
+        employeeId: string;
+        currentAmount: number;
+        lastRevisedAt: Date | null;
+      };
+    }) => {
+      const structure: FakeSalaryStructure = {
+        id: `salary-structure-${this.salaryStructures.size + 1}`,
+        employeeId: data.employeeId,
+        currentAmount: FakePrismaService.decimalShim(data.currentAmount),
+        status: 'ACTIVE',
+        lastRevisedAt: data.lastRevisedAt,
+        updatedAt: new Date(),
+      };
+      this.salaryStructures.set(data.employeeId, structure);
+      return structure;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { employeeId: string };
+      data: { currentAmount?: number; lastRevisedAt?: Date | null };
+    }) => {
+      const existing = this.salaryStructures.get(where.employeeId);
+      if (!existing)
+        throw new Error(`no fake salary structure for ${where.employeeId}`);
+      const updated: FakeSalaryStructure = {
+        ...existing,
+        ...(data.currentAmount !== undefined
+          ? { currentAmount: FakePrismaService.decimalShim(data.currentAmount) }
+          : {}),
+        ...(data.lastRevisedAt !== undefined
+          ? { lastRevisedAt: data.lastRevisedAt }
+          : {}),
+        updatedAt: new Date(),
+      };
+      this.salaryStructures.set(where.employeeId, updated);
+      return updated;
+    },
+  };
+
+  salaryRevision = {
+    findMany: async ({ where }: { where: { employeeId: string } }) =>
+      [...this.salaryRevisions.values()]
+        .filter((revision) => revision.employeeId === where.employeeId)
+        .sort((a, b) => (a.effectiveDate < b.effectiveDate ? 1 : -1)),
+    create: async ({
+      data,
+    }: {
+      data: {
+        employeeId: string;
+        previousAmount: number | null;
+        newAmount: number;
+        effectiveDate: Date;
+        revisedByUserId: string;
+        reason: string | null;
+      };
+    }) => {
+      const revision: FakeSalaryRevision = {
+        id: `salary-revision-${this.salaryRevisions.size + 1}`,
+        employeeId: data.employeeId,
+        previousAmount:
+          data.previousAmount !== null
+            ? FakePrismaService.decimalShim(data.previousAmount)
+            : null,
+        newAmount: FakePrismaService.decimalShim(data.newAmount),
+        effectiveDate: data.effectiveDate,
+        revisedByUserId: data.revisedByUserId,
+        reason: data.reason,
+        createdAt: new Date(),
+      };
+      this.salaryRevisions.set(revision.id, revision);
+      return revision;
+    },
+  };
+
+  payslip = {
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const payslip = this.payslips.get(where.id);
+      return payslip ? this.payslipWithLineItems(payslip) : null;
+    },
+    findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
+      const payslip = this.payslips.get(where.id);
+      if (!payslip) throw new Error(`no fake payslip ${where.id}`);
+      return this.payslipWithLineItems(payslip);
+    },
+    findFirst: async ({
+      where,
+      orderBy,
+    }: {
+      where?: {
+        employeeId?: string;
+        periodMonth?: number;
+        periodYear?: number;
+      };
+      orderBy?: { periodYear?: string; periodMonth?: string }[];
+    } = {}) => {
+      let candidates = [...this.payslips.values()].filter(
+        (payslip) =>
+          (!where?.employeeId || payslip.employeeId === where.employeeId) &&
+          (where?.periodMonth === undefined ||
+            payslip.periodMonth === where.periodMonth) &&
+          (where?.periodYear === undefined ||
+            payslip.periodYear === where.periodYear),
+      );
+      if (orderBy) {
+        candidates = candidates.sort((a, b) => {
+          if (a.periodYear !== b.periodYear) return b.periodYear - a.periodYear;
+          return b.periodMonth - a.periodMonth;
+        });
+      }
+      return candidates[0] ?? null;
+    },
+    findMany: async ({
+      where,
+    }: {
+      where?: {
+        employeeId?: string;
+        periodMonth?: number;
+        periodYear?: number;
+      };
+    } = {}) =>
+      [...this.payslips.values()]
+        .filter(
+          (payslip) =>
+            (!where?.employeeId || payslip.employeeId === where.employeeId) &&
+            (where?.periodMonth === undefined ||
+              payslip.periodMonth === where.periodMonth) &&
+            (where?.periodYear === undefined ||
+              payslip.periodYear === where.periodYear),
+        )
+        .sort((a, b) =>
+          a.periodYear === b.periodYear
+            ? b.periodMonth - a.periodMonth
+            : b.periodYear - a.periodYear,
+        )
+        .map((payslip) => ({
+          ...this.payslipWithLineItems(payslip),
+          employee: this.employees.get(payslip.employeeId)
+            ? {
+                departmentId: this.employees.get(payslip.employeeId)!
+                  .departmentId,
+              }
+            : undefined,
+        })),
+    create: async ({
+      data,
+    }: {
+      data: {
+        payslipNumber: string;
+        employeeId: string;
+        periodMonth: number;
+        periodYear: number;
+        grossAmount: number;
+        netAmount: number;
+        generatedByUserId: string | null;
+      };
+    }) => {
+      const payslip: FakePayslip = {
+        id: `payslip-${this.payslips.size + 1}`,
+        payslipNumber: data.payslipNumber,
+        employeeId: data.employeeId,
+        periodMonth: data.periodMonth,
+        periodYear: data.periodYear,
+        grossAmount: FakePrismaService.decimalShim(data.grossAmount),
+        netAmount: FakePrismaService.decimalShim(data.netAmount),
+        status: 'PROCESSING',
+        paidAt: null,
+        generatedByUserId: data.generatedByUserId,
+        generatedAt: new Date(),
+      };
+      this.payslips.set(payslip.id, payslip);
+      this.payslipLineItems.set(payslip.id, []);
+      return payslip;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { status: string; paidAt: Date };
+    }) => {
+      const payslip = this.payslips.get(where.id);
+      if (!payslip) throw new Error(`no fake payslip ${where.id}`);
+      Object.assign(payslip, data);
+      return this.payslipWithLineItems(payslip);
+    },
+  };
+
+  payslipLineItem = {
+    create: async ({
+      data,
+    }: {
+      data: {
+        payslipId: string;
+        type: string;
+        label: string;
+        amount: number;
+        sortOrder: number;
+      };
+    }) => {
+      const item: FakePayslipLineItem = {
+        id: `payslip-line-item-${(this.payslipLineItems.get(data.payslipId)?.length ?? 0) + 1}-${data.payslipId}`,
+        payslipId: data.payslipId,
+        type: data.type,
+        label: data.label,
+        amount: FakePrismaService.decimalShim(data.amount),
+        sortOrder: data.sortOrder,
+      };
+      const existing = this.payslipLineItems.get(data.payslipId) ?? [];
+      existing.push(item);
+      this.payslipLineItems.set(data.payslipId, existing);
+      return item;
     },
   };
 }

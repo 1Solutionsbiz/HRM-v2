@@ -30,6 +30,7 @@ const PERMISSIONS = [
   { key: 'performance:manage', description: 'Assign goals, conduct reviews, and award recognitions for any employee' },
   { key: 'announcement:publish', description: 'Publish company-wide announcements' },
   { key: 'resignation:decide', description: 'Approve or decline any employee resignation' },
+  { key: 'payroll:manage', description: 'View company-wide salary data, revise salaries, and generate payslips' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
@@ -42,6 +43,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'performance:manage',
     'announcement:publish',
     'resignation:decide',
+    'payroll:manage',
   ],
   hr: [
     'employee:manage',
@@ -51,6 +53,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'performance:manage',
     'announcement:publish',
     'resignation:decide',
+    'payroll:manage',
   ],
   // Manager approval isn't scoped to "my direct reports" yet (no reporting-
   // chain enforcement exists) — granted anyway since some approver has to
@@ -60,7 +63,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
 };
 
 /** Every SequenceCounter key a module relies on for atomic code generation — see SequenceService. */
-const SEQUENCE_COUNTERS = ['employeeCode', 'leaveRequestCode', 'expenseClaimCode'] as const;
+const SEQUENCE_COUNTERS = ['employeeCode', 'leaveRequestCode', 'expenseClaimCode', 'payslipCode'] as const;
 
 /** Matches the mock's `leaveBalances` fixture (Casual/Sick/Earned, with those day counts). */
 const LEAVE_TYPES = [

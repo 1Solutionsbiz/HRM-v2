@@ -61,7 +61,7 @@ been run against real MySQL.
 | 12 | Assets | ○ not started — **no schema model exists** (deliberately deferred at the database-design phase: no approved frontend UX covers it yet, still a `PlaceholderPage` stub). Skipped by explicit user decision on 2026-09-05; revisit once real UX/requirements exist. |
 | 13 | Complaints | ○ not started — same reason and same decision as Assets (12): no schema model, no approved UX, explicitly skipped for now. |
 | 14 | Resignation | ✓ done (submit/withdraw/decide; see notes below) |
-| 15 | Payroll | ○ not started |
+| 15 | Payroll | ✓ done (salary structure/revision, HR-entered payslip generation, trend/by-department aggregates; see notes below) |
 | 16 | Reports | ○ not started |
 | 17 | Admin | ○ not started |
 | 18 | Audit | ○ not started (module 18 is a read-facing System Logs API over the `AuditLog` table already being written by every other module — not the write path itself) |
@@ -481,6 +481,63 @@ rather than guessing at a schema now.
 - 10 new unit tests + 4 new e2e tests, including the derived-notice-period
   check, the duplicate-pending rejection, and withdraw-then-resubmit. Still
   nothing against real MySQL.
+
+**Module 15 (Payroll) notes:**
+- Self-service: `GET /payroll/salary/mine`, `GET /payroll/payslips/mine`,
+  `GET /payroll/payslips/mine/:id`. HR-facing (new `payroll:manage`
+  permission, admin/hr only, not manager — same reasoning as
+  `resignation:decide`): `GET /payroll/salary/company`, `GET
+  /payroll/employees/:id/salary`, `POST
+  /payroll/employees/:id/salary/revise`, `GET
+  /payroll/employees/:id/payslips`, `POST /payroll/employees/:id/payslips`,
+  `PATCH /payroll/payslips/:id/mark-paid`, `GET /payroll/trend`, `GET
+  /payroll/by-department`.
+- **Payslip line items are HR-entered, never computed from a
+  basic/HRA/PF/tax formula.** The schema has no salary-component-breakdown
+  model — `SalaryStructure.currentAmount` is a single number — and the
+  mock's `buildPayslip()` hardcodes the same basic/HRA/special split for
+  every employee regardless of salary, confirming it's demo filler, not a
+  real formula. Inventing percentages here would fabricate numbers nobody
+  signed off on (rule 13). Instead HR enters the actual earnings/deductions
+  (sourced from wherever payroll is really run) and the server only
+  aggregates what the schema's own `EARNING`/`DEDUCTION` split already
+  defines: `grossAmount = Σ EARNING`, `netAmount = grossAmount − Σ
+  DEDUCTION`. **UNKNOWN, alongside the attendance fine formula**: the real
+  basic/HRA/PF/tax breakdown rule, if one is ever wanted.
+- **Salary revision is the first `$transaction` in this codebase.**
+  Capturing `previousAmount` off the current `SalaryStructure`, updating
+  (or creating) that structure, and inserting the `SalaryRevision` row all
+  happen in one transaction — a revision whose `previousAmount` doesn't
+  match what the structure said (or a structure updated with no revision
+  recorded) corrupts the audit trail, unlike a failed write. Payslip +
+  line-item creation is transactional for the same reason. Every other
+  module's multi-write sequences remain non-transactional, per the
+  precedent already accepted in Users/Employees.
+- **First salary revision for an employee creates `SalaryStructure`** (no
+  Employees-module action creates one) — `previousAmount` is `null` in
+  that case, distinguishing "first-ever salary on record" from "no
+  change."
+- **Money summed via integer paise** (`src/common/money.ts`), not floating
+  `+` — avoids the classic `0.1 + 0.2` drift on a payslip total. Every
+  `Decimal` field at the response boundary
+  (`currentAmount`/`previousAmount`/`newAmount`/`grossAmount`/`netAmount`/line-item
+  `amount`) is converted to a plain number.
+- **`payslipNumber` format is a documented guess**: `PS-{periodYear}-{5-digit
+  sequence}` (e.g. `PS-2026-00001`) via a new `payslipCode`
+  `SequenceCounter`. The schema comment already flags the format as
+  unconfirmed; the year is embedded for readability only — the underlying
+  counter is global and never resets per year.
+- **`getTrend`/`getByDepartment` report `payslipCount`/`employeeCount`, not
+  `headcount`** — deliberately named to signal what's actually computable
+  from real data ("employees with a payslip that period"), which
+  undercounts anyone hired mid-period or missing a payslip. Both aggregate
+  real `Payslip` rows rather than reproducing the mock's
+  `payrollMonthlyTrend`/`payrollByDepartment` fixtures.
+- No payslip PDF/download path — no file-storage integration exists yet,
+  same limitation already documented for Documents and Expenses receipts.
+- 11 new unit tests + 4 new e2e tests, including one asserting
+  gross/net are correct numbers (not decimal-stringified) end to end
+  through generate → mark-paid. Still nothing against real MySQL.
 
 ## Not started
 
