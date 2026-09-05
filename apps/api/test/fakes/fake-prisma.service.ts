@@ -417,8 +417,17 @@ export class FakePrismaService {
       [...this.employees.values()].map((employee) =>
         this.employeeWithRelations(employee),
       ),
-    findUnique: async ({ where }: { where: { id: string } }) => {
-      const employee = this.employees.get(where.id);
+    findUnique: async ({
+      where,
+    }: {
+      where: { id?: string; userId?: string };
+    }) => {
+      let employee: FakeEmployee | undefined;
+      if (where.id) employee = this.employees.get(where.id);
+      if (where.userId) {
+        for (const candidate of this.employees.values())
+          if (candidate.userId === where.userId) employee = candidate;
+      }
       return employee ? this.employeeWithRelations(employee) : null;
     },
     update: async ({
@@ -553,4 +562,177 @@ export class FakePrismaService {
       return { count };
     },
   };
+
+  attendanceDays = new Map<
+    string,
+    {
+      id: string;
+      employeeId: string;
+      date: Date;
+      status: string;
+      firstCheckInAt: Date | null;
+      lastCheckOutAt: Date | null;
+      workedMinutes: number | null;
+      lateMinutes: number;
+      leaveRequestId: string | null;
+    }
+  >();
+  attendanceEvents = new Map<
+    string,
+    {
+      id: string;
+      attendanceDayId: string;
+      employeeId: string;
+      type: string;
+      occurredAt: Date;
+    }
+  >();
+  holidays: { date: Date; isActive: boolean }[] = [];
+  attendancePolicy_: {
+    id: string;
+    standardStartTime: Date;
+    standardEndTime: Date;
+    graceMinutes: number;
+    halfDayThresholdHours: { toNumber: () => number };
+    fullDayHours: { toNumber: () => number };
+    workingWeekdays: number[];
+  } | null = null;
+
+  private dateKey(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  attendanceDay = {
+    findUnique: async ({
+      where,
+    }: {
+      where: {
+        id?: string;
+        employeeId_date?: { employeeId: string; date: Date };
+      };
+    }) => {
+      if (where.id) return this.attendanceDays.get(where.id) ?? null;
+      if (where.employeeId_date) {
+        const { employeeId, date } = where.employeeId_date;
+        for (const day of this.attendanceDays.values()) {
+          if (
+            day.employeeId === employeeId &&
+            this.dateKey(day.date) === this.dateKey(date)
+          )
+            return day;
+        }
+      }
+      return null;
+    },
+    findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
+      const day = this.attendanceDays.get(where.id);
+      if (!day) throw new Error(`no fake attendance day ${where.id}`);
+      return day;
+    },
+    findMany: async ({
+      where,
+    }: {
+      where: { employeeId: string; date: { gte: Date; lte: Date } };
+    }) =>
+      [...this.attendanceDays.values()].filter(
+        (day) =>
+          day.employeeId === where.employeeId &&
+          day.date >= where.date.gte &&
+          day.date <= where.date.lte,
+      ),
+    create: async ({ data }: { data: { employeeId: string; date: Date } }) => {
+      const id = `attendance-day-${this.attendanceDays.size + 1}`;
+      const day = {
+        id,
+        status: 'PRESENT',
+        firstCheckInAt: null,
+        lastCheckOutAt: null,
+        workedMinutes: null,
+        lateMinutes: 0,
+        leaveRequestId: null,
+        ...data,
+      };
+      this.attendanceDays.set(id, day);
+      return day;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }) => {
+      const day = this.attendanceDays.get(where.id);
+      if (!day) throw new Error(`no fake attendance day ${where.id}`);
+      Object.assign(day, data);
+      return day;
+    },
+  };
+
+  attendanceEvent = {
+    findFirst: async ({
+      where,
+    }: {
+      where: { attendanceDayId: string; type: string };
+    }) =>
+      [...this.attendanceEvents.values()].find(
+        (event) =>
+          event.attendanceDayId === where.attendanceDayId &&
+          event.type === where.type,
+      ) ?? null,
+    findMany: async ({ where }: { where: { attendanceDayId: string } }) =>
+      [...this.attendanceEvents.values()]
+        .filter((event) => event.attendanceDayId === where.attendanceDayId)
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    create: async ({
+      data,
+    }: {
+      data: {
+        attendanceDayId: string;
+        employeeId: string;
+        type: string;
+        occurredAt: Date;
+      };
+    }) => {
+      const id = `attendance-event-${String(this.attendanceEvents.size + 1).padStart(4, '0')}`;
+      const event = { id, ...data };
+      this.attendanceEvents.set(id, event);
+      return event;
+    },
+  };
+
+  holiday = {
+    findMany: async ({
+      where,
+    }: {
+      where: { isActive: boolean; date: { gte: Date; lte: Date } };
+    }) =>
+      this.holidays.filter(
+        (holiday) =>
+          holiday.isActive === where.isActive &&
+          holiday.date >= where.date.gte &&
+          holiday.date <= where.date.lte,
+      ),
+  };
+
+  attendancePolicy = {
+    findUnique: async () => this.attendancePolicy_,
+  };
+
+  seedAttendancePolicy(
+    overrides: Partial<
+      NonNullable<FakePrismaService['attendancePolicy_']>
+    > = {},
+  ): void {
+    this.attendancePolicy_ = {
+      id: 'singleton',
+      standardStartTime: new Date(Date.UTC(1970, 0, 1, 9, 30, 0)),
+      standardEndTime: new Date(Date.UTC(1970, 0, 1, 18, 30, 0)),
+      graceMinutes: 15,
+      halfDayThresholdHours: { toNumber: () => 4.5 },
+      fullDayHours: { toNumber: () => 9 },
+      workingWeekdays: [1, 2, 3, 4, 5],
+      ...overrides,
+    };
+  }
 }

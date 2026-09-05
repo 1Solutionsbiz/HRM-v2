@@ -6,6 +6,12 @@ what hasn't been started — without re-deriving it from git history.
 
 **Current phase:** Backend (`apps/api`), module-by-module build-out.
 
+**Deployment constraint to not miss:** the API host's system timezone must
+match `CompanySettings.timezone` (default Asia/Kolkata). Attendance derives
+"today" and late/on-time classification from the process's local clock —
+see module 05's notes below for the specific failure mode on a mismatched
+host.
+
 ## Frontend (`apps/web`) — done, mock-data only
 
 - ✓ Design system (shadcn/ui "Nova" preset, Tailwind v4)
@@ -45,7 +51,7 @@ been run against real MySQL.
 | 02 | Users | ✓ done (admin-provisioned accounts + role assignment; see notes below) |
 | 03 | Employees | ✓ done (onboarding, profile, encrypted bank detail, onboarding steps; see notes below) |
 | 04 | Notifications | ✓ done (self-service list/read; see notes below) |
-| 05 | Attendance | ○ not started |
+| 05 | Attendance | ✓ done (event-sourced check-in/out, policy-driven late/half-day, history synthesis; see notes below) |
 | 06 | Leave | ○ not started |
 | 07 | Requests | ○ not started |
 | 08 | Documents | ○ not started |
@@ -212,6 +218,66 @@ alongside each module that adds lookup data, not all at once.
 - 8 new unit tests + 3 new e2e tests, including cross-user isolation (listing
   only returns your own; marking another user's notification 404s; marking
   "all" read never touches another user's rows).
+
+**Module 05 (Attendance) notes — the most architecturally significant
+module so far, alongside 15 (Payroll) still to come:**
+- Endpoints: self-service `POST /attendance/check-in`, `POST
+  /attendance/check-out`, `GET /attendance/today`, `GET /attendance/history`
+  (`from`/`to` query params, capped at 90 days), `GET /attendance/policy`
+  (read-only). Admin-only `POST /attendance/employees/:employeeId/corrections`
+  behind a new `attendance:manage` permission (granted to admin+hr in the
+  seed).
+- **Event-sourced as instructed**: `AttendanceEvent` rows are the source of
+  truth; `AttendanceDay` is a materialized summary recomputed after every
+  write (`recomputeDay()`), never edited directly. A manual correction is a
+  *new* `CHECK_IN`/`CHECK_OUT`/etc. event with `source: MANUAL_CORRECTION`,
+  not a separate always-non-computational path — `AttendanceEventType.CORRECTION`
+  itself stays unwired to any endpoint this pass; force-fitting an
+  interpretation for it was judged worse than leaving it a documented gap.
+- **Which event "wins" per type is resolved by insertion order, not
+  `occurredAt`**: `recomputeDay()` takes the *most recently created*
+  `CHECK_IN`/`CHECK_OUT` event (ordered by `id`, since `AttendanceEvent` has
+  no separate `createdAt`), not the earliest/latest by clock time. This was
+  a deliberate choice over the more obvious `min(CHECK_IN)`/`max(CHECK_OUT)`
+  rule: min/max only lets a correction move check-in earlier or check-out
+  later — the opposite direction would silently do nothing. "Most recent
+  insertion wins" corrects in both directions.
+- **`punchState` (`NOT_CHECKED_IN`/`CHECKED_IN`/`CHECKED_OUT`) is distinct
+  from `AttendanceDay.status`** (`PRESENT`/`LATE`/.../`WEEKEND`) — the mock
+  UI's `TodayAttendance.status` conflates "have you punched today" with "how
+  is today classified," which are different questions once policy-driven
+  classification exists. `punchState` is derived on read, never stored.
+- **History read-path synthesizes gap days**: `AttendanceDay` rows are only
+  ever created reactively (on a day's first event), so a weekend/holiday/
+  absence with zero events has no row at all. `getHistoryForUser()` fills
+  every requested date with a real row if one exists, else derives
+  `WEEKEND` (from `AttendancePolicy.workingWeekdays`), `HOLIDAY` (from the
+  `Holiday` table), or `ABSENT` (a past working day with nothing recorded) —
+  today/future gaps are omitted rather than marked absent. This is the
+  reason the `Holiday` model exists at all (see `docs/database-design.md`).
+- **Real, load-bearing deployment constraint, not just a comment**: "today"
+  and late/on-time classification are derived from the API process's own
+  local clock, assuming the host's system timezone matches
+  `CompanySettings.timezone` (default Asia/Kolkata). **Whoever deploys this
+  must set the host/container timezone accordingly** — on a UTC host, a
+  punch made between roughly 00:00–05:30 IST would silently attach to the
+  wrong `AttendanceDay` (`@@unique([employeeId, date])` merges rather than
+  errors). No per-user timezone support exists or is planned yet.
+- `AttendancePolicy` has no schema defaults for `standardStartTime`/
+  `standardEndTime`/`workingWeekdays` — `getPolicyOrThrow()` fails loudly
+  (`InternalServerErrorException`) rather than guessing if unseeded (rule
+  13: no legacy policy to invent from). The seed script now creates the
+  singleton row from the mock's `officeTiming` (09:30–18:30, 15min grace, 9h
+  full day, 4.5h half-day threshold, Mon–Fri).
+- Break (`BREAK_START`/`BREAK_END`) minutes are correctly subtracted from
+  `workedMinutes` when those events exist, but no endpoint creates them —
+  no built UI calls for it yet; the computation is there for when one does.
+- 19 new unit tests + 7 new e2e tests (using `vi.useFakeTimers()` to control
+  "today" and grace-window boundaries precisely) — including the
+  double-check-in conflict, a late check-in producing nonzero
+  `lateMinutes`, weekend/holiday/absent synthesis, and a correction
+  overriding the original regardless of clock-time ordering. Still nothing
+  against real MySQL.
 
 ## Not started
 

@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { AttendanceModule } from './attendance/attendance.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -27,6 +28,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     UsersModule,
     EmployeesModule,
     NotificationsModule,
+    AttendanceModule,
   ],
   controllers: [AppController],
   providers: [

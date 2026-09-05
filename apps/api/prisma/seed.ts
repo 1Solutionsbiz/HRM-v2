@@ -24,11 +24,12 @@ const ROLES = [
 const PERMISSIONS = [
   { key: 'user:manage', description: 'Create, deactivate, and assign roles to user accounts' },
   { key: 'employee:manage', description: 'Create and update employee HR profiles' },
+  { key: 'attendance:manage', description: 'Record manual attendance corrections for any employee' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
-  admin: ['user:manage', 'employee:manage'],
-  hr: ['employee:manage'],
+  admin: ['user:manage', 'employee:manage', 'attendance:manage'],
+  hr: ['employee:manage', 'attendance:manage'],
   manager: [],
   employee: [],
 };
@@ -80,6 +81,24 @@ async function main(): Promise<void> {
   for (const key of SEQUENCE_COUNTERS) {
     await prisma.sequenceCounter.upsert({ where: { key }, create: { key, value: 0 }, update: {} });
   }
+
+  // Matches apps/web/src/lib/mock/fixtures.ts's `officeTiming` (09:30/18:30,
+  // 15min grace, 9h full day, 4.5h half-day threshold). `AttendancePolicy`
+  // has no schema defaults for these fields — AttendanceService.getPolicyOrThrow
+  // fails loudly rather than guessing if this row is missing.
+  await prisma.attendancePolicy.upsert({
+    where: { id: 'singleton' },
+    create: {
+      id: 'singleton',
+      standardStartTime: new Date(Date.UTC(1970, 0, 1, 9, 30, 0)),
+      standardEndTime: new Date(Date.UTC(1970, 0, 1, 18, 30, 0)),
+      graceMinutes: 15,
+      halfDayThresholdHours: 4.5,
+      fullDayHours: 9,
+      workingWeekdays: [1, 2, 3, 4, 5],
+    },
+    update: {},
+  });
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@1solutions.biz';
   const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
