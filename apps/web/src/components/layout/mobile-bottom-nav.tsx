@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { getMobilePrimaryNav, navGroups } from "@/config/nav-config";
-import { useRole } from "@/lib/role-context";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -22,7 +22,7 @@ import {
  */
 export function MobileBottomNav() {
   const pathname = usePathname();
-  const { role } = useRole();
+  const { role } = useAuthenticatedUser();
   const [moreOpen, setMoreOpen] = React.useState(false);
   const mobilePrimaryNav = getMobilePrimaryNav(role);
 

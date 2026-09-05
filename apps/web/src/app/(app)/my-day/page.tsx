@@ -15,7 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
-import { useRole } from "@/lib/role-context";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import { getMyDaySummary, getAnnouncements } from "@/lib/mock/mock-api";
@@ -43,7 +43,7 @@ function getGreeting() {
 }
 
 export default function MyDayPage() {
-  const { user } = useRole();
+  const user = useAuthenticatedUser();
   const { data, loading, error, refetch } = useAsync(getMyDaySummary);
   const announcementsQuery = useAsync(getAnnouncements);
   const [taskDone, setTaskDone] = React.useState<Record<string, boolean>>({});
@@ -60,7 +60,7 @@ export default function MyDayPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${getGreeting()}, ${user.name.split(" ")[0]}`}
-        description={`${today} · ${user.designation}`}
+        description={user.designation ? `${today} · ${user.designation}` : today}
       />
 
       <AttendanceCard variant="compact" />

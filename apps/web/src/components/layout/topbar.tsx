@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { useAsync } from "@/lib/use-async";
-import { useRole } from "@/lib/role-context";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { getNotifications, subscribeToNotificationChanges } from "@/lib/mock/mock-api";
 import { formatDate, formatRelativeTime, formatTime } from "@/lib/format";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -26,7 +26,7 @@ interface TopbarProps {
 
 export function Topbar({ title }: TopbarProps) {
   const { data, refetch } = useAsync(getNotifications);
-  const { user } = useRole();
+  const user = useAuthenticatedUser();
   React.useEffect(() => subscribeToNotificationChanges(refetch), [refetch]);
   const notifications = data ?? [];
   const unread = notifications.filter((n) => !n.read);
@@ -39,10 +39,12 @@ export function Topbar({ title }: TopbarProps) {
       <div className="ml-auto flex items-center gap-1">
         <div className="text-muted-foreground mr-2 hidden flex-col items-end text-xs leading-tight lg:flex">
           <LiveClock />
-          <span>
-            Last login {formatDate(user.lastLogin, { day: "numeric", month: "short" })},{" "}
-            {formatTime(user.lastLogin)}
-          </span>
+          {user.lastLoginAt && (
+            <span>
+              Last login {formatDate(user.lastLoginAt, { day: "numeric", month: "short" })},{" "}
+              {formatTime(user.lastLoginAt)}
+            </span>
+          )}
         </div>
         <Separator orientation="vertical" className="mr-1 hidden h-6 lg:block" />
 

@@ -11,6 +11,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  // Single explicit origin (WEB_ORIGIN, see environment.ts) — no wildcard,
+  // no reflecting the request's own Origin header.
+  app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000' });
   await app.listen(process.env.PORT ?? 3001);
 }
 await bootstrap();

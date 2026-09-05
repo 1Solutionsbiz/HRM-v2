@@ -671,10 +671,61 @@ deferred by explicit user decision (2026-09-05), not built. Every other
 module in the 01–18 order is done: 16 of 18 shipped, 2 deliberately
 deferred pending real UX/schema, none silently skipped.
 
+**Frontend auth wiring (2026-09-05) — real login replaces the "preview as"
+switcher:**
+- `RoleProvider`/`role-context.tsx` is gone, replaced by
+  `apps/web/src/lib/auth-context.tsx` (`AuthProvider`, `useAuth`,
+  `useAuthenticatedUser`) and a new `apps/web/src/lib/api-client.ts`. The
+  login page now calls the real `POST /auth/login` + `GET /auth/me`; the
+  role a user sees is whatever the backend actually grants them, not a
+  menu selection — the "Preview as" role switcher in `user-menu.tsx` and
+  the role `<Select>` on the login form are both removed, since with real
+  authorization behind every endpoint they'd be actively misleading, not
+  just dead UI. Logout calls the real `POST /auth/logout`.
+- **Tokens live in `localStorage`** (`hrm-v2:access-token`/`-refresh-token`)
+  — the backend returns both in the login response body with no cookie
+  support, and adding one would be a bigger backend change than this task
+  warranted. Accepted XSS tradeoff of that storage choice, not
+  reconsidered here.
+- **`api-client.ts` dedupes concurrent token refreshes.** The backend
+  rotates and revokes the refresh token on every use
+  (`AuthService.refresh`), so if several requests hit a 401 at the same
+  moment, each independently calling `/auth/refresh` would have only the
+  first succeed — the rest would present an already-revoked token and get
+  logged out. Concurrent callers instead await one shared in-flight
+  refresh promise.
+- **Route protection is a client-side guard in `AppShell`**, not Next.js
+  middleware — middleware can't read `localStorage`, and there's no
+  cookie to read instead. It gates on three states: hydrating a stored
+  token (`isLoading`, renders a spinner — must not bounce an authenticated
+  user to `/login` on a hard refresh before this resolves), no user after
+  loading (redirects), user present (renders the real shell). Components
+  inside the protected tree read identity via `useAuthenticatedUser()`,
+  which throws rather than returning a possibly-null user — a wiring
+  mistake fails loudly instead of rendering `undefined` into a name field.
+- **Backend additions**: `app.enableCors()` in `main.ts`, restricted to a
+  single explicit origin from a new `WEB_ORIGIN` env var (default
+  `http://localhost:3000`) — not a wildcard or a reflected Origin header,
+  which would be the kind of default that survives into production on a
+  system with `payroll:manage` endpoints. `AuthService.me()`'s employee
+  select now includes `designation` (`/my-day` already rendered it; the
+  mock's `user.designation` had nothing backing it before).
+- **Verified live in a browser** (dev server on port 3100, API on 3001,
+  both actually running): the CORS preflight (`OPTIONS /auth/login` →
+  204) succeeds, the real `POST /auth/login` reaches the backend and its
+  error response renders correctly in the form, and visiting a protected
+  route (`/dashboard`) while signed out redirects to `/login`. **Not
+  verified**: an actual successful login — there's still no live MySQL in
+  this environment, so `/auth/login` fails at
+  `this.prisma.user.findUnique()` with the same "pool failed to retrieve
+  a connection" error documented everywhere else in this file. The
+  request/response path, CORS, and error handling are confirmed working;
+  the query path against real data is not.
+- `mockLogin` deleted from `mock-api.ts` (dead code — nothing else in
+  that file changed).
+
 ## Not started
 
-- ○ Real authentication wired into the frontend (frontend still uses
-  `RoleProvider`'s "preview as" switcher, not a real session)
 - ○ Deployment / hosting decision
 - ○ Workspace integration (whatever external system(s) this needs to talk to
   — not yet scoped)

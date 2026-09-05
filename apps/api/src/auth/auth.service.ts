@@ -232,6 +232,7 @@ export class AuthService {
             lastName: true,
             avatarUrl: true,
             employeeCode: true,
+            designation: { select: { title: true } },
           },
         },
         userRoles: { select: { role: { select: { key: true, label: true } } } },

@@ -5,9 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useRole } from "@/lib/role-context";
-import { mockLogin } from "@/lib/mock/mock-api";
-import { ROLES, ROLE_LABELS, type Role } from "@/types/role";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,20 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setRole } = useRole();
-  const [email, setEmail] = React.useState("aditi.sharma@1solutions.biz");
+  const { login } = useAuth();
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [role, setLocalRole] = React.useState<Role>("employee");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -41,10 +31,9 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await mockLogin(email, password);
-      setRole(role);
-      toast.success(`Signed in as ${ROLE_LABELS[role]} (preview)`);
-      router.push(role === "employee" ? "/my-day" : "/dashboard");
+      const user = await login(email, password);
+      toast.success(`Signed in as ${user.name}`);
+      router.push(user.role === "employee" ? "/my-day" : "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -71,11 +60,7 @@ export default function LoginPage() {
         <Card>
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
-            <CardDescription>
-              UI preview build - no account is checked against a real
-              backend. Any password with 4+ characters signs you in; pick a
-              role to preview that experience.
-            </CardDescription>
+            <CardDescription>Sign in with your 1Solutions HRM account.</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -92,6 +77,7 @@ export default function LoginPage() {
                   type="email"
                   placeholder="you@1solutions.biz"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -102,37 +88,17 @@ export default function LoginPage() {
                   id="password"
                   type="password"
                   required
-                  placeholder="Try: preview"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Preview as</Label>
-                <Select
-                  value={role}
-                  onValueChange={(v) => setLocalRole(v as Role)}
-                >
-                  <SelectTrigger id="role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {ROLE_LABELS[r]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <Button type="submit" className="w-full" disabled={submitting}>
                 {submitting ? "Signing in…" : "Sign in"}
               </Button>
               <button
                 type="button"
-                onClick={() =>
-                  toast.info("Password reset isn't wired up yet.")
-                }
+                onClick={() => toast.info("Password reset isn't wired up yet.")}
                 className="text-muted-foreground hover:text-foreground block w-full text-center text-xs underline-offset-4 hover:underline"
               >
                 Forgot password?

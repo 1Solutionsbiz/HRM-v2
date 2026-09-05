@@ -1,16 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  LogOut,
-  Settings,
-  UserCircle,
-  UserCog,
-} from "lucide-react";
+import { LogOut, Settings, UserCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useRole } from "@/lib/role-context";
-import { ROLES, ROLE_LABELS, type Role } from "@/types/role";
+import { useAuthenticatedUser, useAuth } from "@/lib/auth-context";
+import { ROLE_LABELS } from "@/types/role";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -18,12 +12,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -33,14 +22,12 @@ import {
 } from "@/components/ui/sidebar";
 
 export function UserMenu() {
-  const { role, setRole, user } = useRole();
-  const router = useRouter();
+  const user = useAuthenticatedUser();
+  const { logout } = useAuth();
 
-  function handleLogout() {
-    toast.info("Signed out", {
-      description: "This is a UI preview - no backend session exists yet.",
-    });
-    router.push("/login");
+  async function handleLogout() {
+    await logout();
+    toast.info("Signed out");
   }
 
   return (
@@ -57,7 +44,7 @@ export function UserMenu() {
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {ROLE_LABELS[role]}
+                  {ROLE_LABELS[user.role]}
                 </span>
               </div>
             </SidebarMenuButton>
@@ -98,25 +85,6 @@ export function UserMenu() {
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <UserCog />
-                Preview as
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  value={role}
-                  onValueChange={(value) => setRole(value as Role)}
-                >
-                  {ROLES.map((r) => (
-                    <DropdownMenuRadioItem key={r} value={r}>
-                      {ROLE_LABELS[r]}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
               <LogOut />

@@ -34,6 +34,16 @@ class EnvironmentVariables {
   @Max(65535)
   PORT: number = 3001;
 
+  /**
+   * The one origin CORS accepts (see main.ts) — an explicit allow-list, not
+   * a wildcard. A bare `enableCors()` default reflects the request's own
+   * Origin header, which is wide open; wrong for a system with
+   * `payroll:manage` endpoints behind it.
+   */
+  @IsString()
+  @MinLength(1)
+  WEB_ORIGIN: string = 'http://localhost:3000';
+
   @IsString()
   @MinLength(32, {
     message: 'JWT_ACCESS_SECRET must be at least 32 characters long',

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navGroups } from "@/config/nav-config";
-import { useRole } from "@/lib/role-context";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import {
   Sidebar,
   SidebarContent,
@@ -21,7 +21,7 @@ import { UserMenu } from "@/components/layout/user-menu";
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { role } = useRole();
+  const { role } = useAuthenticatedUser();
 
   return (
     <Sidebar collapsible="icon">

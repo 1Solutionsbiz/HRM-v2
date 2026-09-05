@@ -320,26 +320,6 @@ export function getMyRequests(): Promise<UnifiedRequest[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Login (mock only - no real auth)
-// ---------------------------------------------------------------------------
-
-export function mockLogin(email: string, password: string) {
-  return new Promise<{ ok: true }>((resolve, reject) => {
-    setTimeout(() => {
-      if (email.trim().length === 0 || password.length === 0) {
-        reject(new Error("Enter your email and password."));
-        return;
-      }
-      if (password.length < 4) {
-        reject(new Error("Incorrect email or password."));
-        return;
-      }
-      resolve({ ok: true });
-    }, 700);
-  });
-}
-
-// ---------------------------------------------------------------------------
 // HR / Admin: company-wide data
 // ---------------------------------------------------------------------------
 // Same simulate()/mutable-store pattern as above, sourced from hr-fixtures.ts
