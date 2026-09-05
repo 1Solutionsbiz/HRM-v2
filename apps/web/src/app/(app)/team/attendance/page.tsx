@@ -1,11 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, Clock, UserX } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { Calendar as CalendarIcon, CheckCircle2, Clock, Search, UserX, X } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getCompanyAttendance } from "@/lib/api/attendance";
-import { titleCase } from "@/lib/api/employees";
-import { formatTime, toDateOnlyString } from "@/lib/format";
+import {
+  getCompanyAttendance,
+  getEmployeeAttendanceHistory,
+  type AttendanceHistoryDay,
+} from "@/lib/api/attendance";
+import { getEmployees, titleCase, type EmployeeListItem } from "@/lib/api/employees";
+import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatCard } from "@/components/hrm/stat-card";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -13,14 +18,248 @@ import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-export default function TeamAttendancePage() {
+type Period = "day" | "week" | "month" | "quarter";
+
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "quarter", label: "Quarter" },
+];
+
+function rangeForPeriod(period: Period, ref: Date): { from: string; to: string } {
+  if (period === "day") {
+    const s = toDateOnlyString(ref);
+    return { from: s, to: s };
+  }
+  if (period === "week") {
+    const day = ref.getDay(); // 0 = Sun .. 6 = Sat
+    const monday = new Date(ref);
+    monday.setDate(ref.getDate() + (day === 0 ? -6 : 1 - day));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { from: toDateOnlyString(monday), to: toDateOnlyString(sunday) };
+  }
+  if (period === "month") {
+    const first = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    const last = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+    return { from: toDateOnlyString(first), to: toDateOnlyString(last) };
+  }
+  const quarterStartMonth = Math.floor(ref.getMonth() / 3) * 3;
+  const first = new Date(ref.getFullYear(), quarterStartMonth, 1);
+  const last = new Date(ref.getFullYear(), quarterStartMonth + 3, 0);
+  return { from: toDateOnlyString(first), to: toDateOnlyString(last) };
+}
+
+function EmployeePicker({
+  employees,
+  onSelect,
+}: {
+  employees: EmployeeListItem[];
+  onSelect: (employee: EmployeeListItem) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return employees.slice(0, 20);
+    return employees
+      .filter(
+        (e) =>
+          `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) ||
+          e.employeeCode.toLowerCase().includes(q),
+      )
+      .slice(0, 20);
+  }, [employees, query]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-start font-normal sm:w-64">
+          <Search className="text-muted-foreground" />
+          Find an employee…
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <div className="p-2">
+          <Input
+            autoFocus
+            placeholder="Search by name or code…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="max-h-72 overflow-y-auto border-t">
+          {filtered.length === 0 ? (
+            <p className="text-muted-foreground p-3 text-xs">No employees found.</p>
+          ) : (
+            filtered.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className="hover:bg-accent flex w-full items-center gap-2.5 px-3 py-2 text-left"
+                onClick={() => {
+                  onSelect(e);
+                  setOpen(false);
+                  setQuery("");
+                }}
+              >
+                <Avatar className="size-6 shrink-0">
+                  <AvatarFallback className="text-[10px]">{initials(e.firstName, e.lastName)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {e.firstName} {e.lastName}
+                  </p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {e.employeeCode} · {e.department?.name ?? "—"}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem; onClear: () => void }) {
+  const [period, setPeriod] = React.useState<Period>("week");
+  const [refDate, setRefDate] = React.useState<Date>(new Date());
+  const { from, to } = React.useMemo(() => rangeForPeriod(period, refDate), [period, refDate]);
+
+  const { data, loading, error, refetch } = useAsync(
+    () => getEmployeeAttendanceHistory(employee.id, { from, to }),
+    [employee.id, from, to],
+  );
+
+  const columns: ColumnDef<AttendanceHistoryDay>[] = [
+    {
+      accessorKey: "date",
+      header: "Date",
+      cell: ({ row }) => formatDate(row.original.date, { weekday: "short", day: "numeric", month: "short" }),
+    },
+    {
+      accessorKey: "firstCheckInAt",
+      header: "Check in",
+      cell: ({ row }) => (row.original.firstCheckInAt ? formatTime(row.original.firstCheckInAt) : "—"),
+    },
+    {
+      accessorKey: "lastCheckOutAt",
+      header: "Check out",
+      cell: ({ row }) => (row.original.lastCheckOutAt ? formatTime(row.original.lastCheckOutAt) : "—"),
+    },
+    {
+      accessorKey: "workedMinutes",
+      header: "Hours",
+      cell: ({ row }) =>
+        row.original.workedMinutes != null ? `${(row.original.workedMinutes / 60).toFixed(1)}h` : "—",
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={titleCase(row.original.status)} />,
+    },
+  ];
+
+  const rows = data ?? [];
+  const present = rows.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+  const absent = rows.filter((r) => r.status === "ABSENT").length;
+  const totalHours = rows.reduce((sum, r) => sum + (r.workedMinutes ?? 0), 0) / 60;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar className="size-9 shrink-0">
+              <AvatarFallback className="text-xs">{initials(employee.firstName, employee.lastName)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                {employee.firstName} {employee.lastName}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {employee.employeeCode} · {employee.designation?.title ?? "—"} · {employee.department?.name ?? "—"}
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClear}>
+            <X />
+            Back to team roster
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1 rounded-lg border p-1">
+          {PERIODS.map((p) => (
+            <Button
+              key={p.value}
+              size="sm"
+              variant={period === p.value ? "default" : "ghost"}
+              onClick={() => setPeriod(p.value)}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="text-muted-foreground size-4" />
+          <DatePicker value={refDate} onChange={(d) => d && setRefDate(d)} />
+        </div>
+      </div>
+
+      <AsyncSection
+        loading={loading}
+        error={error}
+        onRetry={refetch}
+        loadingFallback={<StatGridSkeleton count={3} />}
+      >
+        {data && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <StatCard label="Present" value={String(present)} icon={CheckCircle2} tone="success" />
+            <StatCard label="Absent" value={String(absent)} icon={UserX} />
+            <StatCard label="Total hours" value={totalHours.toFixed(1)} icon={Clock} />
+          </div>
+        )}
+      </AsyncSection>
+
+      <Card>
+        <CardContent className="pt-6">
+          <AsyncSection
+            loading={loading}
+            error={error}
+            onRetry={refetch}
+            loadingFallback={<TableSkeleton rows={7} columns={5} />}
+          >
+            <DataTable
+              columns={columns}
+              data={rows}
+              emptyTitle="No attendance in this range"
+              pageSize={15}
+            />
+          </AsyncSection>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TeamRosterView() {
   const [date, setDate] = React.useState<Date>(new Date());
   const dateStr = toDateOnlyString(date);
 
@@ -34,11 +273,9 @@ export default function TeamAttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Team attendance"
-        description="Review your team's daily attendance."
-        actions={<DatePicker value={date} onChange={(d) => d && setDate(d)} />}
-      />
+      <div className="flex justify-end">
+        <DatePicker value={date} onChange={(d) => d && setDate(d)} />
+      </div>
 
       <AsyncSection
         loading={loading}
@@ -94,6 +331,31 @@ export default function TeamAttendancePage() {
           </AsyncSection>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+export default function TeamAttendancePage() {
+  const { data: employees } = useAsync(getEmployees);
+  const activeEmployees = React.useMemo(
+    () => (employees ?? []).filter((e) => e.status === "ACTIVE"),
+    [employees],
+  );
+  const [selected, setSelected] = React.useState<EmployeeListItem | null>(null);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Team attendance"
+        description="Review your team's daily attendance."
+        actions={<EmployeePicker employees={activeEmployees} onSelect={setSelected} />}
+      />
+
+      {selected ? (
+        <EmployeeHistoryView employee={selected} onClear={() => setSelected(null)} />
+      ) : (
+        <TeamRosterView />
+      )}
     </div>
   );
 }

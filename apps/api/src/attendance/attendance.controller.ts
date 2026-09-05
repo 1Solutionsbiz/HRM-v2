@@ -53,6 +53,16 @@ export class AttendanceController {
     return this.attendanceService.getCompanyAttendanceForDate(date);
   }
 
+  /** Admin/HR lookup of any employee's history — same query shape as the self-service /history above. */
+  @Get('employees/:employeeId/history')
+  @RequirePermissions('attendance:manage')
+  getEmployeeHistory(
+    @Param('employeeId') employeeId: string,
+    @Query() query: GetHistoryQueryDto,
+  ) {
+    return this.attendanceService.getHistoryForEmployeeId(employeeId, query);
+  }
+
   /** HR/admin manual correction — see AttendanceService.recordCorrection for the semantics. */
   @Post('employees/:employeeId/corrections')
   @RequirePermissions('attendance:manage')

@@ -84,3 +84,14 @@ export interface CompanyAttendanceRow {
 export function getCompanyAttendance(date?: string): Promise<CompanyAttendanceRow[]> {
   return apiFetch<CompanyAttendanceRow[]>(`/attendance/company${date ? `?date=${date}` : ""}`);
 }
+
+export function getEmployeeAttendanceHistory(
+  employeeId: string,
+  params?: { from?: string; to?: string },
+): Promise<AttendanceHistoryDay[]> {
+  const search = new URLSearchParams();
+  if (params?.from) search.set("from", params.from);
+  if (params?.to) search.set("to", params.to);
+  const qs = search.toString();
+  return apiFetch<AttendanceHistoryDay[]>(`/attendance/employees/${employeeId}/history${qs ? `?${qs}` : ""}`);
+}

@@ -22,7 +22,10 @@ import type { RecordCorrectionDto } from './dto/record-correction.dto.js';
 import type { GetHistoryQueryDto } from './dto/get-history-query.dto.js';
 
 const DEFAULT_HISTORY_DAYS = 45;
-const MAX_HISTORY_DAYS = 90;
+// 92, not 90 - a calendar quarter (Team attendance's per-employee lookup
+// supports day/week/month/quarter ranges) can be up to 92 days (Jul-Sep,
+// Oct-Dec), and the old 90-day cap would reject exactly those two quarters.
+const MAX_HISTORY_DAYS = 92;
 
 interface RequestMeta {
   ipAddress?: string;
@@ -174,6 +177,23 @@ export class AttendanceService {
 
   async getHistoryForUser(userId: string, query: GetHistoryQueryDto) {
     const employeeId = await this.requireEmployeeId(userId);
+    return this.getHistoryForEmployee(employeeId, query);
+  }
+
+  /** Admin/HR lookup for any employee - see getCompanyAttendanceForDate's sibling reasoning below (attendance:manage-gated at the controller). */
+  async getHistoryForEmployeeId(employeeId: string, query: GetHistoryQueryDto) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+    return this.getHistoryForEmployee(employeeId, query);
+  }
+
+  private async getHistoryForEmployee(
+    employeeId: string,
+    query: GetHistoryQueryDto,
+  ) {
     const today = companyToday();
     const to = query.to ? parseDateOnly(query.to) : today;
     const from = query.from

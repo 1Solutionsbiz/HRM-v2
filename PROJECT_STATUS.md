@@ -895,3 +895,15 @@ switcher:**
   nothing populating it from a real upload yet.
 - ○ Workspace integration (whatever external system(s) this needs to talk to
   — not yet scoped)
+- ○ **Weekly attendance email report** (explicitly requested 2026-09-06,
+  explicitly deferred by the user - "we can work on this later... but it is
+  important"): every employee should receive their own Mon-Fri attendance
+  for the week, emailed Saturday 8am. Needs two things neither of which
+  exist yet: an outbound email provider (nothing sends email anywhere in
+  this app today) and a scheduled-job mechanism (no cron/scheduler
+  infrastructure exists - Hostinger Node.js Web Apps don't have a
+  standing background-job runner distinct from the request-serving
+  process, this needs its own decision). The data side is ready:
+  `AttendanceService.getHistoryForEmployeeId` (added 2026-09-06 for the
+  Team attendance per-employee search) already returns exactly a Mon-Fri
+  week's rows for any employee.
