@@ -44,11 +44,51 @@ interface FakeUserRole {
   assignedByUserId?: string;
 }
 
+export interface FakeEmployee {
+  id: string;
+  userId: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  personalEmail?: string;
+  phone?: string;
+  dateOfBirth: Date | null;
+  dateOfJoining: Date;
+  employmentType: string;
+  workLocation?: string;
+  currentAddress?: string;
+  status: string;
+  avatarUrl: string | null;
+  departmentId: string | null;
+  designationId: string | null;
+  managerId: string | null;
+  createdAt: Date;
+}
+
+interface FakeBankDetail {
+  employeeId: string;
+  bankName: string;
+  accountNumberEncrypted: string;
+  ifscCode: string;
+  panNumberEncrypted: string | null;
+}
+
+interface FakeEmergencyContact {
+  employeeId: string;
+  name: string;
+  relationship: string;
+  phone: string;
+}
+
 export class FakePrismaService {
   users = new Map<string, FakeUser>();
   sessions = new Map<string, FakeSession>();
   roles = new Map<string, FakeRole>();
   userRoleRows: FakeUserRole[] = [];
+  employees = new Map<string, FakeEmployee>();
+  bankDetails = new Map<string, FakeBankDetail>();
+  emergencyContacts = new Map<string, FakeEmergencyContact>();
+  sequenceCounters = new Map<string, number>();
 
   private rolesForUser(userId: string): FakeRole[] {
     return this.userRoleRows
@@ -252,11 +292,143 @@ export class FakePrismaService {
     },
   };
 
+  sequenceCounter = {
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { key: string };
+      data: { value: { increment: number } };
+    }) => {
+      const current = this.sequenceCounters.get(where.key);
+      if (current === undefined) {
+        throw new Error(
+          `no fake sequence counter "${where.key}" — call seedSequenceCounter() first`,
+        );
+      }
+      const value = current + data.value.increment;
+      this.sequenceCounters.set(where.key, value);
+      return { key: where.key, value };
+    },
+  };
+
+  onboardingStepTemplate = {
+    findMany: async () =>
+      [] as {
+        id: string;
+        name: string;
+        sortOrder: number;
+        isActive: boolean;
+      }[],
+  };
+
+  employeeOnboardingStep = {
+    createMany: async () => ({ count: 0 }),
+    findMany: async () => [] as unknown[],
+    findUnique: async () => null,
+    update: async () => {
+      throw new Error('no fake onboarding steps seeded');
+    },
+  };
+
+  private employeeWithRelations(employee: FakeEmployee) {
+    return {
+      ...employee,
+      department: null,
+      designation: null,
+      manager: employee.managerId
+        ? (() => {
+            const manager = this.employees.get(employee.managerId!);
+            return manager
+              ? {
+                  id: manager.id,
+                  firstName: manager.firstName,
+                  lastName: manager.lastName,
+                }
+              : null;
+          })()
+        : null,
+      emergencyContact: this.emergencyContacts.get(employee.id) ?? null,
+      bankDetail: this.bankDetails.get(employee.id) ?? null,
+    };
+  }
+
+  employee = {
+    create: async ({
+      data,
+    }: {
+      data: Omit<FakeEmployee, 'id' | 'createdAt' | 'status' | 'avatarUrl'>;
+    }) => {
+      const id = `employee-${this.employees.size + 1}`;
+      const employee: FakeEmployee = {
+        id,
+        status: 'ACTIVE',
+        avatarUrl: null,
+        createdAt: new Date(),
+        ...data,
+      };
+      this.employees.set(id, employee);
+      return employee;
+    },
+    findMany: async () =>
+      [...this.employees.values()].map((employee) =>
+        this.employeeWithRelations(employee),
+      ),
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const employee = this.employees.get(where.id);
+      return employee ? this.employeeWithRelations(employee) : null;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Partial<FakeEmployee>;
+    }) => {
+      const employee = this.employees.get(where.id);
+      if (!employee) throw new Error(`no fake employee ${where.id}`);
+      Object.assign(employee, data);
+      return employee;
+    },
+  };
+
+  employeeBankDetail = {
+    upsert: async ({
+      where,
+      create,
+    }: {
+      where: { employeeId: string };
+      create: FakeBankDetail;
+      update: Omit<FakeBankDetail, 'employeeId'>;
+    }) => {
+      this.bankDetails.set(where.employeeId, create);
+      return create;
+    },
+  };
+
+  employeeEmergencyContact = {
+    upsert: async ({
+      where,
+      create,
+    }: {
+      where: { employeeId: string };
+      create: FakeEmergencyContact;
+      update: Omit<FakeEmergencyContact, 'employeeId'>;
+    }) => {
+      this.emergencyContacts.set(where.employeeId, create);
+      return create;
+    },
+  };
+
   addRole(role: FakeRole): void {
     this.roles.set(role.id, role);
   }
 
   assignRole(userId: string, roleId: string): void {
     this.userRoleRows.push({ userId, roleId });
+  }
+
+  seedSequenceCounter(key: string, value = 0): void {
+    this.sequenceCounters.set(key, value);
   }
 }

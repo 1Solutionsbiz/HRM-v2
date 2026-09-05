@@ -43,7 +43,7 @@ been run against real MySQL.
 |---|--------|--------|
 | 01 | Auth | ✓ done (login/refresh/logout/me/change-password; see notes below) |
 | 02 | Users | ✓ done (admin-provisioned accounts + role assignment; see notes below) |
-| 03 | Employees | ○ not started |
+| 03 | Employees | ✓ done (onboarding, profile, encrypted bank detail, onboarding steps; see notes below) |
 | 04 | Notifications | ○ not started |
 | 05 | Attendance | ○ not started |
 | 06 | Leave | ○ not started |
@@ -64,10 +64,14 @@ Shared infra built alongside module 01 (used by every module after it, so
 listed once here rather than per-module): `PrismaModule` (global, MySQL via
 `@prisma/adapter-mariadb` — Prisma 7's client generator requires a driver
 adapter now), global `ValidationPipe` + `AllExceptionsFilter`,
-`SecurityModule` (scrypt-based password hashing, global — no native module,
-since this sandbox has no Homebrew/build tools), `AuditModule` (global),
-`JwtAuthGuard` + `PermissionsGuard` (registered globally in `AppModule`),
-`@Public()` / `@RequirePermissions()` / `@CurrentUser()` decorators.
+`SecurityModule` (scrypt password hashing + AES-256-GCM encryption, global —
+no native module, since this sandbox has no Homebrew/build tools),
+`AuditModule` (global), `SequenceModule` (atomic code-generation counters,
+global), `JwtAuthGuard` + `PermissionsGuard` (registered globally in
+`AppModule`), `@Public()` / `@RequirePermissions()` / `@CurrentUser()`
+decorators. A `prisma/seed.ts` script (`npm run prisma:seed`) bootstraps
+roles, permissions, sequence counters, and an admin account — extend it
+alongside each module that adds lookup data, not all at once.
 
 **Module 01 (Auth) notes:**
 - Endpoints: `POST /auth/login`, `POST /auth/refresh` (rotating), `POST
@@ -125,6 +129,59 @@ since this sandbox has no Homebrew/build tools), `AuditModule` (global),
   enough to confirm it builds a real query and only fails at the network
   connection step (`pool failed to retrieve a connection`), which is as
   much verification as this sandbox allows.
+
+**Module 03 (Employees) notes:**
+- Endpoints (all require `employee:manage`, new permission, granted to
+  admin+hr in the seed): `POST /employees` (onboards — provisions the
+  `User` via `UsersService.create()` internally, then the `Employee` row;
+  returns the same one-time `temporaryPassword`), `GET /employees`, `GET
+  /employees/:id`, `PATCH /employees/:id`, `PUT /employees/:id/bank-detail`,
+  `PUT /employees/:id/emergency-contact`, `GET
+  /employees/:id/onboarding-steps`, `PATCH
+  /employees/:id/onboarding-steps/:stepId/complete`. Plus simple
+  `GET`/`POST /departments` and `/designations`.
+- New `EncryptionService` (`src/security/encryption.service.ts`, global,
+  alongside `PasswordService`) — AES-256-GCM, random IV per call, stored as
+  `v1$<iv>$<authTag>$<ciphertext>` (same versioned-string idea as password
+  hashes). Encrypts `EmployeeBankDetail.accountNumberEncrypted` /
+  `panNumberEncrypted` on write, decrypts on read for an authorized caller.
+  A tampered or wrong-key value throws rather than returning garbage —
+  covered by a unit test that flips one ciphertext hex digit and asserts it
+  rejects, which is the test that actually proves the auth tag is checked.
+  New `ENCRYPTION_KEY` env var (64 hex chars / 32 raw bytes), validated at
+  startup like `JWT_ACCESS_SECRET`.
+- New `SequenceService` (`src/sequence/`, global) — atomic `employeeCode`
+  generation via `SequenceCounter`, replacing the "max + 1" race the design
+  doc flags as a legacy anti-pattern. Requires the counter row to already
+  exist (seeded), rather than upserting, since an upsert's own create-path
+  isn't race-free either. Format `EXP-{YY}-{seq:04d}-OM` reproduces the
+  *shape* of the one sample code seen in mock data — **UNKNOWN, not
+  confirmed**: whether "OM" means anything specific and whether the
+  sequence should reset yearly. Flag this with whoever owns the real
+  convention before it's load-bearing.
+- The employee directory's `status` field is `ACTIVE`/`INACTIVE` only, as
+  designed — the mock UI's third "On Leave" value is a derived fact (an
+  approved `LeaveRequest` covering today) that the Leave module (06, not
+  built yet) will need to compute. Deliberately not faked as a field in the
+  meantime so nothing downstream binds to a shape that later becomes a
+  breaking change.
+- No self-service scope yet: every route requires `employee:manage`
+  (whole-company management), not "read your own record." A future
+  `/employees/me` for the employee-facing Profile screen is a distinct,
+  unbuilt piece of authorization.
+- Onboarding steps live here (not a separate module — none of the 18 named
+  modules owns them): seeded from active `OnboardingStepTemplate` rows at
+  employee-create time; template CRUD itself is deferred to Admin (17).
+- `EmployeesService.create()` is not wrapped in a DB transaction across
+  provisioning the `User` and creating the `Employee` (same tradeoff module
+  02 already accepted for `User`+`UserRole`).
+- Tests: 20 new unit tests (`EmployeesService`, `EncryptionService`,
+  `SequenceService`, all against mocked/fake Prisma) + 3 new e2e tests —
+  including one that PUTs a plaintext bank account number and GETs it back
+  decrypted through the real HTTP path (`test/employees.e2e-spec.ts`),
+  which is the only test that actually proves encrypt and decrypt agree
+  end-to-end rather than just in isolation. Still nothing against real
+  MySQL.
 
 ## Not started
 

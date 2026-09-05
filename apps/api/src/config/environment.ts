@@ -1,8 +1,10 @@
 import { Type, plainToInstance } from 'class-transformer';
 import {
+  IsHexadecimal,
   IsIn,
   IsInt,
   IsString,
+  Length,
   Max,
   Min,
   MinLength,
@@ -37,6 +39,15 @@ class EnvironmentVariables {
     message: 'JWT_ACCESS_SECRET must be at least 32 characters long',
   })
   JWT_ACCESS_SECRET!: string;
+
+  // Raw 32-byte AES-256 key, hex-encoded (openssl rand -hex 32) — a
+  // passphrase here would silently produce a weaker/wrong-length key at
+  // first use deep inside EncryptionService instead of failing at startup.
+  @IsHexadecimal()
+  @Length(64, 64, {
+    message: 'ENCRYPTION_KEY must be exactly 64 hex characters (32 raw bytes)',
+  })
+  ENCRYPTION_KEY!: string;
 }
 
 export function validateEnv(

@@ -23,14 +23,18 @@ const ROLES = [
  */
 const PERMISSIONS = [
   { key: 'user:manage', description: 'Create, deactivate, and assign roles to user accounts' },
+  { key: 'employee:manage', description: 'Create and update employee HR profiles' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
-  admin: ['user:manage'],
-  hr: [],
+  admin: ['user:manage', 'employee:manage'],
+  hr: ['employee:manage'],
   manager: [],
   employee: [],
 };
+
+/** Every SequenceCounter key a module relies on for atomic code generation — see SequenceService. */
+const SEQUENCE_COUNTERS = ['employeeCode'] as const;
 
 function randomPassword(): string {
   return randomBytes(18).toString('base64url');
@@ -71,6 +75,10 @@ async function main(): Promise<void> {
         update: {},
       });
     }
+  }
+
+  for (const key of SEQUENCE_COUNTERS) {
+    await prisma.sequenceCounter.upsert({ where: { key }, create: { key, value: 0 }, update: {} });
   }
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@1solutions.biz';
