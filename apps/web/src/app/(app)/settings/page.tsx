@@ -4,9 +4,12 @@ import * as React from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { KeyRound, Monitor, Moon, Sun } from "lucide-react";
+import { ApiError } from "@/lib/api-client";
+import { changePassword } from "@/lib/api/auth";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -14,6 +17,15 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const NOTIF_PREFS = [
   { id: "leave", label: "Leave request updates", description: "Approvals, rejections, and reminders." },
@@ -30,6 +42,48 @@ export default function SettingsPage() {
     attendance: true,
     announcements: false,
   });
+
+  const [passwordDialogOpen, setPasswordDialogOpen] = React.useState(false);
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [passwordError, setPasswordError] = React.useState<string | null>(null);
+  const [changingPassword, setChangingPassword] = React.useState(false);
+
+  function openPasswordDialog() {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError(null);
+    setPasswordDialogOpen(true);
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 12) {
+      setPasswordError("New password must be at least 12 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirmation don't match.");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      toast.success("Password changed", {
+        description: "You've been kept signed in here; your other sessions were signed out.",
+      });
+      setPasswordDialogOpen(false);
+    } catch (err) {
+      setPasswordError(err instanceof ApiError ? err.message : "Something went wrong.");
+    } finally {
+      setChangingPassword(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -96,15 +150,81 @@ export default function SettingsPage() {
           <CardDescription>Manage how you sign in.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            variant="outline"
-            onClick={() => toast.info("Password change isn't wired up yet - no real auth exists.")}
-          >
+          <Button variant="outline" onClick={openPasswordDialog}>
             <KeyRound />
             Change password
           </Button>
         </CardContent>
       </Card>
+
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <form onSubmit={handleChangePassword}>
+            <DialogHeader>
+              <DialogTitle>Change password</DialogTitle>
+              <DialogDescription>
+                Changing your password signs you out of every other session — this one stays
+                signed in.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {passwordError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{passwordError}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="current-password">Current password</Label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  required
+                  minLength={12}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">At least 12 characters.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm new password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPasswordDialogOpen(false)}
+                disabled={changingPassword}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={changingPassword}>
+                {changingPassword ? "Changing…" : "Change password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
