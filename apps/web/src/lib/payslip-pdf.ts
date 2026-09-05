@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { monthName, type Payslip } from "@/lib/api/payroll";
+import { formatDate } from "@/lib/format";
 
 // Matches PayslipDocument's on-screen constant — kept as its own copy here
 // (not shared) since this file has no React dependency and stays usable
@@ -88,6 +89,7 @@ export function downloadPayslipPdf(payslip: Payslip): void {
   labelValue(doc, leftX, ly, "Department :", employee?.department?.name ?? "—");
   labelValue(doc, rightX, ly, "Account :", employee?.bankDetail?.accountNumber ?? "—");
   ly += 6;
+  labelValue(doc, leftX, ly, "Date of Joining :", employee ? formatDate(employee.dateOfJoining) : "—");
   labelValue(doc, rightX, ly, "IFSC :", employee?.bankDetail?.ifscCode ?? "—");
 
   y = infoTop + infoHeight + 6;
