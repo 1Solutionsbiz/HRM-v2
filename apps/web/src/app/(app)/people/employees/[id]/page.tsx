@@ -13,7 +13,9 @@ import {
   Landmark,
   ShieldAlert,
   FileText,
-  Upload,
+  ExternalLink,
+  Check,
+  X,
   FolderOpen,
   GraduationCap,
   Laptop,
@@ -21,6 +23,7 @@ import {
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDate } from "@/lib/format";
+import { ApiError } from "@/lib/api-client";
 import {
   getEmployee,
   employeeFullName,
@@ -29,6 +32,7 @@ import {
   formatBloodGroup,
   maskAccountNumber,
 } from "@/lib/api/employees";
+import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from "@/lib/api/documents";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -38,6 +42,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 function formatDateOrDash(iso: string | null | undefined): string {
   return iso ? formatDate(iso) : "—";
@@ -93,22 +108,52 @@ export default function EmployeeDetailPage() {
     () => getEmployee(params.id),
     [params.id],
   );
+  const {
+    data: documents,
+    loading: docsLoading,
+    error: docsError,
+    refetch: refetchDocs,
+  } = useAsync(() => getEmployeeDocuments(params.id), [params.id]);
 
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [uploadTargetId, setUploadTargetId] = React.useState<string | null>(null);
+  const [deciding, setDeciding] = React.useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = React.useState<DocumentChecklistItem | null>(null);
+  const [rejectNotes, setRejectNotes] = React.useState("");
+  const [rejectError, setRejectError] = React.useState<string | null>(null);
+  const [rejectSaving, setRejectSaving] = React.useState(false);
 
-  function triggerUpload(id: string) {
-    setUploadTargetId(id);
-    fileInputRef.current?.click();
+  async function handleVerify(doc: DocumentChecklistItem) {
+    setDeciding(doc.documentTypeId);
+    try {
+      await decideDocument(params.id, doc.documentTypeId, "VERIFIED");
+      toast.success(`${doc.name} verified`);
+      refetchDocs();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't verify this document.");
+    } finally {
+      setDeciding(null);
+    }
   }
 
-  function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !uploadTargetId) return;
-    toast.success(`${file.name} uploaded`, {
-      description: "This is a UI preview - it will show as \"Pending review\" once document upload is wired up.",
-    });
+  function openReject(doc: DocumentChecklistItem) {
+    setRejectTarget(doc);
+    setRejectNotes("");
+    setRejectError(null);
+  }
+
+  async function handleRejectConfirm() {
+    if (!rejectTarget) return;
+    setRejectSaving(true);
+    setRejectError(null);
+    try {
+      await decideDocument(params.id, rejectTarget.documentTypeId, "REJECTED", rejectNotes.trim());
+      toast.success(`${rejectTarget.name} rejected`);
+      setRejectTarget(null);
+      refetchDocs();
+    } catch (err) {
+      setRejectError(err instanceof ApiError ? err.message : "Couldn't reject this document.");
+    } finally {
+      setRejectSaving(false);
+    }
   }
 
   return (
@@ -250,39 +295,67 @@ export default function EmployeeDetailPage() {
               <TabsContent value="documents" className="mt-4">
                 <Card>
                   <CardContent className="pt-6">
-                    {employee.documents.length === 0 ? (
-                      <EmptyState icon={FolderOpen} title="No documents on file" />
-                    ) : (
-                      <ul className="divide-y">
-                        {employee.documents.map((doc) => (
-                          <li key={doc.id} className="flex items-center justify-between gap-3 py-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <FileText className="text-muted-foreground size-4 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium">{doc.documentType.name}</p>
-                                <p className="text-muted-foreground text-xs">
-                                  {titleCase(doc.documentType.category)}
-                                  {doc.uploadedAt ? ` · Uploaded ${formatDate(doc.uploadedAt)}` : ""}
-                                </p>
+                    <AsyncSection
+                      loading={docsLoading}
+                      error={docsError}
+                      onRetry={refetchDocs}
+                      loadingFallback={<Skeleton className="h-40 w-full" />}
+                    >
+                      {(documents ?? []).length === 0 ? (
+                        <EmptyState icon={FolderOpen} title="No documents on file" />
+                      ) : (
+                        <ul className="divide-y">
+                          {(documents ?? []).map((doc) => (
+                            <li key={doc.documentTypeId} className="flex items-center justify-between gap-3 py-3">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <FileText className="text-muted-foreground size-4 shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">{doc.name}</p>
+                                  <p className="text-muted-foreground text-xs">
+                                    {titleCase(doc.category)}
+                                    {doc.uploadedAt ? ` · Uploaded ${formatDate(doc.uploadedAt)}` : ""}
+                                    {doc.status === "REJECTED" && doc.notes ? ` · ${doc.notes}` : ""}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <StatusBadge status={titleCase(doc.status)} />
-                              {doc.status === "MISSING" ? (
-                                <Button size="sm" variant="outline" onClick={() => triggerUpload(doc.id)}>
-                                  <Upload />
-                                  Upload
-                                </Button>
-                              ) : (
-                                <Button size="sm" variant="ghost" onClick={() => triggerUpload(doc.id)}>
-                                  Replace
-                                </Button>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                              <div className="flex shrink-0 items-center gap-2">
+                                <StatusBadge status={titleCase(doc.status)} />
+                                {doc.fileUrl && (
+                                  <Button size="sm" variant="ghost" asChild>
+                                    <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink />
+                                      View
+                                    </a>
+                                  </Button>
+                                )}
+                                {doc.status === "PENDING_REVIEW" && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={deciding === doc.documentTypeId}
+                                      onClick={() => handleVerify(doc)}
+                                    >
+                                      <Check />
+                                      Verify
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      disabled={deciding === doc.documentTypeId}
+                                      onClick={() => openReject(doc)}
+                                    >
+                                      <X />
+                                      Reject
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </AsyncSection>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -367,7 +440,45 @@ export default function EmployeeDetailPage() {
         )}
       </AsyncSection>
 
-      <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChosen} />
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent>
+          {rejectTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Reject {rejectTarget.name}</DialogTitle>
+                <DialogDescription>
+                  Let the employee know what needs to be fixed before resubmitting.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                {rejectError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{rejectError}</AlertDescription>
+                  </Alert>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="reject-notes">Reason (optional)</Label>
+                  <Textarea
+                    id="reject-notes"
+                    placeholder="e.g. Document is illegible, wrong file uploaded…"
+                    value={rejectNotes}
+                    onChange={(e) => setRejectNotes(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={rejectSaving}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleRejectConfirm} disabled={rejectSaving}>
+                  {rejectSaving ? "Rejecting…" : "Reject document"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
