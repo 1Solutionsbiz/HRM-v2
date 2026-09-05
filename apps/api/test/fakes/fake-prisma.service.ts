@@ -1524,4 +1524,98 @@ export class FakePrismaService {
       return read;
     },
   };
+
+  // --- Resignation -------------------------------------------------------
+
+  resignations = new Map<
+    string,
+    {
+      id: string;
+      employeeId: string;
+      reason: string;
+      submittedAt: Date;
+      lastWorkingDay: Date;
+      noticePeriodDays: number;
+      status: string;
+      decidedByUserId: string | null;
+      decidedAt: Date | null;
+      decisionNote: string | null;
+    }
+  >();
+
+  private resignationWithRelations(
+    resignation: NonNullable<
+      ReturnType<FakePrismaService['resignations']['get']>
+    >,
+  ) {
+    const employee = this.employees.get(resignation.employeeId);
+    return {
+      ...resignation,
+      employee: employee
+        ? {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          }
+        : undefined,
+    };
+  }
+
+  resignation = {
+    findMany: async ({ where }: { where?: { employeeId?: string } } = {}) =>
+      [...this.resignations.values()]
+        .filter(
+          (resignation) =>
+            !where?.employeeId || resignation.employeeId === where.employeeId,
+        )
+        .sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1))
+        .map((resignation) => this.resignationWithRelations(resignation)),
+    findFirst: async ({
+      where,
+    }: {
+      where: { employeeId: string; status: string };
+    }) =>
+      [...this.resignations.values()].find(
+        (resignation) =>
+          resignation.employeeId === where.employeeId &&
+          resignation.status === where.status,
+      ) ?? null,
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.resignations.get(where.id) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: {
+        employeeId: string;
+        reason: string;
+        submittedAt: Date;
+        lastWorkingDay: Date;
+        noticePeriodDays: number;
+      };
+    }) => {
+      const id = `resignation-${this.resignations.size + 1}`;
+      const resignation = {
+        id,
+        status: 'PENDING',
+        decidedByUserId: null,
+        decidedAt: null,
+        decisionNote: null,
+        ...data,
+      };
+      this.resignations.set(id, resignation);
+      return resignation;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }) => {
+      const resignation = this.resignations.get(where.id);
+      if (!resignation) throw new Error(`no fake resignation ${where.id}`);
+      Object.assign(resignation, data);
+      return resignation;
+    },
+  };
 }

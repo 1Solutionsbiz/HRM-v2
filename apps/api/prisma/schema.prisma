@@ -774,6 +774,10 @@ enum ResignationStatus {
   PENDING
   APPROVED
   DECLINED
+  /// Added alongside the Resignation module (14) — self-service withdrawal
+  /// updates status rather than deleting the row, consistent with every
+  /// other domain in this schema never destroying decision history.
+  WITHDRAWN
 }
 
 model Resignation {

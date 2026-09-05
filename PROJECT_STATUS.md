@@ -60,7 +60,7 @@ been run against real MySQL.
 | 11 | Announcements | ✓ done (publish + per-viewer read state; see notes below) |
 | 12 | Assets | ○ not started — **no schema model exists** (deliberately deferred at the database-design phase: no approved frontend UX covers it yet, still a `PlaceholderPage` stub). Skipped by explicit user decision on 2026-09-05; revisit once real UX/requirements exist. |
 | 13 | Complaints | ○ not started — same reason and same decision as Assets (12): no schema model, no approved UX, explicitly skipped for now. |
-| 14 | Resignation | ○ not started |
+| 14 | Resignation | ✓ done (submit/withdraw/decide; see notes below) |
 | 15 | Payroll | ○ not started |
 | 16 | Reports | ○ not started |
 | 17 | Admin | ○ not started |
@@ -451,6 +451,36 @@ module so far, alongside 15 (Payroll) still to come:**
   announcement) rather than adding unrequested write paths.
 - 5 new unit tests + 2 new e2e tests, including the per-viewer isolation
   case. Still nothing against real MySQL.
+
+**Module 12/13 (Assets/Complaints):** skipped by explicit user decision —
+neither has a Prisma model, both were deliberately deferred at the
+database-design phase pending real frontend UX. Revisit once that exists
+rather than guessing at a schema now.
+
+**Module 14 (Resignation) notes:**
+- Self-service: `GET /resignations/mine`, `POST /resignations`, `PATCH
+  /resignations/:id/cancel` (withdrawal, PENDING-only). HR-facing (new
+  `resignation:decide` permission, admin/hr only — not extended to manager,
+  a more sensitive decision than leave/expense approval): `GET
+  /resignations/company`, `PATCH /resignations/:id/decide`.
+- **`noticePeriodDays` is derived from `submittedAt`→`lastWorkingDay`, not
+  accepted as a separate client field** — the mock's own two sample rows
+  have `lastWorkingDay` exactly `noticePeriodDays` after `submittedOn` in
+  both cases, so trusting an independently-suppliable number that could
+  disagree with the dates would be a self-inflicted data-integrity gap.
+- **Added `WITHDRAWN` to `ResignationStatus`** (schema was PENDING/
+  APPROVED/DECLINED only) — self-service withdrawal updates status rather
+  than deleting the row, consistent with how every other domain in this
+  schema never destroys decision history (Leave/Expenses use CANCELLED on
+  the same principle). Free to add since nothing has touched a live DB yet.
+- **Approving a resignation deliberately does not deactivate the
+  `Employee` record** — that stays a separate action via Users/Employees'
+  existing status toggle. No scheduled-job infrastructure exists to defer
+  deactivation to the actual `lastWorkingDay`, and doing it immediately on
+  approval would be premature when that day may be weeks out.
+- 10 new unit tests + 4 new e2e tests, including the derived-notice-period
+  check, the duplicate-pending rejection, and withdraw-then-resubmit. Still
+  nothing against real MySQL.
 
 ## Not started
 

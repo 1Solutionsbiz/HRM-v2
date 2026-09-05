@@ -19,6 +19,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { ExpensesModule } from './expenses/expenses.module.js';
 import { PerformanceModule } from './performance/performance.module.js';
 import { AnnouncementsModule } from './announcements/announcements.module.js';
+import { ResignationModule } from './resignation/resignation.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -41,6 +42,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     ExpensesModule,
     PerformanceModule,
     AnnouncementsModule,
+    ResignationModule,
   ],
   controllers: [AppController],
   providers: [
