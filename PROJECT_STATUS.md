@@ -175,6 +175,18 @@ alongside each module that adds lookup data, not all at once.
 - `EmployeesService.create()` is not wrapped in a DB transaction across
   provisioning the `User` and creating the `Employee` (same tradeoff module
   02 already accepted for `User`+`UserRole`).
+- `create`/`update` validate `managerId`/`departmentId`/`designationId`
+  reference real rows and reject a *direct* self-manager (`managerId ===
+  id`) before writing — otherwise an invalid id surfaced as a raw Prisma FK
+  error (500) instead of 400. Judgment call, documented rather than silent:
+  a longer manager cycle (A → B → A) is not detected. Nothing depends on
+  walking the reporting chain yet (`/team/*` is still a frontend stub);
+  revisit if a manager-hierarchy feature is ever built on `managerId`.
+- `findAll()` uses a narrow `select` (what the directory screen needs), not
+  `include` — the first pass returned every field to any `employee:manage`
+  holder, effectively a bulk PII export (`personalEmail`, `dateOfBirth`,
+  `currentAddress` for the whole company in one call). Full detail stays
+  behind `findOne()` for a specific record.
 - Tests: 20 new unit tests (`EmployeesService`, `EncryptionService`,
   `SequenceService`, all against mocked/fake Prisma) + 3 new e2e tests —
   including one that PUTs a plaintext bank account number and GETs it back

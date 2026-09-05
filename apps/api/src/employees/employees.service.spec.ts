@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EmployeesService } from './employees.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 
@@ -11,6 +11,8 @@ function buildPrismaMock() {
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    department: { findUnique: vi.fn() },
+    designation: { findUnique: vi.fn() },
     onboardingStepTemplate: { findMany: vi.fn().mockResolvedValue([]) },
     employeeOnboardingStep: {
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -181,6 +183,57 @@ describe('EmployeesService', () => {
       prisma.employee.findUnique.mockResolvedValue(null);
       await expect(service.update('missing', {}, actor)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('rejects setting an employee as their own manager', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
+
+      await expect(
+        service.update('emp-1', { managerId: 'emp-1' }, actor),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a managerId that does not reference an existing employee', async () => {
+      prisma.employee.findUnique
+        .mockResolvedValueOnce({ id: 'emp-1' }) // existence check
+        .mockResolvedValueOnce(null); // manager lookup
+
+      await expect(
+        service.update('emp-1', { managerId: 'ghost' }, actor),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a departmentId that does not reference an existing department', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
+      prisma.department.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('emp-1', { departmentId: 'ghost' }, actor),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a designationId that does not reference an existing designation', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
+      prisma.designation.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('emp-1', { designationId: 'ghost' }, actor),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts a managerId that references a real, different employee', async () => {
+      prisma.employee.findUnique
+        .mockResolvedValueOnce({ id: 'emp-1', firstName: 'A', lastName: 'B' }) // existence check
+        .mockResolvedValueOnce({ id: 'emp-2' }) // manager lookup
+        .mockResolvedValueOnce({ id: 'emp-1', bankDetail: null }); // findOne() at the end
+
+      await service.update('emp-1', { managerId: 'emp-2' }, actor);
+
+      expect(prisma.employee.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ managerId: 'emp-2' }),
+        }),
       );
     });
   });

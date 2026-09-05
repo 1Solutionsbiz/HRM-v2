@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EncryptionService } from '../security/encryption.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
@@ -38,6 +42,8 @@ export class EmployeesService {
       { email: dto.email, roleKeys: dto.roleKeys },
       actor,
     );
+
+    await this.validateReferences(dto);
 
     const dateOfJoining = new Date(dto.dateOfJoining);
     const employeeCode = await this.generateEmployeeCode(dateOfJoining);
@@ -83,10 +89,24 @@ export class EmployeesService {
     // today), not a column. That derivation belongs to the Leave module
     // (06), not built yet; this deliberately does not fake a third status
     // value in the meantime. See docs/database-design.md.
+    // A narrow `select` rather than `include` here — the directory screen
+    // shows name/code/work email/phone/department/designation/status/doj/
+    // manager. Without it, every `employee:manage` holder could bulk-read
+    // personalEmail/dateOfBirth/currentAddress for the whole company via a
+    // single list call; those stay behind findOne() for a specific record.
     return this.prisma.employee.findMany({
-      include: {
-        department: true,
-        designation: true,
+      select: {
+        id: true,
+        employeeCode: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        status: true,
+        dateOfJoining: true,
+        avatarUrl: true,
+        user: { select: { email: true } },
+        department: { select: { id: true, name: true } },
+        designation: { select: { id: true, title: true } },
         manager: { select: { id: true, firstName: true, lastName: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -105,6 +125,8 @@ export class EmployeesService {
   async update(id: string, dto: UpdateEmployeeDto, actor: AuthContext) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Employee not found');
+
+    await this.validateReferences(dto, id);
 
     await this.prisma.employee.update({
       where: { id },
@@ -229,6 +251,57 @@ export class EmployeesService {
         stepTemplateId: template.id,
       })),
     });
+  }
+
+  /**
+   * Checks direct self-reference and that each referenced row actually
+   * exists — without this, an invalid id surfaces as a raw Prisma FK
+   * violation (a 500 via AllExceptionsFilter) instead of a 400. Judgment
+   * call, documented: this only catches a *direct* self-manager cycle
+   * (A → A), not a longer one (A → B → A). Full cycle detection would mean
+   * walking the whole reporting chain on every write, and nothing depends
+   * on that chain yet (`/team/*` is still a frontend stub) — revisit if a
+   * manager-hierarchy feature is ever built on top of `managerId`.
+   */
+  private async validateReferences(
+    refs: { departmentId?: string; designationId?: string; managerId?: string },
+    selfId?: string,
+  ): Promise<void> {
+    if (refs.managerId) {
+      if (refs.managerId === selfId) {
+        throw new BadRequestException(
+          'An employee cannot be their own manager',
+        );
+      }
+      const manager = await this.prisma.employee.findUnique({
+        where: { id: refs.managerId },
+        select: { id: true },
+      });
+      if (!manager)
+        throw new BadRequestException(
+          'managerId does not reference an existing employee',
+        );
+    }
+    if (refs.departmentId) {
+      const department = await this.prisma.department.findUnique({
+        where: { id: refs.departmentId },
+        select: { id: true },
+      });
+      if (!department)
+        throw new BadRequestException(
+          'departmentId does not reference an existing department',
+        );
+    }
+    if (refs.designationId) {
+      const designation = await this.prisma.designation.findUnique({
+        where: { id: refs.designationId },
+        select: { id: true },
+      });
+      if (!designation)
+        throw new BadRequestException(
+          'designationId does not reference an existing designation',
+        );
+    }
   }
 
   private async assertExists(id: string): Promise<void> {

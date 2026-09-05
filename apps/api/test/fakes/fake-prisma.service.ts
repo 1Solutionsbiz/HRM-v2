@@ -89,6 +89,14 @@ export class FakePrismaService {
   bankDetails = new Map<string, FakeBankDetail>();
   emergencyContacts = new Map<string, FakeEmergencyContact>();
   sequenceCounters = new Map<string, number>();
+  departments = new Map<
+    string,
+    { id: string; name: string; code: string | null }
+  >();
+  designations = new Map<
+    string,
+    { id: string; title: string; departmentId: string }
+  >();
 
   private rolesForUser(userId: string): FakeRole[] {
     return this.userRoleRows
@@ -292,6 +300,34 @@ export class FakePrismaService {
     },
   };
 
+  department = {
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.departments.get(where.id) ?? null,
+    findMany: async () => [...this.departments.values()],
+    create: async ({ data }: { data: { name: string; code?: string } }) => {
+      const id = `department-${this.departments.size + 1}`;
+      const department = { id, name: data.name, code: data.code ?? null };
+      this.departments.set(id, department);
+      return department;
+    },
+  };
+
+  designation = {
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.designations.get(where.id) ?? null,
+    findMany: async () => [...this.designations.values()],
+    create: async ({
+      data,
+    }: {
+      data: { title: string; departmentId: string };
+    }) => {
+      const id = `designation-${this.designations.size + 1}`;
+      const designation = { id, ...data };
+      this.designations.set(id, designation);
+      return designation;
+    },
+  };
+
   sequenceCounter = {
     update: async ({
       where,
@@ -334,8 +370,15 @@ export class FakePrismaService {
   private employeeWithRelations(employee: FakeEmployee) {
     return {
       ...employee,
-      department: null,
-      designation: null,
+      department: employee.departmentId
+        ? (this.departments.get(employee.departmentId) ?? null)
+        : null,
+      designation: employee.designationId
+        ? (this.designations.get(employee.designationId) ?? null)
+        : null,
+      user: employee.userId
+        ? { email: this.users.get(employee.userId)?.email }
+        : undefined,
       manager: employee.managerId
         ? (() => {
             const manager = this.employees.get(employee.managerId!);
@@ -396,13 +439,16 @@ export class FakePrismaService {
     upsert: async ({
       where,
       create,
+      update,
     }: {
       where: { employeeId: string };
       create: FakeBankDetail;
       update: Omit<FakeBankDetail, 'employeeId'>;
     }) => {
-      this.bankDetails.set(where.employeeId, create);
-      return create;
+      const existing = this.bankDetails.get(where.employeeId);
+      const record = existing ? { ...existing, ...update } : create;
+      this.bankDetails.set(where.employeeId, record);
+      return record;
     },
   };
 
@@ -410,13 +456,16 @@ export class FakePrismaService {
     upsert: async ({
       where,
       create,
+      update,
     }: {
       where: { employeeId: string };
       create: FakeEmergencyContact;
       update: Omit<FakeEmergencyContact, 'employeeId'>;
     }) => {
-      this.emergencyContacts.set(where.employeeId, create);
-      return create;
+      const existing = this.emergencyContacts.get(where.employeeId);
+      const record = existing ? { ...existing, ...update } : create;
+      this.emergencyContacts.set(where.employeeId, record);
+      return record;
     },
   };
 

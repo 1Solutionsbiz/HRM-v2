@@ -135,6 +135,30 @@ describe('Employees (e2e)', () => {
     // The stored representation must never be the plaintext value.
     const stored = prisma.bankDetails.get(employeeId);
     expect(stored?.accountNumberEncrypted).not.toContain('000123456789');
+
+    // A second PUT must correct the record, not create a duplicate row —
+    // exercises the upsert's update path, not just its create path.
+    await request(app.getHttpServer())
+      .put(`/employees/${employeeId}/bank-detail`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        bankName: 'Corrected Bank',
+        accountNumber: '999888777666',
+        ifscCode: 'TEST0009999',
+      })
+      .expect(200);
+
+    const corrected = await request(app.getHttpServer())
+      .get(`/employees/${employeeId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(corrected.body.bankDetail).toEqual({
+      bankName: 'Corrected Bank',
+      accountNumber: '999888777666',
+      ifscCode: 'TEST0009999',
+      panNumber: null,
+    });
   });
 
   it('rejects an employee-scoped route for a user with no employee:manage permission', async () => {
