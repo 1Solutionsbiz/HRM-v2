@@ -1450,4 +1450,78 @@ export class FakePrismaService {
       isActive: input.isActive ?? true,
     });
   }
+
+  // --- Announcements -----------------------------------------------------
+
+  announcementRows = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      body: string;
+      category: string;
+      publishedByUserId: string;
+      publishedAt: Date;
+    }
+  >();
+  announcementReads = new Map<
+    string,
+    { id: string; announcementId: string; userId: string; readAt: Date }
+  >();
+
+  private announcementReadKey(announcementId: string, userId: string): string {
+    return `${announcementId}:${userId}`;
+  }
+
+  announcement = {
+    findMany: async () =>
+      [...this.announcementRows.values()].sort((a, b) =>
+        a.publishedAt < b.publishedAt ? 1 : -1,
+      ),
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.announcementRows.get(where.id) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: {
+        title: string;
+        body: string;
+        category: string;
+        publishedByUserId: string;
+      };
+    }) => {
+      const id = `announcement-${this.announcementRows.size + 1}`;
+      const announcement = { id, publishedAt: new Date(), ...data };
+      this.announcementRows.set(id, announcement);
+      return announcement;
+    },
+  };
+
+  announcementRead = {
+    findMany: async ({ where }: { where: { userId: string } }) =>
+      [...this.announcementReads.values()].filter(
+        (read) => read.userId === where.userId,
+      ),
+    upsert: async ({
+      where,
+      create,
+    }: {
+      where: {
+        announcementId_userId: { announcementId: string; userId: string };
+      };
+      create: { announcementId: string; userId: string };
+      update: Record<string, never>;
+    }) => {
+      const key = this.announcementReadKey(
+        where.announcementId_userId.announcementId,
+        where.announcementId_userId.userId,
+      );
+      const existing = this.announcementReads.get(key);
+      if (existing) return existing;
+      const id = `announcement-read-${this.announcementReads.size + 1}`;
+      const read = { id, readAt: new Date(), ...create };
+      this.announcementReads.set(key, read);
+      return read;
+    },
+  };
 }

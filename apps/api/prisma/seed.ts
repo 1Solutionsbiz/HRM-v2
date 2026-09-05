@@ -28,6 +28,7 @@ const PERMISSIONS = [
   { key: 'leave:approve', description: 'Approve or reject any employee leave request' },
   { key: 'expense:approve', description: 'Approve or reject any employee expense claim' },
   { key: 'performance:manage', description: 'Assign goals, conduct reviews, and award recognitions for any employee' },
+  { key: 'announcement:publish', description: 'Publish company-wide announcements' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
@@ -38,8 +39,16 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'leave:approve',
     'expense:approve',
     'performance:manage',
+    'announcement:publish',
   ],
-  hr: ['employee:manage', 'attendance:manage', 'leave:approve', 'expense:approve', 'performance:manage'],
+  hr: [
+    'employee:manage',
+    'attendance:manage',
+    'leave:approve',
+    'expense:approve',
+    'performance:manage',
+    'announcement:publish',
+  ],
   // Manager approval isn't scoped to "my direct reports" yet (no reporting-
   // chain enforcement exists) — granted anyway since some approver has to
   // exist beyond hr/admin; documented gap in PROJECT_STATUS.md.

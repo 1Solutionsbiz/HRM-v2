@@ -57,7 +57,7 @@ been run against real MySQL.
 | 08 | Documents | ✓ done (submit/verify checklist, no real file storage yet; see notes below) |
 | 09 | Expenses | ✓ done (submit/approve, monthly-cap enforcement, wired into Requests; see notes below) |
 | 10 | Performance | ✓ done (goals, reviews, recognitions; see notes below) |
-| 11 | Announcements | ○ not started |
+| 11 | Announcements | ✓ done (publish + per-viewer read state; see notes below) |
 | 12 | Assets | ○ not started |
 | 13 | Complaints | ○ not started |
 | 14 | Resignation | ○ not started |
@@ -434,6 +434,23 @@ module so far, alongside 15 (Payroll) still to come:**
 - 11 new unit tests + 3 new e2e tests, including the 403 on updating
   someone else's goal and the full HR-assigns-goal → employee-updates-it →
   reflected-on-GET round trip. Still nothing against real MySQL.
+
+**Module 11 (Announcements) notes:**
+- `GET /announcements` (self-service, annotates each row with `read: boolean`
+  for the caller), `PATCH /announcements/:id/read` (self-service, idempotent
+  upsert), `POST /announcements` (new `announcement:publish` permission,
+  granted to admin/hr).
+- **Per-viewer read state via `AnnouncementRead`, as the design doc always
+  intended** — this is the first module to actually build it. Fixes
+  legacy's single global read flag (`docs/database-design.md`: "read" is a
+  fact about a reader, not the announcement). e2e-tested explicitly: one
+  viewer marking an announcement read leaves every other viewer's read
+  state untouched.
+- No edit/delete — the mock has no editing flow, and announcements are
+  treated as immutable once published (a correction would be a new
+  announcement) rather than adding unrequested write paths.
+- 5 new unit tests + 2 new e2e tests, including the per-viewer isolation
+  case. Still nothing against real MySQL.
 
 ## Not started
 
