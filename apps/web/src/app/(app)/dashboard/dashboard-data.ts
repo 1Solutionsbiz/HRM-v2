@@ -1,8 +1,24 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeIndianRupee,
+  CalendarDays,
+  ClipboardList,
+  Megaphone,
+  ShieldCheck,
+  TrendingDown,
+  UserCheck,
+  Users,
+  UserX,
+} from "lucide-react";
 import type { Role } from "@/types/role";
+import type { Tone as StatTone } from "@/lib/tone";
 
 export interface DashboardStat {
   label: string;
   value: string;
+  icon: LucideIcon;
+  tone: StatTone;
   trend?: { value: string; direction: "up" | "down"; positive?: boolean };
   description?: string;
 }
@@ -10,38 +26,40 @@ export interface DashboardStat {
 /**
  * Sample/illustrative numbers only - there is no backend yet. This exists to
  * prove out the dashboard layout and components across all four roles, not
- * to model real attendance/payroll/approval logic.
+ * to model real attendance/payroll/approval logic. Icons/tones are assigned
+ * per metric (not just cycled) so the ones needing attention read distinctly
+ * from routine counts.
  */
 export function getDashboardStats(role: Role): DashboardStat[] {
   switch (role) {
     case "manager":
       return [
-        { label: "Team present today", value: "9 / 11", description: "2 on approved leave" },
-        { label: "Pending approvals", value: "3", trend: { value: "2 new today", direction: "up", positive: false } },
-        { label: "Team size", value: "11" },
-        { label: "Open tickets", value: "2" },
+        { label: "Team present today", value: "9 / 11", icon: UserCheck, tone: "success", description: "2 on approved leave" },
+        { label: "Pending approvals", value: "3", icon: ClipboardList, tone: "warning", trend: { value: "2 new today", direction: "up", positive: false } },
+        { label: "Team size", value: "11", icon: Users, tone: "teal" },
+        { label: "Open tickets", value: "2", icon: AlertTriangle, tone: "orange" },
       ];
     case "hr":
       return [
-        { label: "Total employees", value: "142", trend: { value: "+4 this month", direction: "up" } },
-        { label: "Pending approvals", value: "12" },
-        { label: "Open onboarding", value: "3" },
-        { label: "Attrition (30d)", value: "1.4%", trend: { value: "-0.3%", direction: "down", positive: true } },
+        { label: "Total employees", value: "142", icon: Users, tone: "teal", trend: { value: "+4 this month", direction: "up" } },
+        { label: "Pending approvals", value: "12", icon: ClipboardList, tone: "warning" },
+        { label: "Open onboarding", value: "3", icon: UserCheck, tone: "violet" },
+        { label: "Attrition (30d)", value: "1.4%", icon: TrendingDown, tone: "success", trend: { value: "-0.3%", direction: "down", positive: true } },
       ];
     case "admin":
       return [
-        { label: "Total employees", value: "142" },
-        { label: "Active roles", value: "4" },
-        { label: "Pending approvals", value: "12" },
-        { label: "System alerts", value: "0", description: "All systems normal" },
+        { label: "Total employees", value: "142", icon: Users, tone: "teal" },
+        { label: "Active roles", value: "4", icon: ShieldCheck, tone: "violet" },
+        { label: "Pending approvals", value: "12", icon: ClipboardList, tone: "warning" },
+        { label: "System alerts", value: "0", icon: UserX, tone: "success", description: "All systems normal" },
       ];
     case "employee":
     default:
       return [
-        { label: "Attendance this month", value: "96%", trend: { value: "+2% vs last month", direction: "up" } },
-        { label: "Leave balance", value: "8 days" },
-        { label: "Pending expenses", value: "₹2,400", description: "1 awaiting approval" },
-        { label: "Unread announcements", value: "2" },
+        { label: "Attendance this month", value: "96%", icon: UserCheck, tone: "success", trend: { value: "+2% vs last month", direction: "up" } },
+        { label: "Leave balance", value: "8 days", icon: CalendarDays, tone: "teal" },
+        { label: "Pending expenses", value: "₹2,400", icon: BadgeIndianRupee, tone: "warning", description: "1 awaiting approval" },
+        { label: "Unread announcements", value: "2", icon: Megaphone, tone: "orange" },
       ];
   }
 }

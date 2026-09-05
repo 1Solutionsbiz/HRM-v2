@@ -66,10 +66,10 @@ export default function MyDayPage() {
       <AttendanceCard variant="compact" />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <QuickAction href="/leave/apply" icon={CalendarDays} label="Apply leave" />
-        <QuickAction href="/expenses/add" icon={Receipt} label="Add expense" />
-        <QuickAction href="/payslips" icon={Wallet} label="View payslip" />
-        <QuickAction href="/documents" icon={FolderOpen} label="Documents" />
+        <QuickAction href="/leave/apply" icon={CalendarDays} label="Apply leave" tone="teal" />
+        <QuickAction href="/expenses/add" icon={Receipt} label="Add expense" tone="warning" />
+        <QuickAction href="/payslips" icon={Wallet} label="View payslip" tone="success" />
+        <QuickAction href="/documents" icon={FolderOpen} label="Documents" tone="violet" />
       </div>
 
       <AsyncSection
@@ -86,6 +86,7 @@ export default function MyDayPage() {
                 label="Leave balance"
                 value={`${data.leaveBalances.reduce((sum, b) => sum + (b.total - b.used), 0)} days`}
                 icon={CalendarDays}
+                tone="teal"
                 description="Across all leave types"
               />
             </Link>
@@ -94,6 +95,7 @@ export default function MyDayPage() {
                 label="Pending requests"
                 value={String(data.pendingRequestsCount)}
                 icon={Circle}
+                tone="warning"
                 description={data.pendingRequestsCount > 0 ? "Awaiting approval" : "All clear"}
               />
             </Link>
@@ -102,6 +104,7 @@ export default function MyDayPage() {
                 label="Notifications"
                 value={String(data.unreadNotificationsCount)}
                 icon={Bell}
+                tone="violet"
                 description="Unread"
               />
             </Link>
@@ -110,6 +113,7 @@ export default function MyDayPage() {
                 label="Announcements"
                 value={String(data.unreadAnnouncementsCount)}
                 icon={Megaphone}
+                tone="orange"
                 description="New for you"
               />
             </Link>
@@ -181,7 +185,7 @@ export default function MyDayPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base">Upcoming meetings</CardTitle>
-                <Video className="text-muted-foreground size-4" />
+                <Video className="text-(--chart-3) size-4" />
               </CardHeader>
               <CardContent>
                 {data.meetings.length === 0 ? (
@@ -268,7 +272,7 @@ export default function MyDayPage() {
                   </div>
                 ))}
                 <div className="flex items-center gap-2 pt-1">
-                  <TrendingUp className="text-muted-foreground size-3.5" />
+                  <TrendingUp className="text-(--chart-5) size-3.5" />
                   <p className="text-muted-foreground text-xs">
                     Last review: {data.performance.lastReview.rating}/{data.performance.lastReview.outOf} ({data.performance.lastReview.cycle})
                   </p>

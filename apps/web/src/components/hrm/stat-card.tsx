@@ -2,11 +2,15 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { toneClasses, type Tone as StatTone } from "@/lib/tone";
+
+export type { StatTone };
 
 interface StatCardProps {
   label: string;
   value: string;
   icon?: LucideIcon;
+  tone?: StatTone;
   trend?: {
     value: string;
     direction: "up" | "down";
@@ -21,6 +25,7 @@ export function StatCard({
   label,
   value,
   icon: Icon,
+  tone = "primary",
   trend,
   description,
   className,
@@ -38,7 +43,12 @@ export function StatCard({
           {label}
         </CardTitle>
         {Icon && (
-          <div className="bg-accent text-accent-foreground flex size-8 items-center justify-center rounded-md">
+          <div
+            className={cn(
+              "flex size-8 items-center justify-center rounded-md",
+              toneClasses[tone],
+            )}
+          >
             <Icon className="size-4" />
           </div>
         )}

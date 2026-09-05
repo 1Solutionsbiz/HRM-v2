@@ -61,6 +61,8 @@ export default function DashboardPage() {
             key={stat.label}
             label={stat.label}
             value={stat.value}
+            icon={stat.icon}
+            tone={stat.tone}
             trend={stat.trend}
             description={stat.description}
           />
