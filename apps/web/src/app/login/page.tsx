@@ -1,0 +1,125 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { Building2 } from "lucide-react";
+import { toast } from "sonner";
+import { useRole } from "@/lib/role-context";
+import { ROLES, ROLE_LABELS, type Role } from "@/types/role";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { setRole } = useRole();
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [role, setLocalRole] = React.useState<Role>("employee");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    // UI preview only - no backend exists yet. Signing in just previews the
+    // selected role's experience.
+    setTimeout(() => {
+      setRole(role);
+      toast.success(`Signed in as ${ROLE_LABELS[role]} (preview)`);
+      router.push("/dashboard");
+    }, 400);
+  }
+
+  return (
+    <div className="bg-muted/40 flex min-h-svh items-center justify-center p-4">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-lg">
+            <Building2 className="size-5" />
+          </div>
+          <h1 className="text-lg font-semibold">HRM V2</h1>
+          <p className="text-muted-foreground text-sm">1Solutions</p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in</CardTitle>
+            <CardDescription>
+              This is a UI preview build - no account is checked yet. Pick a
+              role to preview that experience.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="space-y-2">
+                <Label htmlFor="email">Work email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@1solutions.biz"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Preview as</Label>
+                <Select
+                  value={role}
+                  onValueChange={(v) => setLocalRole(v as Role)}
+                >
+                  <SelectTrigger id="role" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? "Signing in…" : "Sign in"}
+              </Button>
+              <button
+                type="button"
+                onClick={() =>
+                  toast.info("Password reset isn't wired up yet.")
+                }
+                className="text-muted-foreground hover:text-foreground block w-full text-center text-xs underline-offset-4 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
