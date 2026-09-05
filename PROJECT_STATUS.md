@@ -53,9 +53,9 @@ been run against real MySQL.
 | 04 | Notifications | ✓ done (self-service list/read; see notes below) |
 | 05 | Attendance | ✓ done (event-sourced check-in/out, policy-driven late/half-day, history synthesis; see notes below) |
 | 06 | Leave | ✓ done (apply/approve, balance ledger, Attendance integration; see notes below) |
-| 07 | Requests | ✓ done (read-only aggregator over Leave; extend for Expenses at 09; see notes below) |
+| 07 | Requests | ✓ done (read-only aggregator over Leave + Expenses; see notes below) |
 | 08 | Documents | ✓ done (submit/verify checklist, no real file storage yet; see notes below) |
-| 09 | Expenses | ○ not started |
+| 09 | Expenses | ✓ done (submit/approve, monthly-cap enforcement, wired into Requests; see notes below) |
 | 10 | Performance | ○ not started |
 | 11 | Announcements | ○ not started |
 | 12 | Assets | ○ not started |
@@ -334,11 +334,12 @@ module so far, alongside 15 (Payroll) still to come:**
   (no `Request` table exists; matches the mock's `getMyRequests()`, which
   merges `leaveRequestStore` + `expenseStore` client-side). Self-service,
   no permission required beyond being authenticated.
-- Only Leave is wired in today (Expenses doesn't exist until module 09).
-  `RequestsService` injects `LeaveService` and maps its rows to the unified
-  `{ id, kind, title, detail, status, submittedOn }` shape; when Expenses
-  lands, add it the same way (inject `ExpensesModule`, map, merge, re-sort)
-  rather than redesigning this module.
+- Both Leave and Expenses (module 09) are now wired in — `RequestsService`
+  injects both, maps each source's rows to the unified `{ id, kind, title,
+  detail, status, submittedOn }` shape, merges, and re-sorts newest first.
+  Complaints/Resignation could plausibly join too if they turn out to need
+  a "my requests" presence; nothing beyond the two the mock combines is
+  assumed.
 - Also fixed while extending the fake test double for this: `FakeEmployee`
   test fixtures across three e2e spec files (attendance, leave, requests)
   had been silently missing a required `dateOfBirth` field — invisible
@@ -375,6 +376,36 @@ module so far, alongside 15 (Payroll) still to come:**
   `npx tsc --noEmit -p tsconfig.json` re-run clean (aside from the
   pre-existing unrelated `supertest/types` error). Still nothing against
   real MySQL.
+
+**Module 09 (Expenses) notes:**
+- Self-service: `GET /expenses/categories`, `GET /expenses/claims`, `POST
+  /expenses/claims`, `PATCH /expenses/claims/:id/cancel` (PENDING-only, own
+  claims only — same shape as Leave's cancel). HR-facing: `GET
+  /expenses/claims/company`, `PATCH /expenses/claims/:id/decide` — behind a
+  new `expense:approve` permission (granted to admin/hr/manager, same
+  manager-approval-not-scoped-to-reports caveat as `leave:approve`).
+- **`ExpenseCategory.monthlyCapAmount` is now actually enforced**, not just
+  modeled — the schema comment on that field cites the exact motivating
+  case ("₹5,000/mo internet cap" as a legacy hardcoded policy-doc rule),
+  and the seed sets that cap on "Internet & Phone" specifically, leaving
+  every other category uncapped. The check is computed live from that
+  employee's PENDING+APPROVED claims in the category for the calendar month
+  of the new claim's `expenseDate` — same reasoning as Leave's balance
+  check: catches double-booking across several pending claims without a
+  reserve/release step, and categories with no cap skip the query
+  entirely.
+- No file storage integration here either (same `receiptUrl`-as-string
+  limitation as Documents' `fileUrl`).
+- Same `Decimal`-serializes-as-a-string fix applied proactively this time
+  (`ExpenseClaim.amount`) — module 06 found this the hard way for
+  `LeaveRequest.totalDays`; `serializeClaim()` converts to a number at
+  every response boundary from the start.
+- Wired into `RequestsModule` (07): `RequestsService` now merges both
+  Leave and Expense sources into the unified view, closing the gap that
+  module left open on purpose.
+- 12 new unit tests + 4 new e2e tests, including the monthly-cap rejection
+  and the full submit → HR-approve → shows-up-in-`/requests/mine` path
+  across two modules. Still nothing against real MySQL.
 
 ## Not started
 

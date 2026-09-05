@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LeaveService } from '../leave/leave.service.js';
+import { ExpensesService } from '../expenses/expenses.service.js';
 import { formatDateOnly } from '../common/date-only.js';
 
 export type RequestKind = 'Leave' | 'Expense';
@@ -16,20 +17,24 @@ export interface UnifiedRequest {
 /**
  * A read-only aggregator, not a domain of its own — there is no `Request`
  * table (matches `apps/web/src/lib/mock/mock-api.ts`'s `getMyRequests()`,
- * which merges `leaveRequestStore` + `expenseStore` client-side). Only
- * Leave exists as a source so far; when Expenses (module 09) is built, add
- * it here the same way — inject `ExpensesModule`, map its rows, merge and
- * re-sort. Complaints/Resignation could plausibly join this list too, but
- * the mock only ever combines Leave+Expense, so nothing else is assumed.
+ * which merges `leaveRequestStore` + `expenseStore` client-side).
+ * Complaints/Resignation could plausibly join this list too, but the mock
+ * only ever combines Leave+Expense, so nothing else is assumed.
  */
 @Injectable()
 export class RequestsService {
-  constructor(private readonly leaveService: LeaveService) {}
+  constructor(
+    private readonly leaveService: LeaveService,
+    private readonly expensesService: ExpensesService,
+  ) {}
 
   async getMyRequests(userId: string): Promise<UnifiedRequest[]> {
-    const leaveRequests = await this.leaveService.getMyRequests(userId);
+    const [leaveRequests, expenseClaims] = await Promise.all([
+      this.leaveService.getMyRequests(userId),
+      this.expensesService.getMyClaims(userId),
+    ]);
 
-    const unified: UnifiedRequest[] = leaveRequests.map((request) => ({
+    const fromLeave: UnifiedRequest[] = leaveRequests.map((request) => ({
       id: request.id,
       kind: 'Leave',
       title: `${request.leaveType.name} · ${request.dayType === 'HALF_DAY' ? 'Half Day' : 'Full Day'}`,
@@ -41,6 +46,17 @@ export class RequestsService {
       submittedOn: request.submittedAt.toISOString(),
     }));
 
-    return unified.sort((a, b) => (a.submittedOn < b.submittedOn ? 1 : -1));
+    const fromExpenses: UnifiedRequest[] = expenseClaims.map((claim) => ({
+      id: claim.id,
+      kind: 'Expense',
+      title: claim.category.name,
+      detail: `${claim.amount.toLocaleString('en-IN')} · ${claim.description}`,
+      status: claim.status,
+      submittedOn: claim.submittedAt.toISOString(),
+    }));
+
+    return [...fromLeave, ...fromExpenses].sort((a, b) =>
+      a.submittedOn < b.submittedOn ? 1 : -1,
+    );
   }
 }

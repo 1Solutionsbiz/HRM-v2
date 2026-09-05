@@ -26,20 +26,21 @@ const PERMISSIONS = [
   { key: 'employee:manage', description: 'Create and update employee HR profiles' },
   { key: 'attendance:manage', description: 'Record manual attendance corrections for any employee' },
   { key: 'leave:approve', description: 'Approve or reject any employee leave request' },
+  { key: 'expense:approve', description: 'Approve or reject any employee expense claim' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
-  admin: ['user:manage', 'employee:manage', 'attendance:manage', 'leave:approve'],
-  hr: ['employee:manage', 'attendance:manage', 'leave:approve'],
+  admin: ['user:manage', 'employee:manage', 'attendance:manage', 'leave:approve', 'expense:approve'],
+  hr: ['employee:manage', 'attendance:manage', 'leave:approve', 'expense:approve'],
   // Manager approval isn't scoped to "my direct reports" yet (no reporting-
   // chain enforcement exists) — granted anyway since some approver has to
   // exist beyond hr/admin; documented gap in PROJECT_STATUS.md.
-  manager: ['leave:approve'],
+  manager: ['leave:approve', 'expense:approve'],
   employee: [],
 };
 
 /** Every SequenceCounter key a module relies on for atomic code generation — see SequenceService. */
-const SEQUENCE_COUNTERS = ['employeeCode', 'leaveRequestCode'] as const;
+const SEQUENCE_COUNTERS = ['employeeCode', 'leaveRequestCode', 'expenseClaimCode'] as const;
 
 /** Matches the mock's `leaveBalances` fixture (Casual/Sick/Earned, with those day counts). */
 const LEAVE_TYPES = [
@@ -56,6 +57,21 @@ const DOCUMENT_TYPES = [
   { key: 'marksheet-12', name: '12th marksheet', category: 'EDUCATION' },
   { key: 'bank-proof', name: 'Bank passbook / cancelled cheque', category: 'BANKING' },
   { key: 'relieving-letter', name: 'Relieving letter (previous employer)', category: 'EMPLOYMENT' },
+] as const;
+
+/**
+ * Matches the mock's `expenseCategories` fixture. `Internet & Phone` gets
+ * the ₹5,000/mo cap the schema comment on `ExpenseCategory.monthlyCapAmount`
+ * cites as its motivating case (a legacy hardcoded policy-doc rule, made an
+ * actual enforced, editable value) — the other categories are uncapped.
+ */
+const EXPENSE_CATEGORIES = [
+  { name: 'Travel', monthlyCapAmount: null },
+  { name: 'Food', monthlyCapAmount: null },
+  { name: 'Internet & Phone', monthlyCapAmount: 5000 },
+  { name: 'Office Supplies', monthlyCapAmount: null },
+  { name: 'Client Entertainment', monthlyCapAmount: null },
+  { name: 'Other', monthlyCapAmount: null },
 ] as const;
 
 function randomPassword(): string {
@@ -134,6 +150,14 @@ async function main(): Promise<void> {
       where: { key: documentType.key },
       create: documentType,
       update: { name: documentType.name, category: documentType.category },
+    });
+  }
+
+  for (const category of EXPENSE_CATEGORIES) {
+    await prisma.expenseCategory.upsert({
+      where: { name: category.name },
+      create: category,
+      update: { monthlyCapAmount: category.monthlyCapAmount },
     });
   }
 

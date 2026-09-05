@@ -98,6 +98,23 @@ interface FakeLeaveRequest {
   submittedAt: Date;
 }
 
+interface FakeExpenseClaim {
+  id: string;
+  code: string;
+  employeeId: string;
+  categoryId: string;
+  amount: { toNumber(): number };
+  currency: string;
+  expenseDate: Date;
+  description: string;
+  receiptUrl: string | null;
+  status: string;
+  approverUserId: string | null;
+  decidedAt: Date | null;
+  decisionNote: string | null;
+  submittedAt: Date;
+}
+
 export class FakePrismaService {
   users = new Map<string, FakeUser>();
   sessions = new Map<string, FakeSession>();
@@ -1114,5 +1131,136 @@ export class FakePrismaService {
     category: string;
   }): void {
     this.documentTypes.set(input.id, input);
+  }
+
+  // --- Expenses ------------------------------------------------------
+
+  expenseCategories = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      monthlyCapAmount: { toNumber(): number } | null;
+      isActive: boolean;
+    }
+  >();
+  expenseClaims = new Map<string, FakeExpenseClaim>();
+
+  private expenseClaimWithRelations(claim: FakeExpenseClaim) {
+    const category = this.expenseCategories.get(claim.categoryId);
+    const employee = this.employees.get(claim.employeeId);
+    return {
+      ...claim,
+      category: category ? { name: category.name } : undefined,
+      employee: employee
+        ? {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          }
+        : undefined,
+    };
+  }
+
+  expenseCategory = {
+    findMany: async ({ where }: { where?: { isActive?: boolean } } = {}) =>
+      [...this.expenseCategories.values()].filter(
+        (category) =>
+          where?.isActive === undefined || category.isActive === where.isActive,
+      ),
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.expenseCategories.get(where.id) ?? null,
+  };
+
+  expenseClaim = {
+    findMany: async ({
+      where,
+    }: {
+      where?: {
+        employeeId?: string;
+        categoryId?: string;
+        status?: { in: string[] };
+        expenseDate?: { gte: Date; lte: Date };
+      };
+    } = {}) =>
+      [...this.expenseClaims.values()]
+        .filter((claim) => {
+          if (where?.employeeId && claim.employeeId !== where.employeeId)
+            return false;
+          if (where?.categoryId && claim.categoryId !== where.categoryId)
+            return false;
+          if (where?.status?.in && !where.status.in.includes(claim.status))
+            return false;
+          if (
+            where?.expenseDate &&
+            !(
+              claim.expenseDate >= where.expenseDate.gte &&
+              claim.expenseDate <= where.expenseDate.lte
+            )
+          )
+            return false;
+          return true;
+        })
+        .map((claim) => this.expenseClaimWithRelations(claim)),
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.expenseClaims.get(where.id) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: {
+        code: string;
+        employeeId: string;
+        categoryId: string;
+        amount: number;
+        expenseDate: Date;
+        description: string;
+        receiptUrl?: string;
+      };
+    }) => {
+      const id = `expense-claim-${this.expenseClaims.size + 1}`;
+      const record: FakeExpenseClaim = {
+        id,
+        ...data,
+        amount: FakePrismaService.decimalShim(data.amount),
+        currency: 'INR',
+        receiptUrl: data.receiptUrl ?? null,
+        status: 'PENDING',
+        approverUserId: null,
+        decidedAt: null,
+        decisionNote: null,
+        submittedAt: new Date(),
+      };
+      this.expenseClaims.set(id, record);
+      return record;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }) => {
+      const claim = this.expenseClaims.get(where.id);
+      if (!claim) throw new Error(`no fake expense claim ${where.id}`);
+      Object.assign(claim, data);
+      return claim;
+    },
+  };
+
+  seedExpenseCategory(input: {
+    id: string;
+    name: string;
+    monthlyCapAmount?: number | null;
+    isActive?: boolean;
+  }): void {
+    this.expenseCategories.set(input.id, {
+      id: input.id,
+      name: input.name,
+      monthlyCapAmount:
+        input.monthlyCapAmount != null
+          ? FakePrismaService.decimalShim(input.monthlyCapAmount)
+          : null,
+      isActive: input.isActive ?? true,
+    });
   }
 }
