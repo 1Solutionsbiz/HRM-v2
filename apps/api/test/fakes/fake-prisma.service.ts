@@ -1263,4 +1263,191 @@ export class FakePrismaService {
       isActive: input.isActive ?? true,
     });
   }
+
+  // --- Performance -----------------------------------------------------
+
+  performanceCycles = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      startDate: Date;
+      endDate: Date;
+      isActive: boolean;
+    }
+  >();
+  goals = new Map<
+    string,
+    {
+      id: string;
+      employeeId: string;
+      cycleId: string;
+      title: string;
+      progressPercent: number;
+      dueDate: Date | null;
+    }
+  >();
+  performanceReviews = new Map<
+    string,
+    {
+      id: string;
+      employeeId: string;
+      cycleId: string;
+      rating: { toNumber(): number };
+      maxRating: number;
+      summary: string;
+      reviewedByUserId: string;
+      reviewedAt: Date;
+    }
+  >();
+  recognitions = new Map<
+    string,
+    {
+      id: string;
+      employeeId: string;
+      title: string;
+      source: string;
+      awardedAt: Date;
+    }
+  >();
+
+  performanceCycle = {
+    findMany: async () => [...this.performanceCycles.values()],
+    findFirst: async ({ where }: { where?: { isActive?: boolean } } = {}) => {
+      const matches = [...this.performanceCycles.values()].filter(
+        (cycle) =>
+          where?.isActive === undefined || cycle.isActive === where.isActive,
+      );
+      matches.sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+      return matches[0] ?? null;
+    },
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.performanceCycles.get(where.id) ?? null,
+  };
+
+  goal = {
+    findMany: async ({
+      where,
+    }: {
+      where: { employeeId: string; cycleId: string };
+    }) =>
+      [...this.goals.values()].filter(
+        (goal) =>
+          goal.employeeId === where.employeeId &&
+          goal.cycleId === where.cycleId,
+      ),
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.goals.get(where.id) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: {
+        employeeId: string;
+        cycleId: string;
+        title: string;
+        dueDate?: Date;
+      };
+    }) => {
+      const id = `goal-${this.goals.size + 1}`;
+      const goal = {
+        id,
+        progressPercent: 0,
+        dueDate: data.dueDate ?? null,
+        ...data,
+      };
+      this.goals.set(id, goal);
+      return goal;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }) => {
+      const goal = this.goals.get(where.id);
+      if (!goal) throw new Error(`no fake goal ${where.id}`);
+      Object.assign(goal, data);
+      return goal;
+    },
+  };
+
+  performanceReview = {
+    findFirst: async ({ where }: { where: { employeeId: string } }) => {
+      const matches = [...this.performanceReviews.values()].filter(
+        (review) => review.employeeId === where.employeeId,
+      );
+      matches.sort((a, b) => (a.reviewedAt < b.reviewedAt ? 1 : -1));
+      const review = matches[0];
+      if (!review) return null;
+      const reviewerEmployee = [...this.employees.values()].find(
+        (employee) => employee.userId === review.reviewedByUserId,
+      );
+      const cycle = this.performanceCycles.get(review.cycleId);
+      return {
+        ...review,
+        reviewedByUser: {
+          employee: reviewerEmployee
+            ? {
+                firstName: reviewerEmployee.firstName,
+                lastName: reviewerEmployee.lastName,
+              }
+            : null,
+        },
+        cycle: cycle ? { name: cycle.name } : undefined,
+      };
+    },
+    create: async ({
+      data,
+    }: {
+      data: {
+        employeeId: string;
+        cycleId: string;
+        rating: number;
+        maxRating: number;
+        summary: string;
+        reviewedByUserId: string;
+      };
+    }) => {
+      const id = `review-${this.performanceReviews.size + 1}`;
+      const review = {
+        id,
+        reviewedAt: new Date(),
+        ...data,
+        rating: FakePrismaService.decimalShim(data.rating),
+      };
+      this.performanceReviews.set(id, review);
+      return review;
+    },
+  };
+
+  recognition = {
+    findMany: async ({ where }: { where: { employeeId: string } }) =>
+      [...this.recognitions.values()].filter(
+        (recognition) => recognition.employeeId === where.employeeId,
+      ),
+    create: async ({
+      data,
+    }: {
+      data: { employeeId: string; title: string; source: string };
+    }) => {
+      const id = `recognition-${this.recognitions.size + 1}`;
+      const recognition = { id, awardedAt: new Date(), ...data };
+      this.recognitions.set(id, recognition);
+      return recognition;
+    },
+  };
+
+  seedPerformanceCycle(input: {
+    id: string;
+    name: string;
+    startDate: Date;
+    endDate: Date;
+    isActive?: boolean;
+  }): void {
+    this.performanceCycles.set(input.id, {
+      ...input,
+      isActive: input.isActive ?? true,
+    });
+  }
 }

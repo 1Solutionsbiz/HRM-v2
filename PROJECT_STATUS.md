@@ -56,7 +56,7 @@ been run against real MySQL.
 | 07 | Requests | ✓ done (read-only aggregator over Leave + Expenses; see notes below) |
 | 08 | Documents | ✓ done (submit/verify checklist, no real file storage yet; see notes below) |
 | 09 | Expenses | ✓ done (submit/approve, monthly-cap enforcement, wired into Requests; see notes below) |
-| 10 | Performance | ○ not started |
+| 10 | Performance | ✓ done (goals, reviews, recognitions; see notes below) |
 | 11 | Announcements | ○ not started |
 | 12 | Assets | ○ not started |
 | 13 | Complaints | ○ not started |
@@ -406,6 +406,34 @@ module so far, alongside 15 (Payroll) still to come:**
 - 12 new unit tests + 4 new e2e tests, including the monthly-cap rejection
   and the full submit → HR-approve → shows-up-in-`/requests/mine` path
   across two modules. Still nothing against real MySQL.
+
+**Module 10 (Performance) notes:**
+- Self-service: `GET /performance/cycles`, `GET /performance/me`, `PATCH
+  /performance/goals/:id/progress` (own goals only — a plain 403, not a
+  silent no-op, for someone else's goal). HR/manager-facing (new
+  `performance:manage` permission, granted to admin/hr/manager): `GET
+  /performance/employees/:employeeId`, `POST .../goals`, `POST
+  .../reviews`, `POST .../recognitions`.
+- The mock's `performance` fixture is entirely read-only (no goal-editing,
+  review-writing, or recognition-awarding call exists in `mock-api.ts`) —
+  unlike modules 06-09, there was no built self-service write flow to
+  match. Goal progress as a self-service action was added anyway because
+  it's clearly employee-owned data with no approval workflow, the same
+  reasoning that made Attendance's check-in/check-out self-service; goal
+  *assignment*, reviews, and recognitions stayed HR/manager actions since
+  nothing suggests otherwise.
+- `PerformanceCycle` creation deferred to Admin (17), consistent with
+  LeaveType/DocumentType — the seed provides the two cycles the mock
+  references ("H1 2026", "H2 2026 Review Cycle") so `/performance/me` has
+  something real to return without Admin existing yet. Their start dates
+  aren't given by the mock (only `cycle.endsOn`) — inferred as Jan 1 / Jul 1
+  half-year boundaries, documented as a guess, not confirmed.
+- `PerformanceReview.rating` is a `Decimal` — applied the same
+  serialize-to-number fix proactively (third time this pattern's needed,
+  after Leave and Expenses).
+- 11 new unit tests + 3 new e2e tests, including the 403 on updating
+  someone else's goal and the full HR-assigns-goal → employee-updates-it →
+  reflected-on-GET round trip. Still nothing against real MySQL.
 
 ## Not started
 

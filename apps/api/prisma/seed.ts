@@ -27,15 +27,23 @@ const PERMISSIONS = [
   { key: 'attendance:manage', description: 'Record manual attendance corrections for any employee' },
   { key: 'leave:approve', description: 'Approve or reject any employee leave request' },
   { key: 'expense:approve', description: 'Approve or reject any employee expense claim' },
+  { key: 'performance:manage', description: 'Assign goals, conduct reviews, and award recognitions for any employee' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
-  admin: ['user:manage', 'employee:manage', 'attendance:manage', 'leave:approve', 'expense:approve'],
-  hr: ['employee:manage', 'attendance:manage', 'leave:approve', 'expense:approve'],
+  admin: [
+    'user:manage',
+    'employee:manage',
+    'attendance:manage',
+    'leave:approve',
+    'expense:approve',
+    'performance:manage',
+  ],
+  hr: ['employee:manage', 'attendance:manage', 'leave:approve', 'expense:approve', 'performance:manage'],
   // Manager approval isn't scoped to "my direct reports" yet (no reporting-
   // chain enforcement exists) — granted anyway since some approver has to
   // exist beyond hr/admin; documented gap in PROJECT_STATUS.md.
-  manager: ['leave:approve', 'expense:approve'],
+  manager: ['leave:approve', 'expense:approve', 'performance:manage'],
   employee: [],
 };
 
@@ -72,6 +80,17 @@ const EXPENSE_CATEGORIES = [
   { name: 'Office Supplies', monthlyCapAmount: null },
   { name: 'Client Entertainment', monthlyCapAmount: null },
   { name: 'Other', monthlyCapAmount: null },
+] as const;
+
+/**
+ * Matches the mock's `performance` fixture cycles ("H2 2026 Review Cycle",
+ * ending 2026-12-15; "H1 2026", referenced by `lastReview.cycle`). The mock
+ * gives no start date for either — half-year boundaries (Jan 1 / Jul 1) are
+ * inferred, not confirmed.
+ */
+const PERFORMANCE_CYCLES = [
+  { name: 'H1 2026', startDate: '2026-01-01', endDate: '2026-06-30', isActive: false },
+  { name: 'H2 2026 Review Cycle', startDate: '2026-07-01', endDate: '2026-12-15', isActive: true },
 ] as const;
 
 function randomPassword(): string {
@@ -158,6 +177,14 @@ async function main(): Promise<void> {
       where: { name: category.name },
       create: category,
       update: { monthlyCapAmount: category.monthlyCapAmount },
+    });
+  }
+
+  for (const cycle of PERFORMANCE_CYCLES) {
+    await prisma.performanceCycle.upsert({
+      where: { name: cycle.name },
+      create: cycle,
+      update: { startDate: cycle.startDate, endDate: cycle.endDate, isActive: cycle.isActive },
     });
   }
 

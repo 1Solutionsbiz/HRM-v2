@@ -17,6 +17,7 @@ import { LeaveModule } from './leave/leave.module.js';
 import { RequestsModule } from './requests/requests.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { ExpensesModule } from './expenses/expenses.module.js';
+import { PerformanceModule } from './performance/performance.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -37,6 +38,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     RequestsModule,
     DocumentsModule,
     ExpensesModule,
+    PerformanceModule,
   ],
   controllers: [AppController],
   providers: [
