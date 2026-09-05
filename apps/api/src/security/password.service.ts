@@ -81,9 +81,7 @@ export class PasswordService {
     });
   }
 
-  private parse(
-    stored: string,
-  ): {
+  private parse(stored: string): {
     N: number;
     r: number;
     p: number;

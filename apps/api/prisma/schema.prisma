@@ -166,6 +166,10 @@ enum AuditEventType {
   SETTINGS_UPDATED
   EMPLOYEE_CREATED
   EMPLOYEE_UPDATED
+  /// Added alongside the Users module (02) — distinct from EMPLOYEE_CREATED,
+  /// which is about the HR profile, not the auth account.
+  USER_CREATED
+  USER_STATUS_CHANGED
   OTHER
 }
 

@@ -42,7 +42,7 @@ been run against real MySQL.
 | # | Module | Status |
 |---|--------|--------|
 | 01 | Auth | ✓ done (login/refresh/logout/me/change-password; see notes below) |
-| 02 | Users | ○ not started |
+| 02 | Users | ✓ done (admin-provisioned accounts + role assignment; see notes below) |
 | 03 | Employees | ○ not started |
 | 04 | Notifications | ○ not started |
 | 05 | Attendance | ○ not started |
@@ -91,9 +91,40 @@ since this sandbox has no Homebrew/build tools), `AuditModule` (global),
   unknown-email parity, `forbidNonWhitelisted`, revoked-session 401, rotated
   refresh-token reuse 401). None of this has run against real MySQL — no
   Docker/MySQL in this sandbox, same limitation as the schema-design phase.
-- Not built yet: there's no way to create a `User` row at all (module 02,
-  Users, owns admin-driven provisioning) — so nothing in module 01 has been
-  exercised against a real seeded account.
+**Module 02 (Users) notes:**
+- Endpoints (all require the `user:manage` permission): `POST /users`
+  (creates a `User` + role assignment, returns a generated temporary
+  password once — never persisted or logged in plaintext), `GET /users`,
+  `GET /users/:id`, `PATCH /users/:id/status` (activate/deactivate — a
+  deactivate immediately revokes that user's active sessions, same
+  defense-in-depth as logout/password-change in module 01), `PUT
+  /users/:id/roles` (replaces the full role set, including down to zero
+  roles). `GET /roles` (read-only; role/permission CRUD is deferred to the
+  Admin module, 17).
+- Not wrapped in a DB transaction (documented tradeoff): a crash between
+  creating the `User` row and its `UserRole` rows leaves a user with no
+  role, recoverable via `PUT /users/:id/roles`.
+- No "must change password on first login" enforcement — would need a new
+  `User.mustChangePassword` schema field plus guard-level enforcement,
+  which is more than this pass should half-build. Documented gap, not a
+  silent one.
+- Added a Prisma seed script (`apps/api/prisma/seed.ts`, run via `npm run
+  prisma:seed`) — the roles (`employee|manager|hr|admin`), the `user:manage`
+  permission (the only one any route enforces so far — new modules add
+  their own keys here as they add gated routes), and a bootstrap admin
+  account (email/password from `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` env
+  vars or generated and printed once). This is the answer to "how does
+  anyone log in on a fresh database" — nothing else creates a `User` row
+  from nothing.
+- Tests: 12 unit tests (`UsersService` with a mocked Prisma client) + 4 new
+  e2e tests, including the one module 01 couldn't write yet: a valid,
+  logged-in user with zero roles hitting a `user:manage`-gated route gets a
+  403, not a silent pass. Also covers unknown-role-key rejection and
+  deactivate-revokes-session. Still nothing run against real MySQL — the
+  seed script itself was run once against no database on purpose, far
+  enough to confirm it builds a real query and only fails at the network
+  connection step (`pool failed to retrieve a connection`), which is as
+  much verification as this sandbox allows.
 
 ## Not started
 

@@ -195,19 +195,19 @@ schema shouldn't repeat:
 
 ## Recommended next step
 
-1. Run `docker compose up -d` and `npx prisma migrate dev --config
-   prisma7.config.ts --name init` against the real local MySQL container to
-   apply the DDL for real (this session generated it offline but couldn't
-   execute it — no Docker access).
-2. Write a seed script for the reference/lookup data this schema assumes
-   exists before the app is usable: `Role` (employee/manager/hr/admin),
-   `Permission` rows + `RolePermission` mappings matching
-   `hr-fixtures.rolePermissions`, `Department`/`Designation` from
-   `employeeDirectory`, `LeaveType` from `leaveTypes`, `ExpenseCategory` from
-   `expenseCategories`, `DocumentType` from the `documents` fixture's
-   categories, a default `AttendancePolicy` row from `officeTiming`, a
-   `CompanySettings` row from `companyProfile`, and `SequenceCounter` rows
-   for each code type.
+1. Run `docker compose up -d` and `npm run prisma:migrate` (in `apps/api`)
+   against the real local MySQL container to apply the DDL for real (this
+   session generated it offline but couldn't execute it — no Docker
+   access).
+2. ~~Write a seed script~~ — done: `apps/api/prisma/seed.ts` (roles,
+   the `user:manage` permission, a bootstrap admin account). Still needs
+   extending as later modules add lookup data: `Department`/`Designation`
+   from `employeeDirectory`, `LeaveType` from `leaveTypes`,
+   `ExpenseCategory` from `expenseCategories`, `DocumentType` from the
+   `documents` fixture's categories, a default `AttendancePolicy` row from
+   `officeTiming`, a `CompanySettings` row from `companyProfile`, and
+   `SequenceCounter` rows for each code type — add these alongside the
+   module that owns each table, not all at once.
 3. Confirm the three open UNKNOWNs above with the business owner before they
    become load-bearing (multi-tenancy, attendance fine formula, payslip
    numbering format).
