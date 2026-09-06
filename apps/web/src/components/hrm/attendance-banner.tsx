@@ -39,10 +39,13 @@ export function AttendanceBanner({ firstName, description }: AttendanceBannerPro
         ) : !attendance ? null : (
           <div className="flex flex-col items-start gap-1 sm:items-end">
             {attendance.punchState === "NOT_CHECKED_IN" && (
-              <Button onClick={checkIn} disabled={pending} variant="secondary">
-                <LogIn />
-                {pending ? "Checking in…" : "Mark attendance"}
-              </Button>
+              <>
+                <Button onClick={checkIn} disabled={pending} variant="secondary">
+                  <LogIn />
+                  {pending ? "Checking in…" : "Mark attendance"}
+                </Button>
+                <p className="text-primary-foreground/80 text-xs">You haven&apos;t checked in yet</p>
+              </>
             )}
 
             {attendance.punchState === "CHECKED_IN" && (

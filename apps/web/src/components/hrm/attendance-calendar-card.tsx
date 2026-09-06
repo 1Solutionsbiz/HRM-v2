@@ -4,7 +4,7 @@ import * as React from "react";
 import { CalendarDays } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { toDateOnlyString } from "@/lib/format";
-import { getAttendanceHistory, type AttendanceDayStatus } from "@/lib/api/attendance";
+import { getAttendanceHistory, getAttendancePolicy, type AttendanceDayStatus } from "@/lib/api/attendance";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,8 +76,14 @@ export function AttendanceCalendarCard() {
   const from = toDateOnlyString(days[0]!);
   const to = toDateOnlyString(days[days.length - 1]!);
 
-  const { data, loading, error, refetch } = useAsync(() => getAttendanceHistory({ from, to }), [from, to]);
-  const byDate = new Map((data ?? []).map((d) => [d.date, d.status]));
+  const history = useAsync(() => getAttendanceHistory({ from, to }), [from, to]);
+  const policy = useAsync(getAttendancePolicy);
+  const byDate = new Map((history.data ?? []).map((d) => [d.date, d.status]));
+  // getAttendanceHistory only returns a WEEKEND row for past dates (today or
+  // later with no record is omitted entirely, not synthesized) - falling
+  // back to the policy's own workingWeekdays here keeps future Saturdays/
+  // Sundays tinted instead of rendering as unstyled blanks.
+  const workingWeekdays = new Set(policy.data?.workingWeekdays ?? [1, 2, 3, 4, 5]);
   const monthLabel = now.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   return (
@@ -88,9 +94,12 @@ export function AttendanceCalendarCard() {
       </CardHeader>
       <CardContent>
         <AsyncSection
-          loading={loading}
-          error={error}
-          onRetry={refetch}
+          loading={history.loading || policy.loading}
+          error={history.error || policy.error}
+          onRetry={() => {
+            history.refetch();
+            policy.refetch();
+          }}
           loadingFallback={<CardSkeleton lines={5} />}
         >
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
@@ -103,7 +112,12 @@ export function AttendanceCalendarCard() {
               const inMonth = d.getMonth() === month;
               const dateStr = toDateOnlyString(d);
               const status = byDate.get(dateStr);
-              const bucket = status ? toBucket(status) : null;
+              const isoWeekday = d.getDay() === 0 ? 7 : d.getDay();
+              const bucket = status
+                ? toBucket(status)
+                : !workingWeekdays.has(isoWeekday)
+                  ? "WEEKEND"
+                  : null;
               return (
                 <div
                   key={dateStr}
