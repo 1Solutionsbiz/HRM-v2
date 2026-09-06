@@ -567,6 +567,34 @@ column per leave type. Verified live: all 7 active employees listed with
 correct real balances (Atul Chaudhary correctly shows 0/1 Casual Leave,
 matching his own leave request seen earlier in System logs).
 
+**Follow-up same day**: two more asks - (1) Highlights should show work
+anniversaries alongside birthdays, colorful, different colors per kind;
+(2) the Leave tab's monthly ledger request came back a third time, this
+time with a buildable column set ("Leave month name, Leaves taken,
+Balance" - no "balance added" this time, so no accrual schedule needed)
+and a clarification that it's a drill-down opened by clicking a leave
+type's name, not a replacement of the existing balance cards.
+
+(1): anniversaries computed client-side in `admin-dashboard.tsx` from
+`dateOfJoining` (already in the general directory, no new endpoint needed
+- see `nextWorkAnniversary()` in `lib/api/employees.ts`, mirroring the
+backend's UTC-based next-occurrence math for birthdays). Highlights now
+merges both lists sorted by days-until, orange for birthdays / violet for
+anniversaries via the existing `toneClasses` system. Verified live: no
+anniversary currently falls in the 30-day window (checked all 7 active
+employees' DOJ month/day directly), so only Sonu Yadav's birthday shows -
+confirmed correct, not a bug.
+
+(2): new `GET /leave/employees/:id/ledger` (+ self-service
+`GET /leave/ledger` mirror) groups real APPROVED LeaveRequest rows by
+month, "leaves taken" = sum of totalDays per month (same rows that drive
+LeaveBalance.usedDays, kept consistent on purpose), "balance" = running
+remaining total through that month. New `LeaveLedgerSheet` component opens
+when a leave type's name is clicked on the existing Leave tab; month rows
+expand to show the real requests (date, reason) behind that month's total.
+Verified live on Atul Chaudhary: Sep correctly shows 1 taken / 0 balance,
+expanding it shows the real "7 Sept 2026 · family · 1d" request.
+
 ## Legacy feature-parity audit (2026-09-06)
 
 Full pass comparing hrmpulse.com's live admin nav (extracted directly from
