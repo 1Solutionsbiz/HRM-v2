@@ -128,6 +128,60 @@ export class EmployeesService {
     return this.serialize(employee);
   }
 
+  /**
+   * Purpose-built and narrow on purpose (see the schema's own comment on
+   * `dateOfBirth`) - findAll()'s directory select deliberately excludes
+   * dateOfBirth to avoid bulk-exposing it company-wide; this endpoint
+   * exposes only what the "Upcoming birthdays" widget needs (name,
+   * department, and the birthday itself), not full employee records.
+   */
+  async getUpcomingBirthdays(withinDays = 30) {
+    const employees = await this.prisma.employee.findMany({
+      where: { status: 'ACTIVE', dateOfBirth: { not: null } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        dateOfBirth: true,
+        department: { select: { name: true } },
+      },
+    });
+
+    const today = new Date();
+    const todayUtcMidnight = Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    );
+
+    return employees
+      .map((e) => {
+        const dob = e.dateOfBirth!;
+        let next = Date.UTC(
+          today.getUTCFullYear(),
+          dob.getUTCMonth(),
+          dob.getUTCDate(),
+        );
+        if (next < todayUtcMidnight) {
+          next = Date.UTC(
+            today.getUTCFullYear() + 1,
+            dob.getUTCMonth(),
+            dob.getUTCDate(),
+          );
+        }
+        return {
+          id: e.id,
+          firstName: e.firstName,
+          lastName: e.lastName,
+          department: e.department,
+          nextBirthday: new Date(next),
+          daysUntil: Math.round((next - todayUtcMidnight) / 86_400_000),
+        };
+      })
+      .filter((e) => e.daysUntil <= withinDays)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+  }
+
   async update(id: string, dto: UpdateEmployeeDto, actor: AuthContext) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Employee not found');

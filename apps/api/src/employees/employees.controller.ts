@@ -48,6 +48,13 @@ export class EmployeesController {
     return this.employeesService.findAll();
   }
 
+  // Before :id for the same reason /me is — registered first so Nest
+  // doesn't match "birthdays" as a literal employee id.
+  @Get('birthdays')
+  getUpcomingBirthdays() {
+    return this.employeesService.getUpcomingBirthdays();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.employeesService.findOne(id);

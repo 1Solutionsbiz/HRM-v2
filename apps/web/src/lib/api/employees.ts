@@ -88,6 +88,30 @@ export function getEmployees(): Promise<EmployeeListItem[]> {
   return apiFetch<EmployeeListItem[]>("/employees");
 }
 
+export interface UpcomingBirthday {
+  id: string;
+  firstName: string;
+  lastName: string;
+  department: { name: string } | null;
+  nextBirthday: string;
+  daysUntil: number;
+}
+
+export function getUpcomingBirthdays(): Promise<UpcomingBirthday[]> {
+  return apiFetch<UpcomingBirthday[]>("/employees/birthdays");
+}
+
+export interface OnboardingStepRow {
+  id: string;
+  isCompleted: boolean;
+  completedAt: string | null;
+  stepTemplate: { id: string; name: string; sortOrder: number };
+}
+
+export function getOnboardingSteps(employeeId: string): Promise<OnboardingStepRow[]> {
+  return apiFetch<OnboardingStepRow[]>(`/employees/${employeeId}/onboarding-steps`);
+}
+
 export function getEmployee(id: string): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>(`/employees/${id}`);
 }

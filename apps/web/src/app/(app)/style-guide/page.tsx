@@ -399,7 +399,15 @@ export default function StyleGuidePage() {
 
       <Section title="Charts" description="Recharts wrapped with the shared theme tokens.">
         <ChartCard title="Sample attendance" description="Illustrative data only.">
-          <AttendanceTrendChart />
+          <AttendanceTrendChart
+            data={[
+              { day: "Mon", present: 6, onLeave: 1 },
+              { day: "Tue", present: 7, onLeave: 0 },
+              { day: "Wed", present: 5, onLeave: 2 },
+              { day: "Thu", present: 7, onLeave: 0 },
+              { day: "Fri", present: 6, onLeave: 1 },
+            ]}
+          />
         </ChartCard>
       </Section>
 
