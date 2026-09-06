@@ -13,6 +13,12 @@ mock data: Performance, Announcements, Notifications, Settings, Onboarding,
 Resignations, Payroll reports. See also "Legacy feature-parity audit
 (2026-09-06)" for what's still missing relative to the legacy hrmpulse.com
 system and what legacy data is genuinely still unmigrated.
+**Admin dashboard redesign + My Day partially de-mocked** (2026-09-06, see
+"Dashboard redesign" session notes below) — active-employee counting bug
+fixed, new blue attendance banner + birthday highlights on Admin dashboard;
+My Day's Leave balance and a new attendance calendar are now real, but
+My Day's Tasks/Meetings/Performance snapshot/Notifications/Pending-requests
+counts are still mock (not part of this pass).
 
 **⚠️ Superseded throughout this file:** every module note below that says
 "still nothing against real MySQL" / "no live database in this environment"
@@ -447,6 +453,77 @@ Verified instead via full typecheck/lint/build and by hitting the two new
 endpoints directly through an authenticated session (shown above). Admin's
 dashboard, which shares the same underlying endpoints, was confirmed live.
 Re-verify HR/Manager in-browser once a real account holds either role.
+
+## Dashboard redesign + My Day wiring (2026-09-06)
+
+User attached two hrmpulse.com/Cipla-style reference screenshots and asked for
+five things: (1) Admin dashboard should count active employees only, (2) a
+blue top banner with greeting/date/Mark attendance/last-punch, (3) a
+"Highlights" birthdays section on Admin dashboard, (4) a real Leave balance
+on the "user dashboard" (interpreted as My Day, the page plain employees
+land on), (5) a monthly attendance calendar ("Yesterday's attendance") on
+the same page.
+
+**Bug fix, not just Admin's stat card**: `getEmployees()`/`findAll()` was
+never changed (it's correctly consumed elsewhere with client-side filters —
+Employees list, Payslips search, Team attendance all need the full roster
+and already filter appropriately). The actual bug was narrower: Admin
+dashboard's "Total employees" counted all 41 records instead of the 7
+active ones, and "Active roles"/Roles distribution (`GET
+/admin/roles/employees`, a separate endpoint with no status filter at all)
+counted roles across all 41 too. Fixed both by filtering to
+`status === "ACTIVE"` at the point of consumption in `admin-dashboard.tsx`,
+cross-referencing role rows against the active employee id set already
+fetched for the stat card — no backend change needed.
+
+**Attendance check-in/out logic extracted into a hook**: `AttendanceCard`'s
+state machine (load/checkIn/checkOut/elapsed-time ticking) moved into
+`lib/use-attendance-punch.ts` so the new `AttendanceBanner` component
+(Admin dashboard's blue top bar) could reuse it without duplicating it.
+`AttendanceCard` itself is unchanged in behavior, just thinner.
+
+**New**: `AttendanceCalendarCard` (`components/hrm/attendance-calendar-card.tsx`)
+renders the current month from real `GET /attendance/history`, bucketed
+into Present (PRESENT/LATE/HALF_DAY)/Absent/Week off/Leave/Holiday — the
+five statuses `AttendanceDayStatus` actually models. One thing to flag
+back to the user: the reference screenshot's legend also had "Home"/
+"Office" (work-location for the day) — V2 has no per-day work-location
+field on `AttendanceDay` at all, so those two are simply not representable
+today; would need a schema addition if wanted. Also note: `getAttendanceHistory`
+only synthesizes a WEEKEND row for *past* dates (today-or-later with no
+record is omitted from the response, not synthesized — see the service's
+own `continue` for that case), so future Saturdays/Sundays in the grid are
+derived client-side from `AttendancePolicy.workingWeekdays` as a fallback,
+not from the API response.
+
+**Also fixed while wiring this**: `apps/web/server.js` (the Hostinger
+Node-hosting entry point, added in eb35c64) is deliberately CommonJS —
+Hostinger's `lsnode.js` loader can't load an ESM module using top-level
+await — but was never excluded from ESLint's TypeScript rules, so it had
+been failing the `web (Next.js)` GitHub Actions CI job's lint step on
+every single push to `main` since that commit, regardless of what changed.
+Added it to `eslint.config.mjs`'s ignore list.
+
+**Verified live** on `hrm.1solutions.biz` as Atul (admin): Total employees
+reads 7 (not 41), Active roles reads 2 (Employee 6 + Admin 1, matching
+Roles distribution), Highlights shows Sonu Yadav's real Sept 8 birthday.
+On My Day (admins don't land here by default — navigated directly):
+Leave balance correctly reads 0 days (real `GET /leave/balances` — Atul's
+1-day Casual Leave allocation is fully used), and the attendance calendar
+correctly renders a real HALF_DAY (Sep 5, an actual short check-in) and a
+real ON_LEAVE day (Sep 7, Atul's own pending leave request) alongside
+synthesized WEEKEND/ABSENT days.
+
+**Deploy note for future sessions**: Hostinger's CDN (`hcdn`) caches pages
+independently of whether the underlying Node app redeployed — after a
+push, the app itself may already be running the new build while
+`hrm.1solutions.biz` keeps serving a stale cached response (check
+`x-hcdn-cache-status`/`age` response headers to tell). Flush via
+hpanel.hostinger.com → the site → Performance → CDN → "Flush cache" before
+trusting what a fresh page load shows. Don't use a JS chunk hash (e.g.
+`main-app-*.js`) to detect a redeploy either — that chunk only changes
+when its own code changes, not on every deploy; check hPanel's
+Deployments list instead.
 
 ## Legacy feature-parity audit (2026-09-06)
 
