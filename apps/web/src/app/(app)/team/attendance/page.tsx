@@ -184,7 +184,13 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
   );
 }
 
-function TeamRosterView() {
+function TeamRosterView({
+  employees,
+  onSelectEmployee,
+}: {
+  employees: EmployeeListItem[];
+  onSelectEmployee: (employee: EmployeeListItem) => void;
+}) {
   const [date, setDate] = React.useState<Date>(new Date());
   const dateStr = toDateOnlyString(date);
 
@@ -230,27 +236,37 @@ function TeamRosterView() {
               <EmptyState icon={Clock} title="No active employees" />
             ) : (
               <ul className="divide-y">
-                {rows.map((r) => (
-                  <li key={r.employeeId} className="flex items-center gap-3 py-3">
-                    <Avatar className="size-8 shrink-0">
-                      <AvatarFallback className="text-xs">{initials(r.firstName, r.lastName)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {r.firstName} {r.lastName}
-                      </p>
-                      <p className="text-muted-foreground truncate text-xs">
-                        {r.designation?.title ?? "—"} · {r.department?.name ?? "—"}
-                      </p>
-                    </div>
-                    <div className="text-muted-foreground hidden shrink-0 text-xs sm:block">
-                      {r.firstCheckInAt ? formatTime(r.firstCheckInAt) : "—"} -{" "}
-                      {r.lastCheckOutAt ? formatTime(r.lastCheckOutAt) : "—"}
-                      {r.workedMinutes != null && ` · ${(r.workedMinutes / 60).toFixed(1)}h`}
-                    </div>
-                    <StatusBadge status={titleCase(r.status)} className="shrink-0" />
-                  </li>
-                ))}
+                {rows.map((r) => {
+                  const employee = employees.find((e) => e.id === r.employeeId);
+                  return (
+                    <li key={r.employeeId} className="flex items-center gap-3 py-3">
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+                        onClick={() => employee && onSelectEmployee(employee)}
+                        disabled={!employee}
+                      >
+                        <Avatar className="size-8 shrink-0">
+                          <AvatarFallback className="text-xs">{initials(r.firstName, r.lastName)}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium hover:underline">
+                            {r.firstName} {r.lastName}
+                          </p>
+                          <p className="text-muted-foreground truncate text-xs">
+                            {r.designation?.title ?? "—"} · {r.department?.name ?? "—"}
+                          </p>
+                        </div>
+                      </button>
+                      <div className="text-muted-foreground hidden shrink-0 text-xs sm:block">
+                        {r.firstCheckInAt ? formatTime(r.firstCheckInAt) : "—"} -{" "}
+                        {r.lastCheckOutAt ? formatTime(r.lastCheckOutAt) : "—"}
+                        {r.workedMinutes != null && ` · ${(r.workedMinutes / 60).toFixed(1)}h`}
+                      </div>
+                      <StatusBadge status={titleCase(r.status)} className="shrink-0" />
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </AsyncSection>
@@ -279,7 +295,7 @@ export default function TeamAttendancePage() {
       {selected ? (
         <EmployeeHistoryView employee={selected} onClear={() => setSelected(null)} />
       ) : (
-        <TeamRosterView />
+        <TeamRosterView employees={activeEmployees} onSelectEmployee={setSelected} />
       )}
     </div>
   );
