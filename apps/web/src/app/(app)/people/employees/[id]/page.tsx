@@ -20,6 +20,7 @@ import {
   GraduationCap,
   Laptop,
   PackageOpen,
+  CalendarDays,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDate } from "@/lib/format";
@@ -33,6 +34,7 @@ import {
   maskAccountNumber,
 } from "@/lib/api/employees";
 import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from "@/lib/api/documents";
+import { getEmployeeLeaveBalances } from "@/lib/api/leave";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -41,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -114,6 +117,12 @@ export default function EmployeeDetailPage() {
     error: docsError,
     refetch: refetchDocs,
   } = useAsync(() => getEmployeeDocuments(params.id), [params.id]);
+  const {
+    data: leaveBalances,
+    loading: leaveLoading,
+    error: leaveError,
+    refetch: refetchLeave,
+  } = useAsync(() => getEmployeeLeaveBalances(params.id), [params.id]);
 
   const [deciding, setDeciding] = React.useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = React.useState<DocumentChecklistItem | null>(null);
@@ -228,6 +237,7 @@ export default function EmployeeDetailPage() {
                 <TabsTrigger value="employment">Employment</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="bank">Bank &amp; emergency</TabsTrigger>
+                <TabsTrigger value="leave">Leave</TabsTrigger>
                 <TabsTrigger value="assets">Assets</TabsTrigger>
               </TabsList>
 
@@ -403,6 +413,43 @@ export default function EmployeeDetailPage() {
                     ) : (
                       <EmptyState size="sm" icon={ShieldAlert} title="No emergency contact on file" />
                     )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="leave" className="mt-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <AsyncSection
+                      loading={leaveLoading}
+                      error={leaveError}
+                      onRetry={refetchLeave}
+                      loadingFallback={<Skeleton className="h-32 w-full" />}
+                    >
+                      {(leaveBalances ?? []).length === 0 ? (
+                        <EmptyState icon={CalendarDays} title="No leave types configured" />
+                      ) : (
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          {(leaveBalances ?? []).map((b) => {
+                            const total = b.allocatedDays + b.carriedOverDays;
+                            return (
+                              <Card key={b.leaveTypeId}>
+                                <CardContent className="space-y-2 pt-6">
+                                  <p className="text-sm font-medium">{b.leaveTypeName}</p>
+                                  <p className="text-2xl font-semibold tabular-nums">
+                                    {b.remainingDays}
+                                    <span className="text-muted-foreground ml-1 text-sm font-normal">
+                                      / {total} days left
+                                    </span>
+                                  </p>
+                                  <Progress value={total > 0 ? (b.usedDays / total) * 100 : 0} />
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </AsyncSection>
                   </CardContent>
                 </Card>
               </TabsContent>

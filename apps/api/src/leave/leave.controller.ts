@@ -41,6 +41,12 @@ export class LeaveController {
     return this.leaveService.getCompanyRequests();
   }
 
+  @Get('employees/:id/balances')
+  @RequirePermissions('leave:approve')
+  getEmployeeBalances(@Param('id') id: string) {
+    return this.leaveService.getBalancesForEmployee(id);
+  }
+
   @Patch('requests/:id/decide')
   @RequirePermissions('leave:approve')
   decide(

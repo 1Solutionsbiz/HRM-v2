@@ -39,6 +39,10 @@ export class LeaveService {
 
   async getBalancesForUser(userId: string) {
     const employeeId = await this.requireEmployeeId(userId);
+    return this.getBalancesForEmployee(employeeId);
+  }
+
+  async getBalancesForEmployee(employeeId: string) {
     const year = new Date().getFullYear();
 
     const [leaveTypes, balances] = await Promise.all([

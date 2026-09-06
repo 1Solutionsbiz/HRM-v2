@@ -35,6 +35,10 @@ export function getLeaveBalances(): Promise<LeaveBalance[]> {
   return apiFetch<LeaveBalance[]>("/leave/balances");
 }
 
+export function getEmployeeLeaveBalances(employeeId: string): Promise<LeaveBalance[]> {
+  return apiFetch<LeaveBalance[]>(`/leave/employees/${employeeId}/balances`);
+}
+
 export interface LeaveRequest {
   id: string;
   code: string;
