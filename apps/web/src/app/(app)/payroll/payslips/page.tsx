@@ -2,14 +2,13 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Download, Plus, Search, Wallet } from "lucide-react";
+import { CheckCircle2, Download, Plus, Search } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
   getEmployees,
   employeeFullName,
   employeeInitials,
-  titleCase,
   type EmployeeListItem,
 } from "@/lib/api/employees";
 import {
@@ -24,12 +23,12 @@ import {
 import { formatDate, formatINR } from "@/lib/format";
 import { downloadPayslipPdf } from "@/lib/payslip-pdf";
 import { PageHeader } from "@/components/hrm/page-header";
-import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { EmployeePicker } from "@/components/hrm/employee-picker";
 import { PayslipDocument } from "@/components/hrm/payslip-document";
-import { TableSkeleton } from "@/components/hrm/loading-state";
+import { PayslipCardGrid } from "@/components/hrm/payslip-card-grid";
+import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -329,38 +328,9 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
             loading={payslips.loading}
             error={payslips.error}
             onRetry={payslips.refetch}
-            loadingFallback={<TableSkeleton rows={4} columns={4} />}
+            loadingFallback={<CardSkeleton lines={4} />}
           >
-            {(payslips.data ?? []).length === 0 ? (
-              <EmptyState icon={Wallet} title="No payslips yet" description="Generate one to get started." />
-            ) : (
-              <ul className="divide-y">
-                {(payslips.data ?? []).map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 py-3">
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(p)}>
-                      <p className="text-sm font-medium hover:underline">
-                        {monthName(p.periodMonth)} {p.periodYear}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        Net pay {formatINR(p.netAmount)}
-                        {p.paidAt ? ` · Paid ${formatDate(p.paidAt)}` : ""}
-                      </p>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <StatusBadge status={titleCase(p.status)} />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Download payslip"
-                        onClick={() => handleDownload(p)}
-                      >
-                        <Download className="size-4" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <PayslipCardGrid payslips={payslips.data ?? []} onOpen={setSelected} onDownload={handleDownload} />
           </AsyncSection>
         </CardContent>
       </Card>
