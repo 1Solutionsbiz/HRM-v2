@@ -607,6 +607,22 @@ live: Atul Chaudhary's Sept 2026 shows his real Approved Casual Leave
 ("7 Sept 2026 · 1d · family"); switching to August correctly shows the
 empty state.
 
+**Follow-up same day**: after seeing the roster's month+year dropdown
+drill-down, user asked for the same month-table ledger shown on the Leave
+tab instead ("ignore the leave type... a table will come like this"). This
+was the same reference screenshot as before, but the ask this time was
+about the layout specifically. Extracted the expandable "Leave month name
+/ Leaves taken / Balance" table out of `LeaveLedgerSheet` into a shared
+`LeaveMonthTable` component; `EmployeeLeaveHistorySheet` (roster page) now
+uses it too, but combined across every leave type in one table (per-month
+totals summed across types, expanded rows tagged with which type each
+request was) rather than the per-type pill-switcher the Leave tab has -
+matches "ignore the leave type" literally, since this entry point doesn't
+ask which type first. Reused the existing per-type ledger endpoint, summed
+client-side - no backend change. Verified live: Atul Chaudhary's table
+shows Jan-Aug at 0 taken/1 balance, Sep at 1 taken/0 balance, expanding Sep
+shows "7 Sept 2026 · Casual Leave (1 Day) · family · 1d".
+
 ## Legacy feature-parity audit (2026-09-06)
 
 Full pass comparing hrmpulse.com's live admin nav (extracted directly from
