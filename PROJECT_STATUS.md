@@ -375,6 +375,22 @@ repeat every module's notes here, the load-bearing findings:
 - **Employee active/inactive was wrong for 18 people** — see the Data
   migration section's "Real misclassification found and fixed" note.
 
+**Later the same day**, after the feature-parity audit below: payslip PDF
+download actually generates a file (was a UI stub that only toasted
+"Downloading..."), the payslip PDF was missing Date of Joining, Team
+attendance roster names are now clickable into that employee's history
+(they weren't before), `newuser_attendance` (238 rows) is imported as real
+attendance history, `EmployeeEmergencyContact` was silently 1-per-employee
+and now supports the multiple contacts real employees actually have,
+employee demographics (gender/nationality/religion/maritalStatus/
+bloodGroup) were backfilled for all 41 employees (schema existed, nothing
+had ever written to it), employee profile photos are now backfilled and
+rendered (hotlinked to hrmpulse.com, no file storage wired), and the
+Payslips admin search was fixed to include past employees, not just active
+ones. Full detail on each is in "Data migration" above and the dedicated
+notes right below it (search this file for "2026-09-06" — several distinct
+same-day entries, added as each fix landed rather than batched).
+
 ## Legacy feature-parity audit (2026-09-06)
 
 Full pass comparing hrmpulse.com's live admin nav (extracted directly from
@@ -1211,12 +1227,16 @@ switcher:**
   (see "Frontend ↔ API wiring" above) is wired as of 2026-09-06.
 - ○ Assets and Complaints backend modules (12/13) — Assets now has a schema
   and passive read access via Employees; neither has real CRUD endpoints.
-- ○ Legacy attendance-history import — see the Data migration section's
-  "Deliberately still not imported" note for exactly why (name-based
-  ambiguity in the historical bulk table, not a "hasn't gotten to it" gap).
+- ○ `hrm_attandance_machine_detail` import (the Sep–Dec 2024 bulk, predating
+  `newuser_attendance` which **is** now imported — see Data migration) —
+  still blocked on name-based employee-id ambiguity, needs manual
+  disambiguation first, not a "hasn't gotten to it" gap.
 - ○ Real file storage for documents/receipts/payslip PDFs — no provider
   wired anywhere; every "file" field in the schema is a URL string with
-  nothing populating it from a real upload yet.
+  nothing populating it from a real upload yet. Employee photos are the one
+  exception with real URLs today, but only by hotlinking to hrmpulse.com
+  (see "Employee profile photos" in Data migration) — a stopgap, not a
+  real fix for this gap.
 - ○ Workspace integration (whatever external system(s) this needs to talk to
   — not yet scoped)
 - ○ **Weekly attendance email report** (explicitly requested 2026-09-06,
