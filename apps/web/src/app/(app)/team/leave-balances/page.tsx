@@ -3,7 +3,7 @@
 import * as React from "react";
 import { CalendarDays } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getCompanyLeaveBalances, getCompanyLeaveRequests, type CompanyLeaveBalanceRow } from "@/lib/api/leave";
+import { getCompanyLeaveBalances, type CompanyLeaveBalanceRow } from "@/lib/api/leave";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -26,7 +26,6 @@ function initials(firstName: string, lastName: string): string {
 
 export default function TeamLeaveBalancesPage() {
   const { data, loading, error, refetch } = useAsync(getCompanyLeaveBalances);
-  const requests = useAsync(getCompanyLeaveRequests);
   const [selected, setSelected] = React.useState<CompanyLeaveBalanceRow | null>(null);
   const rows = data ?? [];
   const leaveTypes = rows[0]?.balances ?? [];
@@ -103,7 +102,6 @@ export default function TeamLeaveBalancesPage() {
           employeeId={selected.employeeId}
           employeeName={`${selected.firstName} ${selected.lastName}`}
           employeeCode={selected.employeeCode}
-          requests={requests.data ?? []}
           onOpenChange={(open) => !open && setSelected(null)}
         />
       )}
