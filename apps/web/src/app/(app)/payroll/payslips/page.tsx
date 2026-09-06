@@ -311,10 +311,12 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
               </p>
             </div>
           </div>
-          <Button size="sm" onClick={() => setGenerateOpen(true)}>
-            <Plus />
-            Generate payslip
-          </Button>
+          {employee.status === "ACTIVE" && (
+            <Button size="sm" onClick={() => setGenerateOpen(true)}>
+              <Plus />
+              Generate payslip
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -412,11 +414,12 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
 }
 
 export default function AdminPayslipsPage() {
+  // Deliberately not filtered to active-only: HR needs to look up a past
+  // employee's payslip history too (that data is real and imported - see
+  // PROJECT_STATUS.md - but was unreachable through this search before).
+  // Generating a *new* payslip for someone no longer employed is blocked
+  // separately, inside EmployeePayslipsView.
   const { data: employees } = useAsync(getEmployees);
-  const activeEmployees = React.useMemo(
-    () => (employees ?? []).filter((e) => e.status === "ACTIVE"),
-    [employees],
-  );
   const [selected, setSelected] = React.useState<EmployeeListItem | null>(null);
 
   return (
@@ -424,7 +427,7 @@ export default function AdminPayslipsPage() {
       <PageHeader
         title="Payslips"
         description="Generate payslips and review any employee's history."
-        actions={<EmployeePicker employees={activeEmployees} onSelect={setSelected} />}
+        actions={<EmployeePicker employees={employees ?? []} onSelect={setSelected} />}
       />
 
       {selected ? (

@@ -89,6 +89,7 @@ script's own success message):
 | Bank details (encrypted) | 25/29 | `hrm_bank_detail` (4 skipped: empty/corrupted rows or `emp_id=0`) |
 | Emergency contacts | 20/24 (all contacts, not one-per-employee — see below) | `hrm_employee_family`, **not** `hrm_employee_emergency_contact` (that table is empty/unused in the live legacy app — confirmed by comparing against what the legacy profile page actually renders). 4 skipped: reference legacy employee ids (11, 20) that no longer exist anywhere in `hrm_employee` — same orphaned-FK class as the 5 skipped education records above |
 | Employee demographics | 41/41 | `hrm_employee.gender`/`marital_status`/`bgroup`/`religion`/`nationality` — see below |
+| Employee photos | 35/41 (6 have none in legacy either) | `hrm_employee.image`, hotlinked to hrmpulse.com — see below |
 | Leave types | 3/3 | `hrm_leave_type` |
 | Leave requests | 176/176 | `hrm_leave_applied` |
 | Leave balances | 46 (computed) | derived from approved-request history, since legacy never had a balance table |
@@ -152,13 +153,50 @@ reported here rather than silently imported): `mobile2` (second phone),
 `fathers_name`, `permanent_address` (V2 only has `currentAddress`),
 `experience`, `other_detail`, `marriage_anniversary`, `house_type`,
 `staying_current_residence`, `living_current_city`, `probation_period`,
-`probation_status`, `job_title` (distinct from designation), `image`
-(profile photo — `Employee.avatarUrl` exists in the schema but nothing
-populates it; even if backfilled with the legacy path, there's no file
-storage wired yet to serve it, see "Not started" at the bottom),
-structured `city_id`/`state_id`/`pincode` (V2's address is one free-text
-field). None of these gate any workflow today. Ask if any of these should
-get a real V2 field — this is a list to decide from, not a queued import.
+`probation_status`, `job_title` (distinct from designation), structured
+`city_id`/`state_id`/`pincode` (V2's address is one free-text field). `image`
+(profile photo) is no longer in this list — see below, it's now backfilled
+and rendered. None of the remaining ones gate any workflow today. Ask if any
+should get a real V2 field — this is a list to decide from, not a queued
+import.
+
+**Employee profile photos (2026-09-06)**: `Employee.avatarUrl` has existed
+in the schema since the personal-details migration but nothing ever wrote
+to it, and no frontend page ever rendered shadcn's `AvatarImage` — every
+avatar everywhere was initials-only, regardless of data. `backfill-
+employee-avatars.ts` set `avatarUrl` for the 35/41 employees who have a
+legacy `hrm_employee.image` filename, pointing at
+`https://hrmpulse.com/upload-image/<filename>` — confirmed live (not
+guessed) by reading the real `<img src>` on hrmpulse.com's own rendered
+profile pages. **This hotlinks to the legacy host rather than downloading
+and re-hosting the files**: V2 has no file storage provider wired (see
+"Not started" below), and several images are multi-megabyte (Atul
+Chaudhary's is 2.2MB) — too large to embed as a data URI on every
+employee-list row. Real dependency on hrmpulse.com staying reachable; if it
+goes away, every photo breaks until this is redone against real storage.
+`AvatarImage` (with a fallback to initials on load failure, Radix's default
+behavior) was wired into the screens with real employee data: Employees
+list + detail header, Team attendance roster + its employee picker
+(shared with Payroll payslips), Profile, and the topbar user menu.
+Leave/Expense approvals, Payroll salary, Resignations, Onboarding, and
+Dashboard were deliberately left untouched — several are still mock data
+(see the wiring table above) and the rest weren't asked for; ask if photos
+should go there too.
+
+**Old payslips were already fully imported — the real gap was visibility,
+not missing data (2026-09-06)**: checked because the user asked to "import
+the old payslips" from legacy. All 24 legacy `salary_slip_generate` rows
+were already in production (Phase 1/2, see the migration table above) —
+verified again directly against the dump, every employee/month/net-amount
+pair matches exactly. The actual problem: `/payroll/payslips`'s employee
+search was filtered to active employees only, and 4 of the 6 employees who
+have legacy payslip history (Gurjeet Kaur, Shikha Pandey, Rajat Kumar,
+Kanchan Gupta, Pallavi Kumari) are no longer active — their real, correctly-
+imported payslips were unreachable through the admin UI. Fixed by
+searching all employees regardless of status; "Generate payslip" (a new
+one) now only shows for active employees, since generating one for someone
+no longer employed doesn't make sense — viewing existing history still
+works for anyone.
 
 **Phase 3 import (2026-09-06, `import-legacy-phase3.ts`)** closed most of the
 above: Assets (8/14 — 6 legacy assets have no assignment row, skipped),
