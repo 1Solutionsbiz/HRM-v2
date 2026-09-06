@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
@@ -71,13 +71,32 @@ export class EmployeesController {
     return this.employeesService.upsertBankDetail(id, dto, actor);
   }
 
-  @Put(':id/emergency-contact')
-  upsertEmergencyContact(
+  @Post(':id/emergency-contacts')
+  addEmergencyContact(
     @Param('id') id: string,
     @Body() dto: UpsertEmergencyContactDto,
     @CurrentUser() actor: AuthContext,
   ) {
-    return this.employeesService.upsertEmergencyContact(id, dto, actor);
+    return this.employeesService.addEmergencyContact(id, dto, actor);
+  }
+
+  @Patch(':id/emergency-contacts/:contactId')
+  updateEmergencyContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @Body() dto: UpsertEmergencyContactDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateEmergencyContact(id, contactId, dto, actor);
+  }
+
+  @Delete(':id/emergency-contacts/:contactId')
+  removeEmergencyContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.removeEmergencyContact(id, contactId, actor);
   }
 
   @Get(':id/onboarding-steps')

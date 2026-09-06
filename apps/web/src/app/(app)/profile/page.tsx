@@ -342,14 +342,16 @@ export default function ProfilePage() {
                     ) : (
                       <p className="text-muted-foreground text-sm sm:col-span-2">No bank details on file.</p>
                     )}
-                    {employee.emergencyContact ? (
-                      <>
-                        <Field label="Emergency contact" value={employee.emergencyContact.name} />
-                        <Field
-                          label="Relationship / phone"
-                          value={`${employee.emergencyContact.relationship} · ${employee.emergencyContact.phone}`}
-                        />
-                      </>
+                    {employee.emergencyContacts.length > 0 ? (
+                      employee.emergencyContacts.map((contact, i) => (
+                        <React.Fragment key={contact.id}>
+                          <Field
+                            label={employee.emergencyContacts.length > 1 ? `Emergency contact ${i + 1}` : "Emergency contact"}
+                            value={contact.name}
+                          />
+                          <Field label="Relationship / phone" value={`${contact.relationship} · ${contact.phone}`} />
+                        </React.Fragment>
+                      ))
                     ) : (
                       <p className="text-muted-foreground text-sm sm:col-span-2">No emergency contact on file.</p>
                     )}

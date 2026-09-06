@@ -28,6 +28,13 @@ export interface EmployeeListItem {
   manager: EmployeeManagerRef | null;
 }
 
+export interface EmergencyContact {
+  id: string;
+  name: string;
+  relationship: string;
+  phone: string;
+}
+
 export interface EmployeeEducationEntry {
   id: string;
   institution: string;
@@ -65,7 +72,7 @@ export interface EmployeeDetail extends EmployeeListItem {
   religion: string | null;
   maritalStatus: MaritalStatus | null;
   bloodGroup: string | null;
-  emergencyContact: { name: string; relationship: string; phone: string } | null;
+  emergencyContacts: EmergencyContact[];
   bankDetail: {
     bankName: string;
     accountNumber: string;

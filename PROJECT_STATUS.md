@@ -87,7 +87,8 @@ script's own success message):
 | Holidays | 9/9 | `hrm_holidays` |
 | Education records | 27/32 | `hrm_employee_education` (5 skipped: reference legacy employee ids that no longer exist anywhere in `hrm_employee`) |
 | Bank details (encrypted) | 25/29 | `hrm_bank_detail` (4 skipped: empty/corrupted rows or `emp_id=0`) |
-| Emergency contacts | 19 | `hrm_employee_family`, **not** `hrm_employee_emergency_contact` (that table is empty/unused in the live legacy app — confirmed by comparing against what the legacy profile page actually renders) |
+| Emergency contacts | 20/24 (all contacts, not one-per-employee — see below) | `hrm_employee_family`, **not** `hrm_employee_emergency_contact` (that table is empty/unused in the live legacy app — confirmed by comparing against what the legacy profile page actually renders). 4 skipped: reference legacy employee ids (11, 20) that no longer exist anywhere in `hrm_employee` — same orphaned-FK class as the 5 skipped education records above |
+| Employee demographics | 41/41 | `hrm_employee.gender`/`marital_status`/`bgroup`/`religion`/`nationality` — see below |
 | Leave types | 3/3 | `hrm_leave_type` |
 | Leave requests | 176/176 | `hrm_leave_applied` |
 | Leave balances | 46 (computed) | derived from approved-request history, since legacy never had a balance table |
@@ -100,17 +101,64 @@ script's own success message):
 
 **Known, permanent structural gaps** (V2 schema can't represent these, not
 an import failure):
-- Legacy allows multiple emergency contacts per employee; V2's
-  `EmployeeEmergencyContact` is 1-per-employee (`@unique employeeId`). The
-  import keeps the best single contact per employee and drops the rest —
-  logged per employee in the run's report file.
 - Social media links, employee free-text history, internal transfer
-  history, sub-departments, family/dependent records beyond one emergency
-  contact, POSH complaints, advance salary/deductions, IT/HR tickets,
-  EOM/quiz gamification, chat, company policy documents, offboarding
-  checklists — none of these have a V2 model. Full inventory and legacy row
-  counts for each were audited against the live dump; ask if this list is
-  needed again.
+  history, sub-departments, POSH complaints, advance salary/deductions,
+  IT/HR tickets, EOM/quiz gamification, chat, company policy documents,
+  offboarding checklists — none of these have a V2 model. Full inventory and
+  legacy row counts for each were audited against the live dump; ask if this
+  list is needed again.
+
+**Multiple emergency contacts + employee demographics (2026-09-06)**: two
+real gaps found while checking Aditya Srivastava's record against his own
+legacy profile page — reported for one employee, true for all 41, fixed for
+all 41, not just the one reported.
+- `EmployeeEmergencyContact` was `@unique(employeeId)` (1-per-employee) since
+  the original schema design; Phase 1's import kept only the "best" contact
+  per employee and dropped the rest — previously listed above as a
+  permanent structural gap, but it wasn't structural, just an unnecessary
+  constraint. Migration `20260906030459_allow_multiple_emergency_contacts`
+  drops the unique index (creating a plain one first — MariaDB won't drop a
+  unique index that's the only index backing the FK) and the `Employee`
+  relation is now `emergencyContacts: EmployeeEmergencyContact[]`. The old
+  single `PUT :id/emergency-contact` upsert route (never called by any
+  frontend page — dead code) is now `POST .../emergency-contacts`,
+  `PATCH .../emergency-contacts/:contactId`, `DELETE .../emergency-contacts/
+  :contactId`. `reimport-emergency-contacts.ts` wiped and fully re-imported
+  from `hrm_employee_family` (24 rows, all of them — not "best per
+  employee"): 20 imported across 19 employees (Aditya now correctly shows
+  both Rakhi Srivastava/Mother and Shyam Srivastava/Father), 4 skipped
+  (legacy emp_ids 11, 20 — orphaned, same class as the education-records
+  skips above). Both frontend read sites (Employee detail page, Profile's
+  "Bank & emergency" tab) render the list; no add/edit/delete UI was built
+  for the new endpoints — that's a real gap if HR needs to manage these,
+  not something this pass claims to have closed.
+- `Employee.gender`/`nationality`/`religion`/`maritalStatus`/`bloodGroup`
+  have existed in the schema since the 2026-09-05 personal-details
+  migration, but no import script ever wrote to them — Phase 1 predates
+  that migration, and nothing followed up, so all 41 employees showed "—"
+  for all five on every profile/detail page. `backfill-employee-
+  demographics.ts` fixed all 41 from `hrm_employee`'s `gender`/
+  `marital_status`/`bgroup`/`religion`/`nationality` columns. Code mappings
+  verified against hrmpulse.com's own rendered profile pages, not guessed:
+  gender 1=Male (Aditya/Shivam/Atul), 2=Female (Ritika/Nikita);
+  marital_status 1=Married (Shivam's own profile says "Married"),
+  2=Single (Aditya's own profile says "Unmarried" — the legacy label,
+  V2's `SINGLE` enum value is the equivalent). Neither `DIVORCED` nor
+  `WIDOWED` appears anywhere in this 41-row dataset.
+
+**Legacy `hrm_employee` columns with no V2 home at all** (not imported,
+not previously flagged — found while auditing the demographics gap above,
+reported here rather than silently imported): `mobile2` (second phone),
+`fathers_name`, `permanent_address` (V2 only has `currentAddress`),
+`experience`, `other_detail`, `marriage_anniversary`, `house_type`,
+`staying_current_residence`, `living_current_city`, `probation_period`,
+`probation_status`, `job_title` (distinct from designation), `image`
+(profile photo — `Employee.avatarUrl` exists in the schema but nothing
+populates it; even if backfilled with the legacy path, there's no file
+storage wired yet to serve it, see "Not started" at the bottom),
+structured `city_id`/`state_id`/`pincode` (V2's address is one free-text
+field). None of these gate any workflow today. Ask if any of these should
+get a real V2 field — this is a list to decide from, not a queued import.
 
 **Phase 3 import (2026-09-06, `import-legacy-phase3.ts`)** closed most of the
 above: Assets (8/14 — 6 legacy assets have no assignment row, skipped),
@@ -420,7 +468,9 @@ one sweep.
   since).
 - ✓ Migrations applied to the live production MariaDB on Hostinger (see
   "Deployment" above) — `20260905112951_init` (the original 41-model
-  schema) and `20260905142756_add_employee_personal_education_assets`.
+  schema), `20260905142756_add_employee_personal_education_assets`,
+  `20260905190657_add_employee_date_of_exit`, and
+  `20260906030459_allow_multiple_emergency_contacts`.
   Local dev still has no Docker/MySQL; every migration so far has been
   generated and applied directly against production
   (`prisma migrate diff --to-config-datasource` + hand-placed migration

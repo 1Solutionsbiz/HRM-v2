@@ -383,13 +383,21 @@ export default function EmployeeDetailPage() {
                   <CardContent className="space-y-4 pt-6">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="text-muted-foreground size-4" />
-                      <p className="text-sm font-semibold">Emergency contact</p>
+                      <p className="text-sm font-semibold">
+                        Emergency contact{employee.emergencyContacts.length > 1 ? "s" : ""}
+                      </p>
                     </div>
-                    {employee.emergencyContact ? (
-                      <div className="grid gap-4">
-                        <InfoRow label="Name" value={employee.emergencyContact.name} />
-                        <InfoRow label="Relationship" value={employee.emergencyContact.relationship} />
-                        <InfoRow label="Phone" value={employee.emergencyContact.phone} />
+                    {employee.emergencyContacts.length > 0 ? (
+                      <div className="space-y-4">
+                        {employee.emergencyContacts.map((contact, i) => (
+                          <div key={contact.id} className={i > 0 ? "border-t pt-4" : undefined}>
+                            <div className="grid gap-4">
+                              <InfoRow label="Name" value={contact.name} />
+                              <InfoRow label="Relationship" value={contact.relationship} />
+                              <InfoRow label="Phone" value={contact.phone} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <EmptyState size="sm" icon={ShieldAlert} title="No emergency contact on file" />

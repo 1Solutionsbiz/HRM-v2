@@ -20,7 +20,7 @@ const EMPLOYEE_INCLUDE = {
   department: true,
   designation: true,
   manager: { select: { id: true, firstName: true, lastName: true } },
-  emergencyContact: true,
+  emergencyContacts: true,
   bankDetail: true,
   education: { orderBy: { startDate: 'desc' } },
   assets: { orderBy: { issuedDate: 'desc' } },
@@ -208,17 +208,43 @@ export class EmployeesService {
     return this.findOne(id);
   }
 
-  async upsertEmergencyContact(
+  /** An employee can have more than one contact (legacy allows it and real
+   * employees use it) - these operate on individual rows by their own id,
+   * not a single upsert keyed by employeeId. */
+  async addEmergencyContact(
     id: string,
     dto: UpsertEmergencyContactDto,
     actor: AuthContext,
   ) {
     await this.assertExists(id);
 
-    await this.prisma.employeeEmergencyContact.upsert({
-      where: { employeeId: id },
-      create: { employeeId: id, ...dto },
-      update: { ...dto },
+    await this.prisma.employeeEmergencyContact.create({
+      data: { employeeId: id, ...dto },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Emergency contact added',
+    });
+
+    return this.findOne(id);
+  }
+
+  async updateEmergencyContact(
+    id: string,
+    contactId: string,
+    dto: UpsertEmergencyContactDto,
+    actor: AuthContext,
+  ) {
+    await this.assertEmergencyContactBelongsToEmployee(id, contactId);
+
+    await this.prisma.employeeEmergencyContact.update({
+      where: { id: contactId },
+      data: { ...dto },
     });
 
     await this.auditService.log({
@@ -231,6 +257,33 @@ export class EmployeesService {
     });
 
     return this.findOne(id);
+  }
+
+  async removeEmergencyContact(id: string, contactId: string, actor: AuthContext) {
+    await this.assertEmergencyContactBelongsToEmployee(id, contactId);
+
+    await this.prisma.employeeEmergencyContact.delete({ where: { id: contactId } });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Emergency contact removed',
+    });
+
+    return this.findOne(id);
+  }
+
+  private async assertEmergencyContactBelongsToEmployee(employeeId: string, contactId: string) {
+    const contact = await this.prisma.employeeEmergencyContact.findUnique({
+      where: { id: contactId },
+      select: { employeeId: true },
+    });
+    if (!contact || contact.employeeId !== employeeId) {
+      throw new NotFoundException('Emergency contact not found for this employee');
+    }
   }
 
   async listOnboardingSteps(employeeId: string) {
