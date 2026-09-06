@@ -539,6 +539,23 @@ trusting what a fresh page load shows. Don't use a JS chunk hash (e.g.
 when its own code changes, not on every deploy; check hPanel's
 Deployments list instead.
 
+**Follow-up same day**: user asked for a per-employee "Leave" tab, both in
+the admin view and self-service, referencing a legacy screenshot showing a
+month-by-month accrual ledger (e.g. Sick Leave: 0.83 added every month,
+subtracted on use). V2 allocates leave as one annual lump sum per
+employee/leave-type/year (`LeaveBalance.allocatedDays`) with a running
+used/remaining total - there's no monthly accrual schedule and no
+transaction ledger, so that exact ledger isn't buildable without a new
+accrual engine. Asked the user; confirmed scoping to the real current-
+balance view only. Added `GET /leave/employees/:id/balances`
+(`leave:approve`-gated), refactoring `LeaveService.getBalancesForUser` into
+a shared `getBalancesForEmployee(employeeId)` so self-service and admin
+compute balances identically. New "Leave" tab on the admin employee-detail
+page (`/people/employees/[id]`) reuses the same balance-card layout as the
+existing self-service `/leave` page (which already covers "his own
+dashboard" - no changes needed there). Verified live: Sonu Yadav's tab
+shows real balances (Casual Leave 1/1, Loss of Pay 0/0, Short Leave 0/0).
+
 ## Legacy feature-parity audit (2026-09-06)
 
 Full pass comparing hrmpulse.com's live admin nav (extracted directly from
