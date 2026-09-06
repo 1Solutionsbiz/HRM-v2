@@ -18,7 +18,7 @@ import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { EmployeePicker } from "@/components/hrm/employee-picker";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -111,6 +111,7 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
         <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="size-9 shrink-0">
+              {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
               <AvatarFallback className="text-xs">{initials(employee.firstName, employee.lastName)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">
@@ -247,6 +248,7 @@ function TeamRosterView({
                         disabled={!employee}
                       >
                         <Avatar className="size-8 shrink-0">
+                          {r.avatarUrl && <AvatarImage src={r.avatarUrl} alt="" />}
                           <AvatarFallback className="text-xs">{initials(r.firstName, r.lastName)}</AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">

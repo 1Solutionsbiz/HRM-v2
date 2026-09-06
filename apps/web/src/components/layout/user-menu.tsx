@@ -5,7 +5,7 @@ import { LogOut, Settings, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthenticatedUser, useAuth } from "@/lib/auth-context";
 import { ROLE_LABELS } from "@/types/role";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +37,7 @@ export function UserMenu() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton size="lg">
               <Avatar className="size-8 rounded-lg">
+                {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
                 <AvatarFallback className="rounded-lg">
                   {user.initials}
                 </AvatarFallback>
@@ -58,6 +59,7 @@ export function UserMenu() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="size-8 rounded-lg">
+                  {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
                   <AvatarFallback className="rounded-lg">
                     {user.initials}
                   </AvatarFallback>

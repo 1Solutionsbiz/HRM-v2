@@ -72,6 +72,7 @@ export interface CompanyAttendanceRow {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  avatarUrl: string | null;
   department: { name: string } | null;
   designation: { title: string } | null;
   status: CompanyAttendanceStatus;

@@ -36,7 +36,7 @@ import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -184,6 +184,7 @@ export default function EmployeeDetailPage() {
             <Card>
               <CardContent className="flex flex-col gap-6 pt-6 sm:flex-row sm:items-start">
                 <Avatar className="size-20 shrink-0 text-lg">
+                  {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
                   <AvatarFallback className="text-xl">{employeeInitials(employee)}</AvatarFallback>
                 </Avatar>
 

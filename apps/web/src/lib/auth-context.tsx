@@ -10,6 +10,7 @@ export interface AuthUser {
   email: string;
   name: string;
   initials: string;
+  avatarUrl: string | null;
   designation: string | null;
   lastLoginAt: string | null;
   role: Role;
@@ -62,6 +63,7 @@ function toAuthUser(me: MeResponse): AuthUser {
     email: me.email,
     name,
     initials,
+    avatarUrl: me.employee?.avatarUrl ?? null,
     designation: me.employee?.designation?.title ?? null,
     lastLoginAt: me.lastLoginAt,
     role: roleKey,

@@ -12,7 +12,7 @@ import { AsyncSection } from "@/components/hrm/async-section";
 import { TableSkeleton } from "@/components/hrm/loading-state";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function EmployeeCell({ employee }: { employee: EmployeeListItem }) {
@@ -22,6 +22,7 @@ function EmployeeCell({ employee }: { employee: EmployeeListItem }) {
       className="flex items-center gap-2.5 text-left hover:underline"
     >
       <Avatar className="size-7 shrink-0">
+        {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
         <AvatarFallback className="text-[10px]">{employeeInitials(employee)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0">

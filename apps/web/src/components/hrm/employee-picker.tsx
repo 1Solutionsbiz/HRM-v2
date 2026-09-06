@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Search } from "lucide-react";
 import { employeeInitials, type EmployeeListItem } from "@/lib/api/employees";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -65,6 +65,7 @@ export function EmployeePicker({
                 }}
               >
                 <Avatar className="size-6 shrink-0">
+                  {e.avatarUrl && <AvatarImage src={e.avatarUrl} alt="" />}
                   <AvatarFallback className="text-[10px]">{employeeInitials(e)}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">

@@ -21,7 +21,7 @@ import { formatDate, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton } from "@/components/hrm/loading-state";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -266,6 +266,7 @@ export default function ProfilePage() {
             <Card>
               <CardContent className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:text-left">
                 <Avatar className="size-16">
+                  {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
                   <AvatarFallback className="text-lg">{employeeInitials(employee)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
