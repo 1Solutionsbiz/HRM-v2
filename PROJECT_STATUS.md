@@ -96,6 +96,7 @@ script's own success message):
 | Salary structures | 14 | `salary_managment` |
 | Salary revisions | 21 | `salary_managment` (full history, not just current) |
 | Payslips | 24/24 | `salary_slip_generate` |
+| Attendance history | 237 days (14 employees, Dec 2024–Feb 2025) | `newuser_attendance` (238 rows; 1 exact duplicate row collapsed to the same day) |
 
 **Known, permanent structural gaps** (V2 schema can't represent these, not
 an import failure):
@@ -122,17 +123,33 @@ reference a `document_type_id` that doesn't exist in the legacy type table,
 and most rows belong to a legacy employee id that doesn't exist anywhere in
 `hrm_employee`).
 
+**Attendance history import (2026-09-06, `import-legacy-attendance-history.ts`)**:
+`newuser_attendance` (238 rows, Dec 2024–Feb 2025, clean numeric employee
+ids) is now imported as real `AttendanceDay`/`AttendanceEvent` rows
+(`AttendanceEventSource.BIOMETRIC_IMPORT`), status/lateMinutes/workedMinutes
+computed with the exact same formula `AttendanceService.recomputeDay()`
+uses, not trusted from legacy's own `status`/`late_status` labels. Two data-
+quality issues found and handled, not silently imported as-is:
+- 1 exact duplicate row (legacy ids 4 and 17, Prem Rai, same timestamps) —
+  collapsed to one `AttendanceDay`, per the schema's own
+  `@@unique([employeeId, date])`.
+- 19 of 238 rows (8%) had `clock_out_time` at or before `clock_in_time` —
+  mostly an exact "06:00:00" same-date sentinel, clearly a legacy
+  placeholder for "never checked out" rather than a real punch. Importing
+  it at face value would have produced a negative shift clamped to a
+  fabricated 0-minute day and (for a few) an inflated `lateMinutes`. Treated
+  as no real checkout instead (`lastCheckOutAt: null`, `workedMinutes:
+  null`) — same shape a live "forgot to check out" day already has.
+
 **Deliberately still not imported**, with reasons (so "done" is a real
 claim, not an oversight):
-- Attendance history — `newuser_attendance` (238 rows, Dec 2024–Feb 2025,
-  clean numeric employee ids) is queued but not yet run. The 72-col wide
-  `hrm_attandance_machine_detail` table (Sep–Dec 2024, the real historical
-  bulk) identifies employees by first-name string, not id — 3 of 18 distinct
-  names are ambiguous or unresolvable (two different "Shivam"s, "sonali" vs
-  "sonali~seo", "punit" doesn't exist in `hrm_employee` at all), so an
-  automated import would misattribute real people's attendance. `newuser_
-  attendance` alone is safe to import when someone picks this back up;
-  the machine-detail table needs manual disambiguation first, not a script.
+- The 72-col wide `hrm_attandance_machine_detail` table (Sep–Dec 2024, the
+  real historical bulk, predates `newuser_attendance`) identifies employees
+  by first-name string, not id — 3 of 18 distinct names are ambiguous or
+  unresolvable (two different "Shivam"s, "sonali" vs "sonali~seo", "punit"
+  doesn't exist in `hrm_employee` at all), so an automated import would
+  misattribute real people's attendance. Needs manual disambiguation first,
+  not a script.
 - `mismatch_attendance` — superseded by design, not skipped for convenience:
   V2's event-sourced `AttendanceDay`/`AttendanceEvent` (see the schema's own
   comment) replaces the whole class of problem this table tracked.
