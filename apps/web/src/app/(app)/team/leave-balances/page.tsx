@@ -1,12 +1,14 @@
 "use client";
 
+import * as React from "react";
 import { CalendarDays } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getCompanyLeaveBalances } from "@/lib/api/leave";
+import { getCompanyLeaveBalances, getCompanyLeaveRequests, type CompanyLeaveBalanceRow } from "@/lib/api/leave";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { TableSkeleton } from "@/components/hrm/loading-state";
+import { EmployeeLeaveHistorySheet } from "@/components/hrm/employee-leave-history-sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -24,6 +26,8 @@ function initials(firstName: string, lastName: string): string {
 
 export default function TeamLeaveBalancesPage() {
   const { data, loading, error, refetch } = useAsync(getCompanyLeaveBalances);
+  const requests = useAsync(getCompanyLeaveRequests);
+  const [selected, setSelected] = React.useState<CompanyLeaveBalanceRow | null>(null);
   const rows = data ?? [];
   const leaveTypes = rows[0]?.balances ?? [];
 
@@ -57,20 +61,24 @@ export default function TeamLeaveBalancesPage() {
                   {rows.map((r) => (
                     <TableRow key={r.employeeId}>
                       <TableCell>
-                        <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          className="flex min-w-0 items-center gap-2.5 text-left"
+                          onClick={() => setSelected(r)}
+                        >
                           <Avatar className="size-8 shrink-0">
                             {r.avatarUrl && <AvatarImage src={r.avatarUrl} alt="" />}
                             <AvatarFallback className="text-xs">{initials(r.firstName, r.lastName)}</AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
+                            <p className="truncate text-sm font-medium hover:underline">
                               {r.firstName} {r.lastName}
                             </p>
                             <p className="text-muted-foreground truncate text-xs">
                               {r.employeeCode} · {r.designation?.title ?? "—"}
                             </p>
                           </div>
-                        </div>
+                        </button>
                       </TableCell>
                       {r.balances.map((b) => (
                         <TableCell key={b.leaveTypeId} className="text-right tabular-nums">
@@ -89,6 +97,16 @@ export default function TeamLeaveBalancesPage() {
           </AsyncSection>
         </CardContent>
       </Card>
+
+      {selected && (
+        <EmployeeLeaveHistorySheet
+          employeeId={selected.employeeId}
+          employeeName={`${selected.firstName} ${selected.lastName}`}
+          employeeCode={selected.employeeCode}
+          requests={requests.data ?? []}
+          onOpenChange={(open) => !open && setSelected(null)}
+        />
+      )}
     </div>
   );
 }
