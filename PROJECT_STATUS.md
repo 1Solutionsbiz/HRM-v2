@@ -556,6 +556,17 @@ existing self-service `/leave` page (which already covers "his own
 dashboard" - no changes needed there). Verified live: Sonu Yadav's tab
 shows real balances (Casual Leave 1/1, Loss of Pay 0/0, Short Leave 0/0).
 
+**Follow-up same day**: user clarified "do it for all the active employees"
+meant a company-wide roster, not the monthly ledger again (asked to
+confirm rather than guess, given how much had just been built). Added
+`GET /leave/employees/company/balances` (`leave:approve`-gated, refactored
+the per-type math into a shared `toBalanceRows` helper used by both the
+single-employee and company-wide paths) and a new "Leave balances" page
+under Team (`/team/leave-balances`) - one row per active employee, one
+column per leave type. Verified live: all 7 active employees listed with
+correct real balances (Atul Chaudhary correctly shows 0/1 Casual Leave,
+matching his own leave request seen earlier in System logs).
+
 ## Legacy feature-parity audit (2026-09-06)
 
 Full pass comparing hrmpulse.com's live admin nav (extracted directly from
