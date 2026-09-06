@@ -96,8 +96,8 @@ script's own success message):
 | Employee demographics | 41/41 | `hrm_employee.gender`/`marital_status`/`bgroup`/`religion`/`nationality` — see below |
 | Employee photos | 35/41 (6 have none in legacy either) | `hrm_employee.image`, downloaded + resized, self-hosted under `apps/web/public/avatars/` — see below |
 | Leave types | 3/3 | `hrm_leave_type` |
-| Leave requests | 176/176 | `hrm_leave_applied` |
-| Leave balances | 46 (computed) | derived from approved-request history, since legacy never had a balance table |
+| Leave requests | 176/176, +106 gap-fill (2026-09-06, see "Leave data gap-fill import" below) | `hrm_leave_applied`; the +106 came from a live scrape, not this dump |
+| Leave balances | 46 (computed), recomputed for 22 keys after the gap-fill | derived from approved-request history, since legacy never had a balance table |
 | Expense categories | 21/21 | `expense_categories` |
 | Expense claims | 79/98 | `employee_expenses` (19 skipped: `employee_id = NULL` in legacy itself) |
 | Salary structures | 14 | `salary_managment` |
@@ -727,6 +727,66 @@ there was never any real data in those legacy tables to lose.
 Everything else (attendance history, login/device logs, mismatch-attendance)
 is exactly as already documented in "Deliberately still not imported" above
 — no changes from this audit.
+
+## Leave data gap-fill import (2026-09-06)
+
+User asked to "check the old HRM and update the leaves of the active
+employees from there." Checked production directly first (not assumed):
+the original `import-legacy-phase2.ts` run (176/176 leave requests, see
+"Data migration" above) came from a point-in-time SQL dump, and
+hrmpulse.com kept accumulating real leave requests after that dump was
+taken - each active employee's newest *imported* request stopped well
+before hrmpulse.com's actual latest entries (e.g. Shivam Singhaniya:
+imported through 2025-08-21, legacy has him through 2026-08-11). Nothing
+was wrong with the original import; the gap is real activity that
+happened after it ran.
+
+No SQL/DB access to legacy's live database (binding rule, see top of this
+file), so instead of a fresh dump: forked a subagent to scrape
+hrmpulse.com's own "Leaves(Admin) → All Leaves" admin table directly
+(130 rows total, all employees, all time - DOM read via `javascript_tool`
+in chunks small enough to survive the tool's ~1KB per-call output
+truncation, not `get_page_text`, which silently ignored the open modal
+entirely and kept returning a different, smaller table on the same page).
+Wrote `apps/api/prisma/import-legacy-leaves-gap-fill.ts` to import from
+that scrape - idempotent via skip-if-duplicate per row (matched on
+employeeId + leaveTypeId + startDate + endDate + status) rather than
+phase-2's delete-and-rebuild (which would also wipe every other,
+including inactive, employee's already-correct data this script has no
+source for), then recomputes `LeaveBalance.usedDays` from all matching
+rows (existing + new) so it's safe to re-run.
+
+**Data-quality decision, not a bug**: `totalDays` is computed from V2's
+own day-type/leave-type semantics (0.5 for any half-day variant, 0 for
+"Short Leave", inclusive day-count for full-day), not trusted from
+legacy's own count - legacy records "1" for every half-day row regardless
+of type, but `LeaveService.applyLeave()` always treats a half day as 0.5;
+importing legacy's literal count would have double-counted half-day usage
+relative to how the live app itself accounts for it.
+
+**Ran against production**: 106 requests imported across the 7 active
+employees (Aditya Srivastava 27, Shivam Singhaniya 26, Sonu Yadav 16,
+Nikita 16, Sumit Kumar 16, Ritika Rajan 9, Atul Chaudhary 0 - he has no
+legacy history at all, only his own recent self-service submission), 4
+already-present duplicates correctly skipped, 20 rows for inactive
+employees correctly left out of scope. Verified live on `/team/leave-balances`
+and its per-employee ledger drill-down.
+
+**Worth flagging, not fixing silently**: `Casual Leave (1 Day)` and
+`Loss of Pay` both now show deeply negative `remainingDays` for most
+active employees (e.g. Aditya Srivastava: -13 combined balance as of
+September). This is real - legacy's own data shows these types were
+routinely used far beyond their configured `LeaveType.defaultAnnualDays`
+(1 for Casual Leave, 0 for Loss of Pay - the latter is presumably
+deliberately uncapped, being unpaid), not an import error. One legacy row
+for Aditya Srivastava (2025-06-09 to 2025-06-17, "Casual Leave (1 Day)",
+Full Day, Approved) is a genuine 9-day span under a type nominally named
+"(1 Day)" - legacy's own `no_of_days` field agrees (9), so this isn't a
+parsing artifact either, just a type name that evidently wasn't enforced
+as a hard cap in the legacy system. If the negative balances should
+display differently (e.g. clamped at 0, or the allocation policy revised),
+that's a product decision for the user, not something this import should
+have silently papered over.
 
 ## Frontend (`apps/web`)
 
