@@ -810,8 +810,11 @@ since that's the whole of what was specified; if the policy needs to vary
 by employee or change over time, it needs a real settings row instead of
 constants in `payroll.service.ts`.
 
-Not yet verified against a real employee/period with actual LATE days on
-production — do that before treating this as done.
+Verified live on production: Shivam Singhaniya, January 2025 (7 real
+`LATE` attendance days that month) correctly showed "7 late arrivals in
+January (3 free) · 4 × ₹100 suggested" and pre-filled ₹400 in the Late
+Deduction field; September 2026 (0 late days) correctly showed 0 with no
+false suggestion. Dialog closed without generating either test payslip.
 
 ## Frontend (`apps/web`)
 
