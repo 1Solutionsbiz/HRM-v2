@@ -7,13 +7,12 @@ what hasn't been started — without re-deriving it from git history.
 **Current phase:** Live in production. Backend and frontend are both deployed
 on Hostinger and connected to a real MySQL database; real legacy-HRM data has
 been imported; most of the frontend is wired to the real API — see the
-"Frontend ↔ API wiring" table below for the current per-screen status (8
-screens — Dashboard, Performance, Announcements, Notifications, Settings,
-Onboarding, Resignations, Payroll reports — are still on mock data as of
-2026-09-06, corrected here after the previous claim of "every module is done"
-was found to be stale). See also "Legacy feature-parity audit (2026-09-06)"
-for what's still missing relative to the legacy hrmpulse.com system and what
-legacy data is genuinely still unmigrated.
+"Frontend ↔ API wiring" table below for the current per-screen status.
+**Dashboard is now wired** (2026-09-06, see below) — 7 screens remain on
+mock data: Performance, Announcements, Notifications, Settings, Onboarding,
+Resignations, Payroll reports. See also "Legacy feature-parity audit
+(2026-09-06)" for what's still missing relative to the legacy hrmpulse.com
+system and what legacy data is genuinely still unmigrated.
 
 **⚠️ Superseded throughout this file:** every module note below that says
 "still nothing against real MySQL" / "no live database in this environment"
@@ -301,11 +300,22 @@ on `hrm.1solutions.biz` against real production data, not just typechecked.
 | Salary management | ✓ wired |
 | Admin (Roles & permissions, Company settings, System logs) | ✓ wired |
 | Profile (self-service view + edit) | ✓ wired |
-| Dashboard, Performance, Announcements, Notifications, Settings, Onboarding, Resignations, Payroll reports | ○ still mock — not touched this pass |
+| Dashboard (Admin/HR/Manager variants) | ✓ wired — see caveat below |
+| Performance, Announcements, Notifications, Settings, Onboarding, Resignations, Payroll reports | ○ still mock — not touched this pass |
 
 Every "✓ wired" row above has been clicked through live on `hrm.1solutions.biz`
 against real production data, not just typechecked — see the 2026-09-06
-session notes below for what was found and fixed along the way.
+session notes below for what was found and fixed along the way. **One
+exception**: Dashboard's HR and Manager variants were verified by typecheck/
+lint/build plus direct API-level checks against production (the two
+genuinely new pieces — `/employees/birthdays` and `/announcements` — were
+hit directly through an authenticated session and returned correct real
+data), but not clicked through in the browser as an HR or Manager user,
+because **no account currently holds either role** (`/dashboard`'s own
+"Roles distribution" widget shows Manager: 0, HR: 0 in production as of
+2026-09-06) — there's no one to log in as. The Admin variant, which shares
+the same underlying real endpoints, was confirmed live. Re-verify HR/
+Manager in-browser once a real account holds either role.
 
 **Bug found and fixed while wiring Employees**: `EmployeesService`'s
 `findOne()` (`GET /employees/:id`) was missing `user` (so no work email at
@@ -397,6 +407,46 @@ Payslips admin search was fixed to include past employees, not just active
 ones. Full detail on each is in "Data migration" above and the dedicated
 notes right below it (search this file for "2026-09-06" — several distinct
 same-day entries, added as each fix landed rather than batched).
+
+**Still later the same day: Dashboard wired** (user asked to work through
+the remaining 8 mock screens one at a time, starting here). Turned out to
+be three separate role-specific components (`admin-dashboard.tsx`,
+`hr-dashboard.tsx`, `manager-dashboard.tsx`), not one screen — and Admin's
+was **already fully real** (`getEmployees` + `lib/api/admin`'s endpoints),
+mislabeled mock only because the other two dragged the whole row down in
+the wiring table. HR and Manager were both 100% mock/sample data; both now
+compute every widget from real endpoints — reusing `getCompanyLeaveRequests`/
+`getCompanyExpenseClaims`/`decideLeaveRequest`/`decideExpenseClaim` (the
+same ones Team approvals already uses) and `getCompanyAttendance` for
+headcount/attendance stats. Two things didn't already exist and had to be
+built:
+- `GET /employees/birthdays` — a new, narrow endpoint. `Employee.dateOfBirth`
+  is deliberately excluded from `findAll()`'s directory select (that
+  method's own comment: avoids bulk-exposing it company-wide to every
+  `employee:manage` holder), so the "Upcoming birthdays" widget needed its
+  own endpoint returning only name/department/next-occurrence, not full
+  records. Verified against production: correctly finds Sonu Yadav's
+  birthday 2 days out, matching hrmpulse.com's own dashboard ("Upcoming
+  Birthday: Sonu Yadav on September 8") seen earlier in this same session.
+- `apps/web/src/lib/api/announcements.ts` — the Announcements backend
+  module has existed since module 11 was built; nothing in the frontend had
+  ever called it. Verified directly against production: 2 real
+  announcements, correct per-viewer `read` state.
+
+Manager dashboard's stats and weekly attendance chart are scoped to actual
+direct reports (`Employee.manager`), not company-wide — computed from 5 real
+per-day `getCompanyAttendance` calls for the current work week. "Open
+tickets" (no Tickets module exists — see the feature-parity audit above)
+was replaced with "On leave today".
+
+**Verification caveat**: HR and Manager variants were not clicked through
+in-browser as an HR or Manager user — production currently has **zero**
+accounts holding either role (confirmed via the Admin dashboard's own Roles
+distribution widget: Manager 0, HR 0), so there's no one to log in as.
+Verified instead via full typecheck/lint/build and by hitting the two new
+endpoints directly through an authenticated session (shown above). Admin's
+dashboard, which shares the same underlying endpoints, was confirmed live.
+Re-verify HR/Manager in-browser once a real account holds either role.
 
 ## Legacy feature-parity audit (2026-09-06)
 
@@ -1229,9 +1279,10 @@ switcher:**
 
 ## Not started
 
-- ○ Frontend wiring for Dashboard, Performance, Announcements, Notifications,
-  Settings, Onboarding, Resignations, Payroll reports — everything else
-  (see "Frontend ↔ API wiring" above) is wired as of 2026-09-06.
+- ○ Frontend wiring for Performance, Announcements, Notifications, Settings,
+  Onboarding, Resignations, Payroll reports — everything else (see
+  "Frontend ↔ API wiring" above, including Dashboard as of 2026-09-06) is
+  wired.
 - ○ Assets and Complaints backend modules (12/13) — Assets now has a schema
   and passive read access via Employees; neither has real CRUD endpoints.
 - ○ `hrm_attandance_machine_detail` import (the Sep–Dec 2024 bulk, predating
