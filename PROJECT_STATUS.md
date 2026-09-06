@@ -89,7 +89,7 @@ script's own success message):
 | Bank details (encrypted) | 25/29 | `hrm_bank_detail` (4 skipped: empty/corrupted rows or `emp_id=0`) |
 | Emergency contacts | 20/24 (all contacts, not one-per-employee — see below) | `hrm_employee_family`, **not** `hrm_employee_emergency_contact` (that table is empty/unused in the live legacy app — confirmed by comparing against what the legacy profile page actually renders). 4 skipped: reference legacy employee ids (11, 20) that no longer exist anywhere in `hrm_employee` — same orphaned-FK class as the 5 skipped education records above |
 | Employee demographics | 41/41 | `hrm_employee.gender`/`marital_status`/`bgroup`/`religion`/`nationality` — see below |
-| Employee photos | 35/41 (6 have none in legacy either) | `hrm_employee.image`, hotlinked to hrmpulse.com — see below |
+| Employee photos | 35/41 (6 have none in legacy either) | `hrm_employee.image`, downloaded + resized, self-hosted under `apps/web/public/avatars/` — see below |
 | Leave types | 3/3 | `hrm_leave_type` |
 | Leave requests | 176/176 | `hrm_leave_applied` |
 | Leave balances | 46 (computed) | derived from approved-request history, since legacy never had a balance table |
@@ -163,21 +163,27 @@ import.
 **Employee profile photos (2026-09-06)**: `Employee.avatarUrl` has existed
 in the schema since the personal-details migration but nothing ever wrote
 to it, and no frontend page ever rendered shadcn's `AvatarImage` — every
-avatar everywhere was initials-only, regardless of data. `backfill-
-employee-avatars.ts` set `avatarUrl` for the 35/41 employees who have a
-legacy `hrm_employee.image` filename, pointing at
-`https://hrmpulse.com/upload-image/<filename>` — confirmed live (not
-guessed) by reading the real `<img src>` on hrmpulse.com's own rendered
-profile pages. **This hotlinks to the legacy host rather than downloading
-and re-hosting the files**: V2 has no file storage provider wired (see
-"Not started" below), and several images are multi-megabyte (Atul
-Chaudhary's is 2.2MB) — too large to embed as a data URI on every
-employee-list row. Real dependency on hrmpulse.com staying reachable; if it
-goes away, every photo breaks until this is redone against real storage.
-`AvatarImage` (with a fallback to initials on load failure, Radix's default
-behavior) was wired into the screens with real employee data: Employees
-list + detail header, Team attendance roster + its employee picker
-(shared with Payroll payslips), Profile, and the topbar user menu.
+avatar everywhere was initials-only, regardless of data. `AvatarImage`
+(with a fallback to initials on load failure, Radix's default behavior)
+was wired into the screens with real employee data: Employees list +
+detail header, Team attendance roster + its employee picker (shared with
+Payroll payslips), Profile, and the topbar user menu.
+
+First pass set `avatarUrl` to a hotlinked `https://hrmpulse.com/upload-
+image/<filename>` URL for the 35/41 employees who have a legacy
+`hrm_employee.image` filename — a real dependency on the legacy host
+staying reachable, which is exactly the "no file storage" gap this project
+already tracked. **Fixed the same day**: `apps/web/download-avatars.mjs`
+(one-off, deleted after running) downloaded each of the 35 photos from
+hrmpulse.com, resized to a 256×256 JPEG thumbnail via `sharp` (already a
+transitive Next.js dependency — no new package needed), and saved them to
+`apps/web/public/avatars/<employeeCode>.jpg` — 35 files, 484KB total (down
+from several multi-megabyte originals, Atul Chaudhary's was 2.2MB).
+Checked into the web app's own `public/` folder, these deploy and persist
+exactly like any other static asset: no file-storage provider, no
+dependency on hrmpulse.com, survives every redeploy since they're in git.
+`backfill-employee-avatars.ts` now points `avatarUrl` at that same-origin
+path (`/avatars/<employeeCode>.jpg`) instead of the hotlink.
 Leave/Expense approvals, Payroll salary, Resignations, Onboarding, and
 Dashboard were deliberately left untouched — several are still mock data
 (see the wiring table above) and the rest weren't asked for; ask if photos
@@ -385,7 +391,8 @@ and now supports the multiple contacts real employees actually have,
 employee demographics (gender/nationality/religion/maritalStatus/
 bloodGroup) were backfilled for all 41 employees (schema existed, nothing
 had ever written to it), employee profile photos are now backfilled and
-rendered (hotlinked to hrmpulse.com, no file storage wired), and the
+rendered (self-hosted under `apps/web/public/avatars/`, not hotlinked —
+an initial hotlinked version was corrected the same day), and the
 Payslips admin search was fixed to include past employees, not just active
 ones. Full detail on each is in "Data migration" above and the dedicated
 notes right below it (search this file for "2026-09-06" — several distinct
@@ -1233,10 +1240,13 @@ switcher:**
   disambiguation first, not a "hasn't gotten to it" gap.
 - ○ Real file storage for documents/receipts/payslip PDFs — no provider
   wired anywhere; every "file" field in the schema is a URL string with
-  nothing populating it from a real upload yet. Employee photos are the one
-  exception with real URLs today, but only by hotlinking to hrmpulse.com
-  (see "Employee profile photos" in Data migration) — a stopgap, not a
-  real fix for this gap.
+  nothing populating it from a real upload yet. Employee photos are no
+  longer part of this gap (self-hosted as static files under `apps/web/
+  public/avatars/`, see "Employee profile photos" in Data migration) — that
+  worked because it's a small, fixed set of 35 images touched once, not
+  ongoing user uploads. Documents/receipts are actual user uploads that
+  grow over time and still need a real provider (S3/R2/etc.) — checking
+  those into git the same way would not scale.
 - ○ Workspace integration (whatever external system(s) this needs to talk to
   — not yet scoped)
 - ○ **Weekly attendance email report** (explicitly requested 2026-09-06,
