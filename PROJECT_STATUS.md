@@ -595,6 +595,18 @@ expand to show the real requests (date, reason) behind that month's total.
 Verified live on Atul Chaudhary: Sep correctly shows 1 taken / 0 balance,
 expanding it shows the real "7 Sept 2026 · family · 1d" request.
 
+**Follow-up same day**: asked for the same "click a name, see leave history"
+drill-down on `/team/leave-balances` too, with month + year selects. Reused
+the already-fetched `GET /leave/requests/company` (same source
+`/team/leave-approvals` uses) - no new endpoint - filtered client-side by
+employee + selected month/year in a new `EmployeeLeaveHistorySheet`. Shows
+every status (not just approved) since this is framed as history, not
+usage accounting. Year options are the years that actually have a request
+for that employee, plus the current year - not a guessed range. Verified
+live: Atul Chaudhary's Sept 2026 shows his real Approved Casual Leave
+("7 Sept 2026 · 1d · family"); switching to August correctly shows the
+empty state.
+
 ## Legacy feature-parity audit (2026-09-06)
 
 Full pass comparing hrmpulse.com's live admin nav (extracted directly from
