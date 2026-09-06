@@ -514,6 +514,20 @@ correctly renders a real HALF_DAY (Sep 5, an actual short check-in) and a
 real ON_LEAVE day (Sep 7, Atul's own pending leave request) alongside
 synthesized WEEKEND/ABSENT days.
 
+**Follow-up same day**: user shared a legacy hrmpulse.com screenshot showing
+Payslips as a card grid (one card per document: folder icon, type label,
+month/year, download icon) instead of a plain list, and asked for the same
+treatment on both the self-service `/payslips` page and the admin
+per-employee "Payslip history" view at `/payroll/payslips` (opened by
+picking an employee there). Built one shared `PayslipCardGrid` component
+(search box + card grid, click a card to open the existing detail sheet)
+used by both. The legacy screenshot's grid actually paired a "Salary" card
+with a "Tax" card per month - asked the user, confirmed scoping to Salary
+only, since V2 has no separate tax-document type or generation logic (would
+be new scope, not a redesign). Verified live: picked Kanchan Gupta in the
+admin view, saw 3 real Salary cards (Jul/Jun/May 2026), opened one, and the
+existing detail sheet + PDF download still worked unchanged.
+
 **Deploy note for future sessions**: Hostinger's CDN (`hcdn`) caches pages
 independently of whether the underlying Node app redeployed — after a
 push, the app itself may already be running the new build while
