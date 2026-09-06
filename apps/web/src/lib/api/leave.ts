@@ -54,6 +54,33 @@ export function getCompanyLeaveBalances(): Promise<CompanyLeaveBalanceRow[]> {
   return apiFetch<CompanyLeaveBalanceRow[]>("/leave/employees/company/balances");
 }
 
+export interface LeaveLedgerRequest {
+  id: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason: string;
+}
+
+export interface LeaveLedgerMonth {
+  month: number;
+  leavesTaken: number;
+  balance: number;
+  requests: LeaveLedgerRequest[];
+}
+
+export interface LeaveLedger extends LeaveBalance {
+  months: LeaveLedgerMonth[];
+}
+
+export function getLeaveLedger(year?: number): Promise<LeaveLedger[]> {
+  return apiFetch<LeaveLedger[]>(`/leave/ledger${year ? `?year=${year}` : ""}`);
+}
+
+export function getEmployeeLeaveLedger(employeeId: string, year?: number): Promise<LeaveLedger[]> {
+  return apiFetch<LeaveLedger[]>(`/leave/employees/${employeeId}/ledger${year ? `?year=${year}` : ""}`);
+}
+
 export interface LeaveRequest {
   id: string;
   code: string;

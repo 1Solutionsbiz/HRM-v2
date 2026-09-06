@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
@@ -18,6 +18,14 @@ export class LeaveController {
   @Get('balances')
   getBalances(@CurrentUser() actor: AuthContext) {
     return this.leaveService.getBalancesForUser(actor.userId);
+  }
+
+  @Get('ledger')
+  getLedger(@CurrentUser() actor: AuthContext, @Query('year') year?: string) {
+    return this.leaveService.getLedgerForUser(
+      actor.userId,
+      year ? Number(year) : new Date().getFullYear(),
+    );
   }
 
   @Get('requests')
@@ -53,6 +61,15 @@ export class LeaveController {
   @RequirePermissions('leave:approve')
   getEmployeeBalances(@Param('id') id: string) {
     return this.leaveService.getBalancesForEmployee(id);
+  }
+
+  @Get('employees/:id/ledger')
+  @RequirePermissions('leave:approve')
+  getEmployeeLedger(@Param('id') id: string, @Query('year') year?: string) {
+    return this.leaveService.getLedgerForEmployee(
+      id,
+      year ? Number(year) : new Date().getFullYear(),
+    );
   }
 
   @Patch('requests/:id/decide')

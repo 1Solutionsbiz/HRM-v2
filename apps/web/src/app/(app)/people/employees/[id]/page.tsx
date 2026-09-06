@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/employees";
 import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from "@/lib/api/documents";
 import { getEmployeeLeaveBalances } from "@/lib/api/leave";
+import { LeaveLedgerSheet } from "@/components/hrm/leave-ledger-sheet";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -126,6 +127,7 @@ export default function EmployeeDetailPage() {
 
   const [deciding, setDeciding] = React.useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = React.useState<DocumentChecklistItem | null>(null);
+  const [ledgerLeaveTypeId, setLedgerLeaveTypeId] = React.useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = React.useState("");
   const [rejectError, setRejectError] = React.useState<string | null>(null);
   const [rejectSaving, setRejectSaving] = React.useState(false);
@@ -435,7 +437,13 @@ export default function EmployeeDetailPage() {
                             return (
                               <Card key={b.leaveTypeId}>
                                 <CardContent className="space-y-2 pt-6">
-                                  <p className="text-sm font-medium">{b.leaveTypeName}</p>
+                                  <button
+                                    type="button"
+                                    className="text-sm font-medium hover:underline"
+                                    onClick={() => setLedgerLeaveTypeId(b.leaveTypeId)}
+                                  >
+                                    {b.leaveTypeName}
+                                  </button>
                                   <p className="text-2xl font-semibold tabular-nums">
                                     {b.remainingDays}
                                     <span className="text-muted-foreground ml-1 text-sm font-normal">
@@ -495,6 +503,16 @@ export default function EmployeeDetailPage() {
           </>
         )}
       </AsyncSection>
+
+      {employee && ledgerLeaveTypeId && (
+        <LeaveLedgerSheet
+          employeeId={params.id}
+          employeeName={employeeFullName(employee)}
+          employeeCode={employee.employeeCode}
+          leaveTypeId={ledgerLeaveTypeId}
+          onOpenChange={(open) => !open && setLedgerLeaveTypeId(null)}
+        />
+      )}
 
       <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
         <DialogContent>

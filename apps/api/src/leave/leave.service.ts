@@ -42,6 +42,11 @@ export class LeaveService {
     return this.getBalancesForEmployee(employeeId);
   }
 
+  async getLedgerForUser(userId: string, year: number) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.getLedgerForEmployee(employeeId, year);
+  }
+
   async getBalancesForEmployee(employeeId: string) {
     const year = new Date().getFullYear();
 
@@ -102,6 +107,78 @@ export class LeaveService {
         year,
       ),
     }));
+  }
+
+  /**
+   * Per leave type, a running month-by-month view of real approved usage -
+   * "leaves taken" is the sum of APPROVED LeaveRequest.totalDays whose
+   * startDate falls in that month (the same rows that drive
+   * LeaveBalance.usedDays via recordApprovedUsage, so the two stay
+   * consistent), and "balance" is the running remaining total through that
+   * month. Only synthesizes real data - no monthly accrual schedule exists
+   * (see toBalanceRows' own comment), so months only go up to the current
+   * month for the current year (there's nothing to show for a month that
+   * hasn't happened) and all 12 for a past year.
+   */
+  async getLedgerForEmployee(employeeId: string, year: number) {
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
+
+    const [leaveTypes, balances, requests] = await Promise.all([
+      this.prisma.leaveType.findMany({ where: { isActive: true } }),
+      this.prisma.leaveBalance.findMany({ where: { employeeId, year } }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          employeeId,
+          status: 'APPROVED',
+          startDate: { gte: yearStart, lt: yearEnd },
+        },
+        orderBy: { startDate: 'asc' },
+      }),
+    ]);
+
+    const balanceRows = this.toBalanceRows(leaveTypes, balances, year);
+    const requestsByType = new Map<string, typeof requests>();
+    for (const request of requests) {
+      const list = requestsByType.get(request.leaveTypeId) ?? [];
+      list.push(request);
+      requestsByType.set(request.leaveTypeId, list);
+    }
+
+    const now = new Date();
+    const lastMonth = year === now.getUTCFullYear() ? now.getUTCMonth() + 1 : 12;
+
+    return balanceRows.map((row) => {
+      const typeRequests = requestsByType.get(row.leaveTypeId) ?? [];
+      const totalDays = row.allocatedDays + row.carriedOverDays;
+      let cumulativeUsed = 0;
+
+      const months = Array.from({ length: lastMonth }, (_, i) => {
+        const month = i + 1;
+        const monthRequests = typeRequests.filter(
+          (r) => r.startDate.getUTCMonth() + 1 === month,
+        );
+        const leavesTaken = monthRequests.reduce(
+          (sum, r) => sum + r.totalDays.toNumber(),
+          0,
+        );
+        cumulativeUsed += leavesTaken;
+        return {
+          month,
+          leavesTaken,
+          balance: totalDays - cumulativeUsed,
+          requests: monthRequests.map((r) => ({
+            id: r.id,
+            startDate: r.startDate,
+            endDate: r.endDate,
+            totalDays: r.totalDays.toNumber(),
+            reason: r.reason,
+          })),
+        };
+      });
+
+      return { ...row, months };
+    });
   }
 
   // A LeaveBalance row is only created for real on first approval (see

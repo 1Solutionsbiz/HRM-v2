@@ -146,6 +146,31 @@ export function employeeInitials(e: { firstName: string; lastName: string }): st
   return `${a}${b}`.toUpperCase() || "?";
 }
 
+/**
+ * `dateOfJoining` is already in the general directory select (no privacy
+ * restriction like `dateOfBirth` - see EmployeesService.findAll()'s own
+ * comment), so unlike upcoming birthdays this doesn't need its own narrow
+ * backend endpoint; computed client-side from data already fetched.
+ * Mirrors the backend's UTC-based next-occurrence math for
+ * getUpcomingBirthdays so the two "upcoming" computations behave
+ * identically (leap-year Feb 29, year-boundary wraparound).
+ */
+export function nextWorkAnniversary(dateOfJoining: string, today: Date = new Date()) {
+  const doj = new Date(dateOfJoining);
+  const todayUtcMidnight = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  let next = Date.UTC(today.getUTCFullYear(), doj.getUTCMonth(), doj.getUTCDate());
+  let years = today.getUTCFullYear() - doj.getUTCFullYear();
+  if (next < todayUtcMidnight) {
+    next = Date.UTC(today.getUTCFullYear() + 1, doj.getUTCMonth(), doj.getUTCDate());
+    years += 1;
+  }
+  return {
+    nextAnniversary: new Date(next),
+    daysUntil: Math.round((next - todayUtcMidnight) / 86_400_000),
+    years,
+  };
+}
+
 /** Backend enums are SCREAMING_CASE; every status/enum badge in the UI expects Title Case. */
 export function titleCase(value: string): string {
   return value
