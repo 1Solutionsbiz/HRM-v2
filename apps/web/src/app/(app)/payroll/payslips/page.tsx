@@ -16,9 +16,11 @@ import {
   getEmployeePayslips,
   generatePayslip,
   markPayslipPaid,
+  getLateDeductionSuggestion,
   monthName,
   type Payslip,
   type PayslipLineItemInput,
+  type LateDeductionSuggestion,
 } from "@/lib/api/payroll";
 import { formatDate, formatINR } from "@/lib/format";
 import { downloadPayslipPdf } from "@/lib/payslip-pdf";
@@ -113,10 +115,29 @@ function GeneratePayslipDialog({
   );
   const [leaveDeduction, setLeaveDeduction] = React.useState("0");
   const [lateDeduction, setLateDeduction] = React.useState("0");
+  const [lateSuggestion, setLateSuggestion] = React.useState<LateDeductionSuggestion | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
   const grossTotal = earnings.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  React.useEffect(() => {
+    let ignore = false;
+    setLateSuggestion(null);
+    getLateDeductionSuggestion(employee.id, Number(periodMonth), Number(periodYear))
+      .then((suggestion) => {
+        if (ignore) return;
+        setLateSuggestion(suggestion);
+        setLateDeduction(String(suggestion.amount));
+      })
+      .catch(() => {
+        // Suggestion is a convenience, not a requirement - leave the field
+        // at whatever it already was and let HR enter it manually.
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [employee.id, periodMonth, periodYear]);
 
   async function handleGenerate() {
     setSaving(true);
@@ -251,6 +272,14 @@ function GeneratePayslipDialog({
                   onChange={(e) => setLateDeduction(e.target.value)}
                 />
               </div>
+              {lateSuggestion && (
+                <p className="text-muted-foreground text-xs">
+                  {lateSuggestion.lateCount} late arrival{lateSuggestion.lateCount === 1 ? "" : "s"} in{" "}
+                  {monthName(Number(periodMonth))} ({lateSuggestion.graceOccurrences} free) ·{" "}
+                  {lateSuggestion.chargeableCount} × {formatINR(lateSuggestion.ratePerOccurrence)} suggested — edit
+                  or clear if it&apos;s not right.
+                </p>
+              )}
               <p className="text-muted-foreground text-xs">Left at 0, a deduction won&apos;t appear on the payslip.</p>
             </div>
           </div>

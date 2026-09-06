@@ -174,6 +174,48 @@ export class PayrollService {
     };
   }
 
+  /**
+   * Suggests, never applies, a late-coming deduction — same "HR reviews
+   * every line item" rule as the rest of this module (see CreatePayslipDto).
+   * Policy: the first 3 LATE-marked attendance days in the period month are
+   * a grace allowance; each one after that costs a flat ₹100. Both numbers
+   * are a business rule stated directly by ops, not derived from anything
+   * in the schema, so they're not configurable yet — if that changes, this
+   * is the one place to add a setting.
+   */
+  async getLateDeductionSuggestion(
+    employeeId: string,
+    periodMonth: number,
+    periodYear: number,
+  ) {
+    await this.requireEmployee(employeeId);
+
+    const GRACE_OCCURRENCES = 3;
+    const RATE_PER_OCCURRENCE = 100;
+
+    const start = new Date(Date.UTC(periodYear, periodMonth - 1, 1));
+    const end = new Date(Date.UTC(periodYear, periodMonth, 1));
+
+    const lateCount = await this.prisma.attendanceDay.count({
+      where: {
+        employeeId,
+        status: 'LATE',
+        date: { gte: start, lt: end },
+      },
+    });
+
+    const chargeableCount = Math.max(0, lateCount - GRACE_OCCURRENCES);
+    const amount = chargeableCount * RATE_PER_OCCURRENCE;
+
+    return {
+      lateCount,
+      graceOccurrences: GRACE_OCCURRENCES,
+      chargeableCount,
+      ratePerOccurrence: RATE_PER_OCCURRENCE,
+      amount,
+    };
+  }
+
   async getMyPayslips(userId: string) {
     const employeeId = await this.requireEmployeeId(userId);
     return this.getEmployeePayslips(employeeId);

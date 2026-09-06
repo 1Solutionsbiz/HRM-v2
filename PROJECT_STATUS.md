@@ -788,6 +788,31 @@ display differently (e.g. clamped at 0, or the allocation policy revised),
 that's a product decision for the user, not something this import should
 have silently papered over.
 
+## Late-coming deduction suggestion (2026-09-06)
+
+User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a
+month (3 free, then ₹100 each — user picked this over a flat ₹100-once
+reading and over a no-grace-period reading when asked directly).
+
+The admin "Generate payslip" dialog already had a manual "Late Deduction"
+input defaulting to 0 with no computation behind it. Rather than
+auto-injecting the deduction (would be the first payslip line item ever
+computed instead of HR-entered — see `CreatePayslipDto`'s own comment on
+why that's deliberate), added `GET
+/payroll/employees/:employeeId/late-deduction-suggestion?periodMonth=&periodYear=`
+(`PayrollService.getLateDeductionSuggestion`) that counts
+`AttendanceDay` rows with `status: 'LATE'` in that month, and the frontend
+pre-fills the existing input with the computed amount plus a hint line
+("5 late arrivals in August (3 free) · 2 × ₹100 suggested") whenever the
+employee or period changes — HR can still edit or clear it like any other
+line item. Grace count (3) and rate (₹100) are hardcoded, not a setting,
+since that's the whole of what was specified; if the policy needs to vary
+by employee or change over time, it needs a real settings row instead of
+constants in `payroll.service.ts`.
+
+Not yet verified against a real employee/period with actual LATE days on
+production — do that before treating this as done.
+
 ## Frontend (`apps/web`)
 
 - ✓ Design system (shadcn/ui "Nova" preset, Tailwind v4)

@@ -131,6 +131,24 @@ export function markPayslipPaid(payslipId: string): Promise<Payslip> {
   return apiFetch<Payslip>(`/payroll/payslips/${payslipId}/mark-paid`, { method: "PATCH" });
 }
 
+export interface LateDeductionSuggestion {
+  lateCount: number;
+  graceOccurrences: number;
+  chargeableCount: number;
+  ratePerOccurrence: number;
+  amount: number;
+}
+
+export function getLateDeductionSuggestion(
+  employeeId: string,
+  periodMonth: number,
+  periodYear: number,
+): Promise<LateDeductionSuggestion> {
+  return apiFetch<LateDeductionSuggestion>(
+    `/payroll/employees/${employeeId}/late-deduction-suggestion?periodMonth=${periodMonth}&periodYear=${periodYear}`,
+  );
+}
+
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",

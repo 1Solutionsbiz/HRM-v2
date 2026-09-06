@@ -61,6 +61,20 @@ export class PayrollController {
     return this.payrollService.getEmployeePayslips(employeeId);
   }
 
+  @Get('employees/:employeeId/late-deduction-suggestion')
+  @RequirePermissions('payroll:manage')
+  getLateDeductionSuggestion(
+    @Param('employeeId') employeeId: string,
+    @Query('periodMonth') periodMonth: string,
+    @Query('periodYear') periodYear: string,
+  ) {
+    return this.payrollService.getLateDeductionSuggestion(
+      employeeId,
+      Number(periodMonth),
+      Number(periodYear),
+    );
+  }
+
   @Post('employees/:employeeId/payslips')
   @RequirePermissions('payroll:manage')
   generatePayslip(
