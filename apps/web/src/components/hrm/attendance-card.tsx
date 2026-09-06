@@ -2,20 +2,13 @@
 
 import * as React from "react";
 import { CheckCircle2, Clock, LogIn, LogOut } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { ErrorState } from "@/components/hrm/error-state";
 import { formatTime } from "@/lib/format";
-import { ApiError } from "@/lib/api-client";
-import {
-  checkIn as apiCheckIn,
-  checkOut as apiCheckOut,
-  getTodayAttendance,
-  type TodayAttendance,
-} from "@/lib/api/attendance";
+import { useAttendancePunch } from "@/lib/use-attendance-punch";
 
 function elapsedLabel(sinceIso: string, nowMs: number) {
   const minutes = Math.max(0, Math.floor((nowMs - new Date(sinceIso).getTime()) / 60000));
@@ -35,60 +28,8 @@ interface AttendanceCardProps {
 }
 
 export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
-  const [attendance, setAttendance] = React.useState<TodayAttendance | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<Error | null>(null);
-  const [pending, setPending] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [now, setNow] = React.useState(() => Date.now());
-
-  const load = React.useCallback(() => {
-    setLoading(true);
-    setError(null);
-    getTodayAttendance()
-      .then(setAttendance)
-      .catch(setError)
-      .finally(() => setLoading(false));
-  }, []);
-
-  React.useEffect(() => {
-    // Fetching from an external system (the API) on mount, not deriving
-    // state from props/state - the sanctioned effect use case.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
-
-  React.useEffect(() => {
-    if (attendance?.punchState !== "CHECKED_IN") return;
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, [attendance?.punchState]);
-
-  async function handleCheckIn() {
-    setPending(true);
-    try {
-      const result = await apiCheckIn();
-      setAttendance(result);
-      toast.success(`Checked in at ${formatTime(result.firstCheckInAt!)}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't check you in. Please try again.");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleCheckOut() {
-    setPending(true);
-    try {
-      const result = await apiCheckOut();
-      setAttendance(result);
-      toast.success(`Checked out at ${formatTime(result.lastCheckOutAt!)}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't check you out. Please try again.");
-    } finally {
-      setPending(false);
-    }
-  }
+  const { attendance, loading, error, pending, now, checkIn, checkOut, reload } = useAttendancePunch();
 
   if (loading) {
     return (
@@ -111,7 +52,7 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
           <ErrorState
             title="Couldn't load attendance"
             description={error?.message}
-            onRetry={load}
+            onRetry={reload}
           />
         </CardContent>
       </Card>
@@ -133,7 +74,7 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
                 Office hours: 9:30 AM - 6:30 PM
               </p>
             </div>
-            <Button onClick={handleCheckIn} disabled={pending}>
+            <Button onClick={checkIn} disabled={pending}>
               <LogIn />
               {pending ? "Checking in…" : "Check in"}
             </Button>
@@ -183,7 +124,7 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
         title="Check out for the day?"
         description={`You checked in at ${formatTime(attendance.firstCheckInAt ?? new Date().toISOString())}. This will stop your work timer for today.`}
         confirmLabel="Check out"
-        onConfirm={handleCheckOut}
+        onConfirm={checkOut}
       />
     </Card>
   );

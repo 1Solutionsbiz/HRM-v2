@@ -3,14 +3,15 @@
 import Link from "next/link";
 import {
   Building2,
+  Cake,
   ClipboardList,
   ScrollText,
   ShieldCheck,
   Users,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { formatRelativeTime } from "@/lib/format";
-import { getEmployees, titleCase } from "@/lib/api/employees";
+import { formatDateShort, formatRelativeTime } from "@/lib/format";
+import { getEmployees, getUpcomingBirthdays, employeeFullName, employeeInitials, titleCase } from "@/lib/api/employees";
 import {
   getAuditLogs,
   getCompanySettings,
@@ -25,8 +26,9 @@ import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { CardSkeleton, StatGridSkeleton } from "@/components/hrm/loading-state";
-import { PageHeader } from "@/components/hrm/page-header";
+import { AttendanceBanner } from "@/components/hrm/attendance-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ROLE_LABELS, ROLES } from "@/types/role";
 
 function WidgetHeader({
@@ -62,10 +64,13 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
   const resignations = useAsync(getCompanyResignations);
   const leaveRequests = useAsync(getCompanyLeaveRequests);
   const expenseClaims = useAsync(getCompanyExpenseClaims);
+  const birthdays = useAsync(getUpcomingBirthdays);
 
+  const activeEmployees = (employees.data ?? []).filter((e) => e.status === "ACTIVE");
+  const activeEmployeeIds = new Set(activeEmployees.map((e) => e.id));
   const roleCounts = ROLES.map((r) => ({
     role: r,
-    count: (roles.data ?? []).filter((row) => row.role === r).length,
+    count: (roles.data ?? []).filter((row) => row.role === r && activeEmployeeIds.has(row.employeeId)).length,
   }));
   const maxCount = Math.max(1, ...roleCounts.map((r) => r.count));
   const activeRoleCount = roleCounts.filter((r) => r.count > 0).length;
@@ -79,16 +84,13 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Good to see you, ${firstName}`}
-        description="System Administrator"
-      />
+      <AttendanceBanner firstName={firstName} description="System Administrator" />
 
       {statsLoading ? (
         <StatGridSkeleton count={4} />
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard label="Total employees" value={String((employees.data ?? []).length)} icon={Users} tone="teal" />
+          <StatCard label="Total employees" value={String(activeEmployees.length)} icon={Users} tone="teal" />
           <StatCard label="Active roles" value={String(activeRoleCount)} icon={ShieldCheck} tone="violet" />
           <StatCard label="Pending approvals" value={String(pendingApprovals)} icon={ClipboardList} tone="warning" />
           <StatCard label="Departments" value={String((departments.data ?? []).length)} icon={Building2} tone="success" />
@@ -183,6 +185,39 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
                     <dd className="truncate font-medium">{profile.data.timezone}</dd>
                   </div>
                 </dl>
+              )}
+            </AsyncSection>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <WidgetHeader title="Highlights" icon={Cake} />
+          <CardContent>
+            <AsyncSection
+              loading={birthdays.loading}
+              error={birthdays.error}
+              onRetry={birthdays.refetch}
+              loadingFallback={<CardSkeleton lines={3} />}
+            >
+              {(birthdays.data ?? []).length === 0 ? (
+                <EmptyState size="sm" icon={Cake} title="No birthdays in the next 30 days" />
+              ) : (
+                <ul className="space-y-3">
+                  {(birthdays.data ?? []).map((b) => (
+                    <li key={b.id} className="flex items-center gap-2.5">
+                      <Avatar className="size-7 shrink-0">
+                        <AvatarFallback className="text-[10px]">{employeeInitials(b)}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium">{employeeFullName(b)}</p>
+                        <p className="text-muted-foreground truncate text-[11px]">{b.department?.name ?? "—"}</p>
+                      </div>
+                      <span className="text-muted-foreground shrink-0 text-[11px]">
+                        {formatDateShort(b.nextBirthday)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </AsyncSection>
           </CardContent>

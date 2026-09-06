@@ -19,9 +19,11 @@ import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import { getMyDaySummary, getAnnouncements } from "@/lib/mock/mock-api";
+import { getLeaveBalances } from "@/lib/api/leave";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatCard } from "@/components/hrm/stat-card";
 import { AttendanceCard } from "@/components/hrm/attendance-card";
+import { AttendanceCalendarCard } from "@/components/hrm/attendance-calendar-card";
 import { QuickAction } from "@/components/hrm/quick-action";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { StatGridSkeleton, CardSkeleton } from "@/components/hrm/loading-state";
@@ -46,6 +48,7 @@ export default function MyDayPage() {
   const user = useAuthenticatedUser();
   const { data, loading, error, refetch } = useAsync(getMyDaySummary);
   const announcementsQuery = useAsync(getAnnouncements);
+  const leaveBalances = useAsync(getLeaveBalances);
   const [taskDone, setTaskDone] = React.useState<Record<string, boolean>>({});
 
   const today = formatDate(new Date().toISOString(), {
@@ -73,9 +76,12 @@ export default function MyDayPage() {
       </div>
 
       <AsyncSection
-        loading={loading}
-        error={error}
-        onRetry={refetch}
+        loading={loading || leaveBalances.loading}
+        error={error || leaveBalances.error}
+        onRetry={() => {
+          refetch();
+          leaveBalances.refetch();
+        }}
         loadingFallback={<StatGridSkeleton count={4} />}
         errorTitle="Couldn't load your overview"
       >
@@ -84,7 +90,7 @@ export default function MyDayPage() {
             <Link href="/leave">
               <StatCard
                 label="Leave balance"
-                value={`${data.leaveBalances.reduce((sum, b) => sum + (b.total - b.used), 0)} days`}
+                value={`${(leaveBalances.data ?? []).reduce((sum, b) => sum + b.remainingDays, 0)} days`}
                 icon={CalendarDays}
                 tone="teal"
                 description="Across all leave types"
@@ -120,6 +126,8 @@ export default function MyDayPage() {
           </div>
         )}
       </AsyncSection>
+
+      <AttendanceCalendarCard />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <AsyncSection
