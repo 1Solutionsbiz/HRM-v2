@@ -49,15 +49,79 @@ export class LeaveService {
       this.prisma.leaveType.findMany({ where: { isActive: true } }),
       this.prisma.leaveBalance.findMany({ where: { employeeId, year } }),
     ]);
+    return this.toBalanceRows(leaveTypes, balances, year);
+  }
+
+  /**
+   * One roster row per active employee (no argument to scope to a single
+   * one) so admins/managers/HR can see everyone's balance at a glance
+   * instead of opening each employee's profile - reuses the exact same
+   * per-type math as getBalancesForEmployee via toBalanceRows.
+   */
+  async getCompanyBalances() {
+    const year = new Date().getFullYear();
+
+    const [employees, leaveTypes, balances] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          employeeCode: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+          department: { select: { name: true } },
+          designation: { select: { title: true } },
+        },
+        orderBy: { firstName: 'asc' },
+      }),
+      this.prisma.leaveType.findMany({ where: { isActive: true } }),
+      this.prisma.leaveBalance.findMany({
+        where: { year, employee: { status: 'ACTIVE' } },
+      }),
+    ]);
+
+    const balancesByEmployee = new Map<string, typeof balances>();
+    for (const balance of balances) {
+      const list = balancesByEmployee.get(balance.employeeId) ?? [];
+      list.push(balance);
+      balancesByEmployee.set(balance.employeeId, list);
+    }
+
+    return employees.map((employee) => ({
+      employeeId: employee.id,
+      employeeCode: employee.employeeCode,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      avatarUrl: employee.avatarUrl,
+      department: employee.department,
+      designation: employee.designation,
+      balances: this.toBalanceRows(
+        leaveTypes,
+        balancesByEmployee.get(employee.id) ?? [],
+        year,
+      ),
+    }));
+  }
+
+  // A LeaveBalance row is only created for real on first approval (see
+  // decide()) — until then this synthesizes the view from
+  // LeaveType.defaultAnnualDays, which exists in the schema for exactly
+  // this. Never persisted here: allocating a real balance is an HR action,
+  // not a side effect of a GET.
+  private toBalanceRows(
+    leaveTypes: { id: string; key: string; name: string; defaultAnnualDays: Decimal }[],
+    balances: {
+      leaveTypeId: string;
+      allocatedDays: Decimal;
+      carriedOverDays: Decimal;
+      usedDays: Decimal;
+    }[],
+    year: number,
+  ) {
     const balanceByType = new Map(
       balances.map((balance) => [balance.leaveTypeId, balance]),
     );
-
-    // A LeaveBalance row is only created for real on first approval (see
-    // decide()) — until then this synthesizes the view from
-    // LeaveType.defaultAnnualDays, which exists in the schema for exactly
-    // this. Never persisted here: allocating a real balance is an HR
-    // action, not a side effect of a GET.
     return leaveTypes.map((leaveType) => {
       const balance = balanceByType.get(leaveType.id);
       const allocatedDays = balance

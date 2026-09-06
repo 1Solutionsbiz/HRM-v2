@@ -78,6 +78,12 @@ export const navGroups: NavGroup[] = [
         roles: ["manager", "hr", "admin"],
       },
       {
+        title: "Leave balances",
+        url: "/team/leave-balances",
+        icon: CalendarDays,
+        roles: ["manager", "hr", "admin"],
+      },
+      {
         title: "Expense approvals",
         url: "/team/expense-approvals",
         icon: BadgeIndianRupee,

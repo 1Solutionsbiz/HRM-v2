@@ -39,6 +39,21 @@ export function getEmployeeLeaveBalances(employeeId: string): Promise<LeaveBalan
   return apiFetch<LeaveBalance[]>(`/leave/employees/${employeeId}/balances`);
 }
 
+export interface CompanyLeaveBalanceRow {
+  employeeId: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  department: { name: string } | null;
+  designation: { title: string } | null;
+  balances: LeaveBalance[];
+}
+
+export function getCompanyLeaveBalances(): Promise<CompanyLeaveBalanceRow[]> {
+  return apiFetch<CompanyLeaveBalanceRow[]>("/leave/employees/company/balances");
+}
+
 export interface LeaveRequest {
   id: string;
   code: string;

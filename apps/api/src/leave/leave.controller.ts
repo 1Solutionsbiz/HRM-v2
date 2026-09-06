@@ -41,6 +41,14 @@ export class LeaveController {
     return this.leaveService.getCompanyRequests();
   }
 
+  // Before employees/:id/balances so Nest doesn't match "company" as a
+  // literal employee id - same reasoning as /employees/me elsewhere.
+  @Get('employees/company/balances')
+  @RequirePermissions('leave:approve')
+  getCompanyBalances() {
+    return this.leaveService.getCompanyBalances();
+  }
+
   @Get('employees/:id/balances')
   @RequirePermissions('leave:approve')
   getEmployeeBalances(@Param('id') id: string) {
