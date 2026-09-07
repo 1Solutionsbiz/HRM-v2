@@ -60,21 +60,21 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
   }
 
   return (
-    <Card className={attendance.punchState === "CHECKED_IN" ? "border-success/30" : undefined}>
+    <Card className="bg-primary text-primary-foreground ring-primary-foreground/10">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Today&apos;s attendance</CardTitle>
-        <Clock className="text-muted-foreground size-4" />
+        <CardTitle className="text-base text-primary-foreground">Today&apos;s attendance</CardTitle>
+        <Clock className="text-primary-foreground/70 size-4" />
       </CardHeader>
       <CardContent>
         {attendance.punchState === "NOT_CHECKED_IN" && (
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">You haven&apos;t checked in yet</p>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-primary-foreground/70 text-xs">
                 Office hours: 9:30 AM - 6:30 PM
               </p>
             </div>
-            <Button onClick={checkIn} disabled={pending}>
+            <Button variant="secondary" onClick={checkIn} disabled={pending}>
               <LogIn />
               {pending ? "Checking in…" : "Check in"}
             </Button>
@@ -83,16 +83,19 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
 
         {attendance.punchState === "CHECKED_IN" && (
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-success text-sm font-medium">
-                Checked in at {formatTime(attendance.firstCheckInAt!)}
-              </p>
-              <p className="text-muted-foreground text-xs">
-                Worked so far: {elapsedLabel(attendance.firstCheckInAt!, now)}
-              </p>
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">
+                  Checked in at {formatTime(attendance.firstCheckInAt!)}
+                </p>
+                <p className="text-primary-foreground/70 text-xs">
+                  Worked so far: {elapsedLabel(attendance.firstCheckInAt!, now)}
+                </p>
+              </div>
             </div>
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={() => setConfirmOpen(true)}
               disabled={pending}
             >
@@ -108,7 +111,7 @@ export function AttendanceCard({ variant = "full" }: AttendanceCardProps) {
               <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
               <div>
                 <p className="text-sm font-medium">Day complete</p>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-primary-foreground/70 text-xs">
                   {formatTime(attendance.firstCheckInAt!)} - {formatTime(attendance.lastCheckOutAt!)}
                   {variant === "full" && attendance.workedMinutes != null && ` · ${minutesLabel(attendance.workedMinutes)} worked`}
                 </p>
