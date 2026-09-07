@@ -829,6 +829,29 @@ already built against but had no frontend for. A confirm step warns about
 the forced sign-out before generating the password, which is then shown
 once in a copyable dialog.
 
+## Brand color rebrand (2026-09-07)
+
+User flagged the "Check in" button on the attendance card as the wrong
+blue and asked for the company logo blue (`#114171`). The color it was
+using (`#2a78d6`) is the app's single global `--primary` design token,
+reused as `--ring`/`--info`/`--chart-1`/`--sidebar-primary`/
+`--sidebar-ring` throughout `globals.css` - not a one-off on that card.
+Asked whether to fix just the card or rebrand the whole app; user chose
+the global fix. Replaced all 6 of those tokens (light mode) with
+`#114171` directly - white text on it is 10.4:1 contrast, no accessibility
+concern. Dark mode's equivalent set (`#3987e5`) couldn't just become
+`#114171` too - that exact navy is unreadably dark against the near-black
+dark background (`#0d0d0d`/`#1a1a19`). Computed a same-hue (210°),
+higher-lightness derivative (`#1c6bba`, HSL 210/74/42) instead of reusing
+generic sky-blue math, keeping it recognizably "the brand navy, lightened
+for dark mode" rather than an unrelated blue; also switched dark-mode
+`--primary-foreground`/`--sidebar-primary-foreground` from near-black text
+to white, since `#1c6bba` is dark enough that black text only hit 3.6:1
+(fails AA) while white hits 5.4:1. Left `--accent`/`--accent-foreground`
+(hover-tint tokens, not literal copies of the old primary) untouched in
+both modes - they already had independent, adequate contrast and weren't
+part of what the user pointed at.
+
 ## Late-coming deduction suggestion (2026-09-06)
 
 User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a
