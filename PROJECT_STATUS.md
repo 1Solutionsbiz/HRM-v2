@@ -967,6 +967,67 @@ specified orange (`#fe9700`, dark text - white failed contrast at 2.2:1),
 and `YesterdayAttendanceCard`'s In-time/Out-time now sit in a shared
 background box (previously only the label chip had one, not the value).
 
+## Ticket Management module (2026-09-07)
+
+New `tickets`/`ticket_comments` tables (migration
+`20260907055059_add_tickets`, purely additive) and a `TicketModule`
+(`apps/api/src/tickets`) so employees can raise a support ticket and HR
+can work it to resolution. Investigated hrmpulse.com's real `ticket.php`/
+`view-ticket.php` first (rule: verify legacy reference before building) -
+category dropdown (8 values: Salary or Payment, Leave or Attendance,
+Office Facilities, General Queries, Recruitment / Joining, Exit
+Formalities, Complaint, Mispunch) and priority (Low/Medium/High) are
+lifted from there as stable enum keys (`TicketCategory`,
+`TicketPriority`), not the legacy prose strings - the frontend holds a
+label map, same shape as `ATTENDANCE_BUCKET_LABEL`.
+
+**Status model diverges from the request on purpose.** The user asked
+for 3 states (Open/Under Progress/Closed, red/orange/green) but legacy
+has ~90 real tickets sitting in a 4th state, Resolved - dropping it would
+make that data unmappable if ever imported. Kept `TicketStatus` as
+OPEN/IN_PROGRESS/RESOLVED/CLOSED; the requested 3-color scheme still
+holds exactly as asked (`TICKET_STATUS_TONE` in `lib/api/tickets.ts`):
+OPEN=red, IN_PROGRESS=orange, RESOLVED and CLOSED both=green. This
+overrides `StatusBadge`'s automatic label→tone lookup, which would
+otherwise map "open" to info/blue and "closed" to neutral/gray - wrong
+for what was explicitly requested. Added a `destructive` tone to the
+shared `lib/tone.ts` (previously missing despite `--destructive` being a
+real design token) so the HR console's "Open" stat tile can be red too,
+not just the badge.
+
+New `ticket:manage` permission (granted to hr/admin only, seeded into
+production directly since `prisma/seed.ts` is local-dev-only - same
+"minimal seed" pattern as the original bootstrap) gates the HR console
+and status changes; `POST /tickets/:id/comments` is reachable by either
+the raising employee or anyone holding `ticket:manage` (no single
+`@RequirePermissions()` fits both), so that ownership check lives inside
+`TicketService.addComment` instead, comparing `actor.userId` against the
+ticket's `employee.userId`. `ticketCode` seeded as a new `SequenceCounter`
+row (`TKT-0001`, `TKT-0002`, ...).
+
+Frontend: `/support` (was a placeholder page already in the nav, now
+real) is the employee view - raise-ticket dialog, "My tickets" table,
+click a row to open `TicketDetailSheet` with the comment thread. New
+`/team/tickets` nav item (hr/admin only, same gating reasoning as "Team
+attendance") is the HR console - status-count tiles, a status-filtered
+tabbed table, the same detail sheet with a status-change dropdown added.
+`/my-day` gets a 5th quick-action tile ("Raise a ticket") and a small
+"My tickets" summary card (open/in-progress count, links to `/support`) -
+deliberately just a count, not another dashboard widget with content to
+maintain, per the "drop placeholder widgets" precedent from the last
+dashboard pass.
+
+Verified live end-to-end in the browser after deploy: raised a real
+ticket (TKT-0001, Mispunch category) as the signed-in admin, confirmed
+the red Open badge, moved it through Under Progress (orange) to Closed
+(green) from `/team/tickets`, posted comments from the HR side and
+confirmed they render with the poster's identity and relative time, and
+confirmed the employee-side `/support` list and the `/my-day` "My
+tickets" count both update to match. Not built: deleting a ticket (no
+route exists, matching how leave requests can only be cancelled, never
+hard-deleted) and importing the ~90 real historical legacy tickets -
+left as a follow-up, not started.
+
 ## Late-coming deduction suggestion (2026-09-06)
 
 User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a
