@@ -60,6 +60,9 @@ export interface LeaveLedgerRequest {
   endDate: string;
   totalDays: number;
   reason: string;
+  dayType: LeaveDayType;
+  /** Remaining balance for this leave type immediately after this request. */
+  balanceAfter: number;
 }
 
 export interface LeaveLedgerMonth {

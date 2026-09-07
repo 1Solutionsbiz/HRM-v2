@@ -158,22 +158,28 @@ export class LeaveService {
         const monthRequests = typeRequests.filter(
           (r) => r.startDate.getUTCMonth() + 1 === month,
         );
-        const leavesTaken = monthRequests.reduce(
-          (sum, r) => sum + r.totalDays.toNumber(),
-          0,
-        );
-        cumulativeUsed += leavesTaken;
-        return {
-          month,
-          leavesTaken,
-          balance: totalDays - cumulativeUsed,
-          requests: monthRequests.map((r) => ({
+        // balanceAfter is computed per-request, in the same chronological
+        // order the containing array is already sorted in (startDate asc,
+        // carried over from the top-level query) - cumulativeUsed threading
+        // through every month's loop this way keeps months[].balance
+        // identical to the pre-existing month-granularity computation.
+        const requestsWithBalance = monthRequests.map((r) => {
+          cumulativeUsed += r.totalDays.toNumber();
+          return {
             id: r.id,
             startDate: r.startDate,
             endDate: r.endDate,
             totalDays: r.totalDays.toNumber(),
             reason: r.reason,
-          })),
+            dayType: r.dayType,
+            balanceAfter: totalDays - cumulativeUsed,
+          };
+        });
+        return {
+          month,
+          leavesTaken: requestsWithBalance.reduce((sum, r) => sum + r.totalDays, 0),
+          balance: totalDays - cumulativeUsed,
+          requests: requestsWithBalance,
         };
       });
 

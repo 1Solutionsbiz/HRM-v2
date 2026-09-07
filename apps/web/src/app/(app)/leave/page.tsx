@@ -2,26 +2,42 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CalendarPlus, Ban } from "lucide-react";
 import { toast } from "sonner";
+import { CalendarPlus, Ban } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getLeaveBalances, getMyLeaveRequests, cancelLeaveRequest } from "@/lib/api/leave";
+import { getLeaveBalances, getLeaveLedger, getMyLeaveRequests, cancelLeaveRequest, type LeaveLedgerRequest } from "@/lib/api/leave";
 import { titleCase } from "@/lib/api/employees";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateShort } from "@/lib/format";
+import { monthName } from "@/lib/api/payroll";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
-import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { EmptyState } from "@/components/hrm/empty-state";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { CardSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+interface LedgerRow extends LeaveLedgerRequest {
+  month: number;
+}
 
 export default function LeavePage() {
   const balances = useAsync(getLeaveBalances);
+  const ledger = useAsync(() => getLeaveLedger());
   const requests = useAsync(getMyLeaveRequests);
   const [cancelId, setCancelId] = React.useState<string | null>(null);
+  const pendingRequests = (requests.data ?? []).filter((r) => r.status === "PENDING");
 
   async function handleCancel() {
     if (!cancelId) return;
@@ -34,7 +50,7 @@ export default function LeavePage() {
     <div className="space-y-6">
       <PageHeader
         title="Leave"
-        description="Your balance and leave request history."
+        description="Your balance and leave history."
         actions={
           <Button asChild size="sm">
             <Link href="/leave/apply">
@@ -82,21 +98,105 @@ export default function LeavePage() {
         )}
       </AsyncSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Your requests</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AsyncSection
-            loading={requests.loading}
-            error={requests.error}
-            onRetry={requests.refetch}
-            loadingFallback={<TableSkeleton rows={3} columns={4} />}
-          >
-            {(requests.data ?? []).length === 0 ? (
+      {pendingRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pending requests</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {pendingRequests.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {r.leaveType.name} · {titleCase(r.dayType)}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {r.startDate === r.endDate
+                        ? formatDate(r.startDate)
+                        : `${formatDate(r.startDate)} - ${formatDate(r.endDate)}`}{" "}
+                      · {r.totalDays} day{r.totalDays !== 1 ? "s" : ""} · {r.reason}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <StatusBadge status={titleCase(r.status)} />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Cancel request"
+                      onClick={() => setCancelId(r.id)}
+                    >
+                      <Ban className="text-muted-foreground size-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      <AsyncSection
+        loading={ledger.loading}
+        error={ledger.error}
+        onRetry={ledger.refetch}
+        loadingFallback={<TableSkeleton rows={5} columns={4} />}
+      >
+        {(ledger.data ?? [])
+          .filter((type) => type.months.some((m) => m.requests.length > 0))
+          .map((type) => {
+            const rows: LedgerRow[] = type.months
+              .flatMap((m) => m.requests.map((r) => ({ ...r, month: m.month })))
+              .sort((a, b) => b.startDate.localeCompare(a.startDate));
+
+            return (
+              <Card key={type.leaveTypeId}>
+                <CardHeader>
+                  <CardTitle className="flex items-baseline gap-2 text-base">
+                    {type.leaveTypeName}
+                    <span className="text-muted-foreground text-sm font-normal">
+                      Current balance: {type.remainingDays}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Leave month name</TableHead>
+                        <TableHead>Leave date</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                        <TableHead className="text-right">Type of leave</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell>{monthName(r.month)}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {r.startDate === r.endDate
+                              ? formatDateShort(r.startDate)
+                              : `${formatDateShort(r.startDate)} – ${formatDateShort(r.endDate)}`}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{r.balanceAfter}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="outline">{titleCase(r.dayType)}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+        {(ledger.data ?? []).every((type) => type.months.every((m) => m.requests.length === 0)) && (
+          <Card>
+            <CardContent className="pt-6">
               <EmptyState
                 icon={CalendarPlus}
-                title="No leave requests yet"
+                title="No leave taken yet this year"
                 description="Apply for leave and it will show up here."
                 action={
                   <Button size="sm" asChild>
@@ -104,41 +204,10 @@ export default function LeavePage() {
                   </Button>
                 }
               />
-            ) : (
-              <ul className="divide-y">
-                {(requests.data ?? []).map((r) => (
-                  <li key={r.id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {r.leaveType.name} · {titleCase(r.dayType)}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {r.startDate === r.endDate
-                          ? formatDate(r.startDate)
-                          : `${formatDate(r.startDate)} - ${formatDate(r.endDate)}`}{" "}
-                        · {r.totalDays} day{r.totalDays !== 1 ? "s" : ""} · {r.reason}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <StatusBadge status={titleCase(r.status)} />
-                      {r.status === "PENDING" && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Cancel request"
-                          onClick={() => setCancelId(r.id)}
-                        >
-                          <Ban className="text-muted-foreground size-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </AsyncSection>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
+      </AsyncSection>
 
       <ConfirmDialog
         open={!!cancelId}
