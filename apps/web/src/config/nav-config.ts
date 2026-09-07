@@ -8,6 +8,7 @@ import {
   Megaphone,
   Trophy,
   LifeBuoy,
+  Ticket,
   Users,
   UserPlus,
   UserMinus,
@@ -94,6 +95,14 @@ export const navGroups: NavGroup[] = [
         url: "/team/directory",
         icon: Users,
         roles: ["manager", "hr", "admin"],
+      },
+      {
+        title: "Ticket management",
+        url: "/team/tickets",
+        icon: Ticket,
+        // ticket:manage is only granted to hr/admin in seed.ts, same
+        // reasoning as "Team attendance" above.
+        roles: ["hr", "admin"],
       },
     ],
   },

@@ -1,4 +1,4 @@
-export type Tone = "primary" | "success" | "warning" | "violet" | "orange" | "teal";
+export type Tone = "primary" | "success" | "warning" | "destructive" | "violet" | "orange" | "teal";
 
 /**
  * Icon/accent tones, drawn from the same validated palette the charts use
@@ -10,6 +10,7 @@ export const toneClasses: Record<Tone, string> = {
   primary: "bg-primary/10 text-primary",
   success: "bg-success/10 text-success",
   warning: "bg-warning/15 text-warning-foreground dark:text-warning",
+  destructive: "bg-destructive/10 text-destructive",
   violet: "bg-(--chart-5)/10 text-(--chart-5)",
   orange: "bg-(--chart-2)/10 text-(--chart-2)",
   teal: "bg-(--chart-3)/10 text-(--chart-3)",

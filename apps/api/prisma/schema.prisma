@@ -61,6 +61,7 @@ model User {
   generatedPayslips        Payslip[]           @relation("PayslipGenerator")
   recordedAttendanceEvents AttendanceEvent[]   @relation("AttendanceRecorder")
   assignedUserRoles        UserRole[]          @relation("UserRoleAssignedBy")
+  ticketComments           TicketComment[]
 
   @@map("users")
 }
@@ -352,6 +353,7 @@ model Employee {
   performanceReviews PerformanceReview[]
   recognitions       Recognition[]
   tasks              Task[]
+  tickets            Ticket[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1020,6 +1022,78 @@ model AnnouncementRead {
 
   @@unique([announcementId, userId])
   @@map("announcement_reads")
+}
+
+/// Stable keys, not the legacy prose labels ("Recruitment / Joining") — the
+/// frontend holds a display-label map, same shape as ATTENDANCE_BUCKET_LABEL.
+enum TicketCategory {
+  SALARY_OR_PAYMENT
+  LEAVE_OR_ATTENDANCE
+  OFFICE_FACILITIES
+  GENERAL_QUERIES
+  RECRUITMENT_OR_JOINING
+  EXIT_FORMALITIES
+  COMPLAINT
+  MISPUNCH
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// Four states, not the three the request described (Open/Under
+/// Progress/Closed) — RESOLVED is kept because it's real: legacy has ~90
+/// historical tickets sitting in that state and dropping it would make them
+/// unmappable. RESOLVED and CLOSED both render green (see
+/// TICKET_STATUS_TONE on the frontend) so the requested 3-color scheme
+/// (red/orange/green) still holds at a glance.
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Ticket {
+  id          String         @id @default(cuid())
+  /// Human-facing code shown throughout the UI (e.g. "TKT-0042").
+  code        String         @unique
+  employeeId  String
+  category    TicketCategory
+  title       String
+  description String         @db.Text
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  employee Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  comments TicketComment[]
+
+  @@index([status])
+  @@index([employeeId])
+  @@map("tickets")
+}
+
+/// Single flat thread per ticket (matches the legacy "Add a Comment" /
+/// "Submit Comment" feature) — no threading/replies, HR and the raising
+/// employee both post into the same list.
+model TicketComment {
+  id           String   @id @default(cuid())
+  ticketId     String
+  authorUserId String
+  body         String   @db.Text
+  createdAt    DateTime @default(now())
+
+  ticket     Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUser User   @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_comments")
 }
 
 enum NotificationType {

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, FolderOpen, Receipt, Wallet } from "lucide-react";
+import { CalendarDays, FolderOpen, LifeBuoy, Receipt, Wallet } from "lucide-react";
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { AttendanceCard } from "@/components/hrm/attendance-card";
@@ -9,6 +9,7 @@ import { HighlightsCard } from "@/components/hrm/highlights-card";
 import { AnnouncementsFeedCard } from "@/components/hrm/announcements-feed-card";
 import { LeaveBalanceCard } from "@/components/hrm/leave-balance-card";
 import { YesterdayAttendanceCard } from "@/components/hrm/yesterday-attendance-card";
+import { TicketsSummaryCard } from "@/components/hrm/tickets-summary-card";
 import { QuickAction } from "@/components/hrm/quick-action";
 import { PageHeader } from "@/components/hrm/page-header";
 
@@ -37,11 +38,12 @@ export default function MyDayPage() {
 
       <AttendanceCard variant="compact" />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <QuickAction href="/leave/apply" icon={CalendarDays} label="Apply leave" tone="teal" />
         <QuickAction href="/expenses/add" icon={Receipt} label="Add expense" tone="warning" />
         <QuickAction href="/payslips" icon={Wallet} label="View payslip" tone="success" />
         <QuickAction href="/documents" icon={FolderOpen} label="Documents" tone="violet" />
+        <QuickAction href="/support" icon={LifeBuoy} label="Raise a ticket" tone="primary" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -55,6 +57,7 @@ export default function MyDayPage() {
         <div className="space-y-4">
           <LeaveBalanceCard />
           <YesterdayAttendanceCard />
+          <TicketsSummaryCard />
         </div>
       </div>
     </div>
