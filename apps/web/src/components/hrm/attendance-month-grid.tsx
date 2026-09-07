@@ -15,6 +15,7 @@ import {
 } from "@/lib/attendance-status";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { StatusBadge } from "@/components/hrm/status-badge";
+import { AttendanceDayDetailSheet } from "@/components/hrm/attendance-day-detail-sheet";
 import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ export function AttendanceMonthGrid() {
   });
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
+  const [selectedDate, setSelectedDate] = React.useState<string | null>(null);
 
   const days = React.useMemo(() => monthGrid(year, month), [year, month]);
   const from = toDateOnlyString(days[0]!);
@@ -141,10 +143,13 @@ export function AttendanceMonthGrid() {
                       : null;
 
                   return (
-                    <div
+                    <button
                       key={dateStr}
+                      type="button"
+                      disabled={!inMonth}
+                      onClick={() => setSelectedDate(dateStr)}
                       className={cn(
-                        "bg-card border-border/60 -mr-px -mb-px flex min-h-[92px] flex-col gap-1 border p-2",
+                        "bg-card border-border/60 hover:bg-accent -mr-px -mb-px flex min-h-[92px] flex-col gap-1 border p-2 text-left transition-colors disabled:cursor-default disabled:hover:bg-card",
                         !inMonth && "bg-muted/40",
                       )}
                     >
@@ -169,7 +174,7 @@ export function AttendanceMonthGrid() {
                           className="mt-auto"
                         />
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -189,6 +194,15 @@ export function AttendanceMonthGrid() {
           </div>
         </AsyncSection>
       </CardContent>
+
+      {selectedDate && (
+        <AttendanceDayDetailSheet
+          date={selectedDate}
+          record={byDate.get(selectedDate)}
+          policy={policy.data}
+          onOpenChange={(open) => !open && setSelectedDate(null)}
+        />
+      )}
     </Card>
   );
 }
