@@ -852,6 +852,43 @@ to white, since `#1c6bba` is dark enough that black text only hit 3.6:1
 both modes - they already had independent, adequate contrast and weren't
 part of what the user pointed at.
 
+## Attendance month-grid redesign + attendance card blue (2026-09-07)
+
+User shared 3 screenshots of a Keka-style attendance calendar (month grid
+with per-day status/hours, a "Check-in view" showing punch timestamps
+color-coded by source, an "Attendance regularization" request workflow,
+and a "Weekly hours breakup" modal) and asked for the employee attendance
+section to look like it. Scoped down after flagging that 3 of the 4 pieces
+need real new backend work we don't have (a regularization/approval
+model, and punch-source tracking beyond `AttendanceEventSource`'s existing
+WEB/MOBILE/MANUAL_CORRECTION/BIOMETRIC_IMPORT - no Excel Import/API/OD/AR
+in our schema). User chose to build just the month-grid "Attendance view"
+now.
+
+Built `AttendanceMonthGrid` (new, `components/hrm/attendance-month-grid.tsx`)
+and wired it into `/attendance`, replacing the old flat "This week" list.
+Prev/next month navigation (not a dropdown - simpler and avoids building a
+duplicate month/year picker), each day cell shows total hours worked and a
+status badge, a legend with live per-bucket counts for the visible month,
+and a "Worked this month" total. Reused `AttendanceDayStatus` as-is via a
+new shared `lib/attendance-status.ts` (bucket/tone/label/legend mapping,
+factored out for reuse with the existing `/my-day` mini calendar widget)
+rather than inventing Keka's own status vocabulary. Deliberately dropped
+the reference's per-cell shift-time repetition (constant every cell, pure
+visual noise) and its "Deducted Hours" stat (no such concept in this
+schema - not invented). The reference's own "Weekly hours breakup" numbers
+(125hrs+ shift hours for a single person in a single week) don't add up
+against a real week having 168 hours total - flagged as likely a display
+bug in the source product, not something to replicate if that piece gets
+built later.
+
+Separately, user clarified an earlier ask: the "Today's attendance" card
+itself (not just its Check-in button) should have the brand-navy
+background. `AttendanceCard` now sets `bg-primary text-primary-foreground`
+across all three punch states, switching both buttons to `variant="secondary"`
+(the default variant would have matched the new navy background and
+disappeared) and secondary text to `/70`-opacity foreground.
+
 ## Late-coming deduction suggestion (2026-09-06)
 
 User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a
