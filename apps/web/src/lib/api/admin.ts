@@ -57,6 +57,17 @@ export function setEmployeeRole(employeeId: string, roleKey: Role): Promise<Empl
   });
 }
 
+export interface PasswordResetResult {
+  id: string;
+  email: string;
+  /** Shown once - the server never stores or returns this again. */
+  temporaryPassword: string;
+}
+
+export function resetUserPassword(userId: string): Promise<PasswordResetResult> {
+  return apiFetch<PasswordResetResult>(`/users/${userId}/reset-password`, { method: "POST" });
+}
+
 export type AuditEventType =
   | "LOGIN_SUCCESS"
   | "LOGIN_FAILED"

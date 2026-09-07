@@ -75,6 +75,45 @@ export class UsersService {
     };
   }
 
+  /**
+   * Admin-triggered reset for an account the owner can no longer log into
+   * (lost/forgotten password) — there's no self-service "forgot password"
+   * flow yet. Mirrors `create()`'s one-time-shown temporary password (rule
+   * 11: never persist or log a plaintext credential) and
+   * `AuthService.changePassword()`'s session revocation, except every
+   * active session is revoked here, not all-but-one — the admin resetting
+   * this isn't the account owner, so there's no "session making this
+   * request" to spare.
+   */
+  async resetPassword(id: string, actor: AuthContext) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await this.passwordService.hash(temporaryPassword);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash, passwordUpdatedAt: new Date() },
+    });
+
+    await this.prisma.session.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: 'PASSWORD_CHANGED' },
+    });
+
+    await this.auditService.log({
+      eventType: 'PASSWORD_CHANGED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'User',
+      targetId: id,
+      description: `Password reset for ${user.email} by admin`,
+    });
+
+    return { id: user.id, email: user.email, temporaryPassword };
+  }
+
   async findAll() {
     const users = await this.prisma.user.findMany({
       select: {

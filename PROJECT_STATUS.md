@@ -788,6 +788,47 @@ display differently (e.g. clamped at 0, or the allocation policy revised),
 that's a product decision for the user, not something this import should
 have silently papered over.
 
+## Holiday type + admin password reset (2026-09-07)
+
+**Holiday redesign**: user shared a reference screenshot (a table with
+Holiday name/Day/Date/Type columns under a "Fixed holidays (N)" tab) and
+asked for the Holidays page to match it. `Holiday` had no type
+classification before this - added `HolidayType` (`FIXED` | `NATIONAL`)
+via migration `20260907040230_add_holiday_type`
+(`ALTER TABLE holidays ADD COLUMN type ENUM('FIXED','NATIONAL') NOT NULL
+DEFAULT 'FIXED'`, applied to production with `prisma migrate deploy` -
+`prisma migrate diff --from-config-datasource --to-schema` generated the
+SQL since there's still no shadow DB in this environment). Backfilled the
+3 real India-gazetted holidays already in production (Republic Day,
+Independence Day, Mahatma Gandhi Jayanti) to `NATIONAL`; everything else
+defaults to `FIXED`.
+
+Deliberately deviated from the literal reference: the screenshot's single
+"Fixed holidays" tab actually mixes Fixed and National rows together
+(Republic Day etc. appear inside it with a Type badge) - copying that
+verbatim would mislabel National holidays as "Fixed." Built two real tabs
+instead (Fixed holidays (N) / National holidays (M)), each showing only
+its own type, dropping the now-redundant Type column from the table.
+Page still shared between employee (read-only) and admin (add/edit/delete
+via the pre-existing `canManage` gate) — matches what the user asked for
+without needing a second page.
+
+**Admin password reset**: separately, user asked for Ritika Rajan's login
+and learned there's no way to recover it - her account (created
+2026-09-05, never logged in) has no retrievable temporary password (it's
+hashed) and the app had no reset capability, self-service or admin. Added
+`POST /users/:id/reset-password` (`UsersService.resetPassword`) - mirrors
+`create()`'s one-time-shown temporary password (never persisted in
+plaintext) and `AuthService.changePassword()`'s session revocation,
+except every active session is revoked (not all-but-one, since the admin
+resetting it isn't the account owner). Wired into the existing "Roles &
+permissions" admin page (`/admin/roles`) rather than building a new Users
+page - it already lists every employee with their login email and is
+gated by the same `user:manage` permission the raw `UsersController` was
+already built against but had no frontend for. A confirm step warns about
+the forced sign-out before generating the password, which is then shown
+once in a copyable dialog.
+
 ## Late-coming deduction suggestion (2026-09-06)
 
 User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a

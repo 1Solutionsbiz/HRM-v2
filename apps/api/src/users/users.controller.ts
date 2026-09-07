@@ -27,6 +27,11 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
+  @Post(':id/reset-password')
+  resetPassword(@Param('id') id: string, @CurrentUser() actor: AuthContext) {
+    return this.usersService.resetPassword(id, actor);
+  }
+
   @Patch(':id/status')
   setStatus(
     @Param('id') id: string,

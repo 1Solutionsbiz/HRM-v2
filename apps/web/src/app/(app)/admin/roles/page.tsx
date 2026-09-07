@@ -3,16 +3,24 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ShieldCheck } from "lucide-react";
+import { Check, Copy, KeyRound, ShieldCheck } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
-import { getEmployeeRoles, getRolePermissions, setEmployeeRole, type EmployeeRoleRow } from "@/lib/api/admin";
+import {
+  getEmployeeRoles,
+  getRolePermissions,
+  setEmployeeRole,
+  resetUserPassword,
+  type EmployeeRoleRow,
+  type PasswordResetResult,
+} from "@/lib/api/admin";
 import { ROLES, ROLE_LABELS, type Role } from "@/types/role";
 import { PageHeader } from "@/components/hrm/page-header";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -21,11 +29,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export default function RolesPermissionsPage() {
   const { data, loading, error, refetch } = useAsync(getEmployeeRoles);
   const permissions = useAsync(getRolePermissions);
   const [pendingChange, setPendingChange] = React.useState<{ row: EmployeeRoleRow; newRole: Role } | null>(null);
+  const [pendingReset, setPendingReset] = React.useState<EmployeeRoleRow | null>(null);
+  const [resetResult, setResetResult] = React.useState<PasswordResetResult | null>(null);
+  const [copied, setCopied] = React.useState(false);
 
   async function handleConfirm() {
     if (!pendingChange) return;
@@ -36,6 +54,28 @@ export default function RolesPermissionsPage() {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Couldn't change this employee's role.");
       throw err;
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!pendingReset) return;
+    try {
+      const result = await resetUserPassword(pendingReset.userId);
+      setResetResult(result);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't reset this password.");
+      throw err;
+    }
+  }
+
+  async function handleCopy() {
+    if (!resetResult) return;
+    try {
+      await navigator.clipboard.writeText(resetResult.temporaryPassword);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy - select and copy the password manually.");
     }
   }
 
@@ -74,6 +114,20 @@ export default function RolesPermissionsPage() {
         ) : (
           <span className="text-muted-foreground text-xs">No role assigned</span>
         ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setPendingReset(row.original)}
+        >
+          <KeyRound />
+          Reset password
+        </Button>
+      ),
     },
   ];
 
@@ -146,6 +200,45 @@ export default function RolesPermissionsPage() {
         variant={pendingChange?.newRole === "admin" ? "destructive" : "default"}
         onConfirm={handleConfirm}
       />
+
+      <ConfirmDialog
+        open={!!pendingReset}
+        onOpenChange={(open) => !open && setPendingReset(null)}
+        title="Reset this password?"
+        description={
+          pendingReset
+            ? `${pendingReset.name} will be signed out everywhere and given a new temporary password, shown once, that you'll need to share with them yourself.`
+            : ""
+        }
+        confirmLabel="Reset password"
+        variant="destructive"
+        onConfirm={handleResetPassword}
+      />
+
+      <Dialog
+        open={!!resetResult}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResetResult(null);
+            setPendingReset(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Temporary password generated</DialogTitle>
+            <DialogDescription>
+              For {resetResult?.email} - shown once. Share it with them directly; it won&apos;t be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 rounded-md border p-3">
+            <code className="flex-1 text-sm font-medium break-all">{resetResult?.temporaryPassword}</code>
+            <Button size="icon-sm" variant="ghost" onClick={handleCopy} aria-label="Copy password">
+              {copied ? <Check className="text-success" /> : <Copy />}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
