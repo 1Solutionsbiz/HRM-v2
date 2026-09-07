@@ -889,6 +889,60 @@ across all three punch states, switching both buttons to `variant="secondary"`
 (the default variant would have matched the new navy background and
 disappeared) and secondary text to `/70`-opacity foreground.
 
+## Employee /my-day redesign + Hostinger CDN opt-out (2026-09-07)
+
+**CDN root cause found**: the "page looks stale after a deploy" problem
+from earlier today (the attendance month-grid appearing/disappearing
+across reloads) wasn't a deploy failure - Hostinger's automatic CDN sits
+in front of the app and caches page responses (`x-hcdn-*` headers,
+`cache-control: s-maxage=31536000`) without any deploy-aware invalidation
+hook, so different edge nodes kept serving different cached builds for a
+while after every push. Opted `hrm.1solutions.biz` out of the CDN
+(hPanel → Websites → Performance → CDN → per-domain "CDN status" row,
+*not* the account-wide opt-out checklist page, which doesn't list Web
+Apps) - confirmed via `curl` that `x-hcdn-*` headers are gone and every
+request now hits the origin directly. A deploy is visible immediately
+everywhere from now on; no more manual redeploy-to-force-refresh needed.
+
+**Dashboard**: user shared a reference employee dashboard (Highlights,
+Wall of fame, a center Feed of HR posts, Leave balance + Apply Leave,
+Tasks, Goals, Yesterday's attendance, a small Calendar widget) and asked
+for `/my-day` to look like it. Investigated what's real: `/my-day` was
+built entirely against `lib/mock/mock-api` (`getMyDaySummary`,
+`getAnnouncements` from mock, not the real `/announcements` API that
+already existed) - tasks, meetings, and performance/goals had no backend
+at all. Asked the user; they chose to drop the fake widgets rather than
+keep placeholder data. Result:
+
+- **Kept/real**: `HighlightsCard` (new, `components/hrm/highlights-card.tsx`
+  - extracted from the admin dashboard's inline birthday/anniversary block
+  so both dashboards share one implementation instead of drifting),
+  `AnnouncementsFeedCard` (new - wired to the real `getAnnouncements()`
+  API the page wasn't using), `LeaveBalanceCard` (new, real balances +
+  Apply Leave button), `YesterdayAttendanceCard` (new, real single-day
+  attendance lookup).
+- **Dropped entirely**: Today's tasks, Upcoming meetings, Performance
+  snapshot/Goals - all mock-only, no real data behind them. Also dropped
+  Wall of fame (recognition badges) - no such system exists.
+- **Also dropped**: the old top stat-card row (Leave balance/Pending
+  requests/Notifications/Announcements) - `Notifications` had no real API
+  at all (confirmed `/notifications` itself is still 100% mock), and the
+  other three are now represented more richly by the cards below instead
+  of a redundant summary row.
+
+**Calendar**: user separately asked to replace `/attendance`'s big
+month-grid (built earlier today, see the entry above) with something
+calendar-widget-sized - "eating up a lot of space." Enhanced the existing
+compact `AttendanceCalendarCard` (previously fixed to the current month
+only) with prev/next month navigation, circular day cells, a "Today" ring
+indicator, and an optional `linkHref` prop (shows "Go to calendar" only
+when used somewhere that isn't already the calendar page). Swapped it
+into both `/my-day` and `/attendance` swapped out the `AttendanceMonthGrid`
+grid there - `/attendance` keeps the "This week" detail list beside it for
+real substance, `attendance-month-grid.tsx` deleted as dead code. Bucket
+color/label logic centralized in `lib/attendance-status.ts` (already
+existed from the earlier grid work) so both calendars stay in sync.
+
 ## Late-coming deduction suggestion (2026-09-06)
 
 User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a

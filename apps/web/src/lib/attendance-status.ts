@@ -47,6 +47,15 @@ export const ATTENDANCE_BUCKET_DOT: Record<AttendanceBucket, string> = {
   HOLIDAY: "bg-warning",
 };
 
+/** Tinted-background + colored-text pair for a small calendar cell. */
+export const ATTENDANCE_BUCKET_CELL: Record<AttendanceBucket, string> = {
+  PRESENT: "bg-success/15 text-success",
+  ABSENT: "bg-destructive/15 text-destructive",
+  WEEKEND: "bg-muted text-muted-foreground",
+  LEAVE: "bg-info/15 text-info",
+  HOLIDAY: "bg-warning/15 text-warning",
+};
+
 export const ATTENDANCE_LEGEND: AttendanceBucket[] = [
   "PRESENT",
   "ABSENT",

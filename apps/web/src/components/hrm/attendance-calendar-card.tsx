@@ -1,62 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { CalendarDays } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { toDateOnlyString } from "@/lib/format";
-import { getAttendanceHistory, getAttendancePolicy, type AttendanceDayStatus } from "@/lib/api/attendance";
+import { getAttendanceHistory, getAttendancePolicy } from "@/lib/api/attendance";
+import {
+  toAttendanceBucket,
+  ATTENDANCE_BUCKET_DOT,
+  ATTENDANCE_BUCKET_CELL,
+  ATTENDANCE_LEGEND,
+  ATTENDANCE_BUCKET_LABEL,
+} from "@/lib/attendance-status";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const WEEKDAY_LABELS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-// V2 doesn't track a per-day work-location field (the legacy system's
-// "Home"/"Office" split), so this calendar only surfaces the statuses that
-// actually exist on AttendanceDayStatus.
-type Bucket = "PRESENT" | "ABSENT" | "WEEKEND" | "LEAVE" | "HOLIDAY";
-
-function toBucket(status: AttendanceDayStatus): Bucket {
-  switch (status) {
-    case "PRESENT":
-    case "LATE":
-    case "HALF_DAY":
-      return "PRESENT";
-    case "ABSENT":
-      return "ABSENT";
-    case "WEEKEND":
-      return "WEEKEND";
-    case "ON_LEAVE":
-      return "LEAVE";
-    case "HOLIDAY":
-      return "HOLIDAY";
-  }
-}
-
-const BUCKET_DOT: Record<Bucket, string> = {
-  PRESENT: "bg-success",
-  ABSENT: "bg-destructive",
-  WEEKEND: "bg-muted-foreground/40",
-  LEAVE: "bg-(--chart-5)",
-  HOLIDAY: "bg-warning",
-};
-
-const BUCKET_CELL: Record<Bucket, string> = {
-  PRESENT: "bg-success/15 text-success",
-  ABSENT: "bg-destructive/15 text-destructive",
-  WEEKEND: "bg-muted text-muted-foreground",
-  LEAVE: "bg-(--chart-5)/15 text-(--chart-5)",
-  HOLIDAY: "bg-warning/15 text-warning",
-};
-
-const LEGEND: { bucket: Bucket; label: string }[] = [
-  { bucket: "PRESENT", label: "Present" },
-  { bucket: "ABSENT", label: "Absent" },
-  { bucket: "WEEKEND", label: "Week off" },
-  { bucket: "LEAVE", label: "Leave" },
-  { bucket: "HOLIDAY", label: "Holiday" },
-];
+const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 function monthGrid(year: number, month: number) {
   const firstOfMonth = new Date(year, month, 1);
@@ -68,10 +31,20 @@ function monthGrid(year: number, month: number) {
   });
 }
 
-export function AttendanceCalendarCard() {
-  const now = React.useMemo(() => new Date(), []);
-  const year = now.getFullYear();
-  const month = now.getMonth();
+interface AttendanceCalendarCardProps {
+  /** When set, shows a "Go to calendar" link in the header pointing here. */
+  linkHref?: string;
+}
+
+export function AttendanceCalendarCard({ linkHref }: AttendanceCalendarCardProps) {
+  const [cursor, setCursor] = React.useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const todayStr = toDateOnlyString(new Date());
+
   const days = React.useMemo(() => monthGrid(year, month), [year, month]);
   const from = toDateOnlyString(days[0]!);
   const to = toDateOnlyString(days[days.length - 1]!);
@@ -84,13 +57,35 @@ export function AttendanceCalendarCard() {
   // back to the policy's own workingWeekdays here keeps future Saturdays/
   // Sundays tinted instead of rendering as unstyled blanks.
   const workingWeekdays = new Set(policy.data?.workingWeekdays ?? [1, 2, 3, 4, 5]);
-  const monthLabel = now.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const monthLabel = cursor.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Attendance for {monthLabel}</CardTitle>
-        <CalendarDays className="text-muted-foreground size-4" />
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardTitle className="text-base">Calendar</CardTitle>
+        <div className="flex items-center gap-2">
+          {linkHref && (
+            <Link href={linkHref} className="text-primary text-xs font-medium hover:underline">
+              Go to calendar
+            </Link>
+          )}
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label="Previous month"
+            onClick={() => setCursor(new Date(year, month - 1, 1))}
+          >
+            <ChevronLeft className="size-3.5" />
+          </Button>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label="Next month"
+            onClick={() => setCursor(new Date(year, month + 1, 1))}
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <AsyncSection
@@ -102,6 +97,7 @@ export function AttendanceCalendarCard() {
           }}
           loadingFallback={<CardSkeleton lines={5} />}
         >
+          <p className="text-muted-foreground mb-2 text-xs font-medium">{monthLabel}</p>
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
             {WEEKDAY_LABELS.map((w) => (
               <div key={w}>{w}</div>
@@ -114,17 +110,21 @@ export function AttendanceCalendarCard() {
               const status = byDate.get(dateStr);
               const isoWeekday = d.getDay() === 0 ? 7 : d.getDay();
               const bucket = status
-                ? toBucket(status)
+                ? toAttendanceBucket(status)
                 : !workingWeekdays.has(isoWeekday)
                   ? "WEEKEND"
                   : null;
+              const isToday = dateStr === todayStr;
+
               return (
                 <div
                   key={dateStr}
+                  title={bucket ? ATTENDANCE_BUCKET_LABEL[bucket] : undefined}
                   className={cn(
-                    "flex aspect-square items-center justify-center rounded text-xs",
+                    "flex aspect-square items-center justify-center rounded-full text-xs",
                     !inMonth && "text-muted-foreground/40",
-                    bucket && BUCKET_CELL[bucket],
+                    bucket && ATTENDANCE_BUCKET_CELL[bucket],
+                    isToday && "ring-primary ring-2",
                   )}
                 >
                   {d.getDate()}
@@ -133,10 +133,14 @@ export function AttendanceCalendarCard() {
             })}
           </div>
           <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
-            {LEGEND.map((l) => (
-              <div key={l.bucket} className="flex items-center gap-1.5">
-                <span className={cn("size-2.5 rounded-full", BUCKET_DOT[l.bucket])} />
-                <span className="text-muted-foreground">{l.label}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="border-primary size-2.5 rounded-full border-2" />
+              <span className="text-muted-foreground">Today</span>
+            </div>
+            {ATTENDANCE_LEGEND.map((bucket) => (
+              <div key={bucket} className="flex items-center gap-1.5">
+                <span className={cn("size-2.5 rounded-full", ATTENDANCE_BUCKET_DOT[bucket])} />
+                <span className="text-muted-foreground">{ATTENDANCE_BUCKET_LABEL[bucket]}</span>
               </div>
             ))}
           </div>
