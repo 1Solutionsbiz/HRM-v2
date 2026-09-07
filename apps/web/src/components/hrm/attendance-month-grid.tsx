@@ -128,7 +128,7 @@ export function AttendanceMonthGrid() {
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-px overflow-hidden rounded-b-md border">
+              <div className="border-border grid grid-cols-7 gap-0 overflow-hidden rounded-b-md border">
                 {days.map((d) => {
                   const inMonth = d.getMonth() === month;
                   const dateStr = toDateOnlyString(d);
@@ -144,7 +144,7 @@ export function AttendanceMonthGrid() {
                     <div
                       key={dateStr}
                       className={cn(
-                        "bg-card flex min-h-[92px] flex-col gap-1 p-2",
+                        "bg-card border-border/60 -mr-px -mb-px flex min-h-[92px] flex-col gap-1 border p-2",
                         !inMonth && "bg-muted/40",
                       )}
                     >
