@@ -43,7 +43,12 @@ export default function MyDayPage() {
         <QuickAction href="/expenses/add" icon={Receipt} label="Add expense" tone="warning" />
         <QuickAction href="/payslips" icon={Wallet} label="View payslip" tone="success" />
         <QuickAction href="/documents" icon={FolderOpen} label="Documents" tone="violet" />
-        <QuickAction href="/support" icon={LifeBuoy} label="Raise a ticket" tone="primary" />
+        <QuickAction
+          href="/support"
+          icon={LifeBuoy}
+          label="Raise a ticket"
+          iconClassName="bg-[#44973d]/10 text-[#44973d]"
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
