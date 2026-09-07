@@ -515,14 +515,24 @@ model AttendanceEvent {
   @@map("attendance_events")
 }
 
+/// National = India's gazetted holidays (Republic Day, Independence Day,
+/// Gandhi Jayanti); Fixed = every other company-observed holiday
+/// (festivals etc.). Not in the legacy schema - added per a direct product
+/// request to classify holidays this way.
+enum HolidayType {
+  FIXED
+  NATIONAL
+}
+
 /// Company holidays — required to resolve AttendanceDayStatus.HOLIDAY.
 /// Replaces legacy's hrm_holidays (year/name/date/no_of_days/added_by) with
 /// the same shape, minus added_by (audited via AuditLog instead).
 model Holiday {
-  id       String   @id @default(cuid())
+  id       String      @id @default(cuid())
   name     String
-  date     DateTime @db.Date
-  isActive Boolean  @default(true)
+  date     DateTime    @db.Date
+  type     HolidayType @default(FIXED)
+  isActive Boolean     @default(true)
 
   @@unique([date])
   @@map("holidays")

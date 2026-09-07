@@ -28,7 +28,7 @@ export class HolidaysService {
     }
 
     const holiday = await this.prisma.holiday.create({
-      data: { name: dto.name, date },
+      data: { name: dto.name, date, type: dto.type ?? 'FIXED' },
     });
 
     await this.auditService.log({
@@ -57,7 +57,7 @@ export class HolidaysService {
 
     const updated = await this.prisma.holiday.update({
       where: { id },
-      data: { name: dto.name, date },
+      data: { name: dto.name, date, type: dto.type },
     });
 
     await this.auditService.log({

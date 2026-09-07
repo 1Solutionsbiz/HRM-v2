@@ -6,7 +6,14 @@ import { CalendarCheck, CalendarClock, Pencil, PartyPopper, Plus, Trash2 } from 
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
-import { getHolidays, createHoliday, updateHoliday, deleteHoliday, type Holiday } from "@/lib/api/holidays";
+import {
+  getHolidays,
+  createHoliday,
+  updateHoliday,
+  deleteHoliday,
+  type Holiday,
+  type HolidayType,
+} from "@/lib/api/holidays";
 import { formatDate, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatCard } from "@/components/hrm/stat-card";
@@ -21,6 +28,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -44,6 +60,7 @@ function todayDateOnly(): string {
 interface HolidayFormState {
   name: string;
   date: Date | undefined;
+  type: HolidayType;
 }
 
 export default function HolidaysPage() {
@@ -52,8 +69,9 @@ export default function HolidaysPage() {
   const { data, loading, error, refetch } = useAsync(getHolidays);
 
   const [year, setYear] = React.useState<string>(String(new Date().getFullYear()));
+  const [tab, setTab] = React.useState<HolidayType>("FIXED");
   const [target, setTarget] = React.useState<Holiday | "new" | null>(null);
-  const [form, setForm] = React.useState<HolidayFormState>({ name: "", date: undefined });
+  const [form, setForm] = React.useState<HolidayFormState>({ name: "", date: undefined, type: "FIXED" });
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<Holiday | null>(null);
@@ -75,14 +93,17 @@ export default function HolidaysPage() {
   const upcoming = forYear.filter((h) => h.date >= today);
   const thisMonth = forYear.filter((h) => h.date.startsWith(thisMonthPrefix));
 
+  const fixedHolidays = forYear.filter((h) => h.type === "FIXED");
+  const nationalHolidays = forYear.filter((h) => h.type === "NATIONAL");
+
   function openAdd() {
-    setForm({ name: "", date: undefined });
+    setForm({ name: "", date: undefined, type: tab });
     setSaveError(null);
     setTarget("new");
   }
 
   function openEdit(holiday: Holiday) {
-    setForm({ name: holiday.name, date: new Date(holiday.date) });
+    setForm({ name: holiday.name, date: new Date(holiday.date), type: holiday.type });
     setSaveError(null);
     setTarget(holiday);
   }
@@ -92,7 +113,7 @@ export default function HolidaysPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const payload = { name: form.name.trim(), date: toDateOnlyString(form.date) };
+      const payload = { name: form.name.trim(), date: toDateOnlyString(form.date), type: form.type };
       if (target === "new") {
         await createHoliday(payload);
         toast.success(`${payload.name} added`);
@@ -120,6 +141,68 @@ export default function HolidaysPage() {
     }
   }
 
+  function renderTable(holidays: Holiday[]) {
+    if (holidays.length === 0) {
+      return (
+        <Card>
+          <CardContent className="pt-6">
+            <EmptyState icon={PartyPopper} title="No holidays recorded for this year" />
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Holiday name</TableHead>
+                <TableHead>Day</TableHead>
+                <TableHead>Date</TableHead>
+                {canManage && <TableHead className="w-0" />}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {holidays.map((h) => {
+                const isPast = h.date < today;
+                return (
+                  <TableRow key={h.id}>
+                    <TableCell className="font-medium">{h.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(h.date, { weekday: "long" })}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(h.date)}</TableCell>
+                    {canManage && (
+                      <TableCell className="text-right">
+                        {isPast ? (
+                          <Badge variant="outline">Completed</Badge>
+                        ) : (
+                          <div className="flex justify-end gap-1">
+                            <Button size="icon-sm" variant="ghost" aria-label="Edit" onClick={() => openEdit(h)}>
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              aria-label="Delete"
+                              onClick={() => setDeleteTarget(h)}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -127,6 +210,7 @@ export default function HolidaysPage() {
         description="Company holidays and celebrations."
         actions={
           <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-sm">Year</span>
             <Select value={year} onValueChange={setYear}>
               <SelectTrigger className="w-[100px]">
                 <SelectValue />
@@ -169,56 +253,20 @@ export default function HolidaysPage() {
         loading={loading}
         error={error}
         onRetry={refetch}
-        loadingFallback={<TableSkeleton rows={4} columns={3} />}
+        loadingFallback={<TableSkeleton rows={4} columns={4} />}
       >
-        {forYear.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
-              <EmptyState icon={PartyPopper} title="No holidays recorded for this year" />
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {forYear.map((h) => {
-              const isPast = h.date < today;
-              return (
-                <Card key={h.id}>
-                  <CardContent className="flex items-start justify-between gap-3 pt-6">
-                    <div className="min-w-0">
-                      <p className="text-muted-foreground text-xs">{formatDate(h.date)}</p>
-                      <p className="truncate text-sm font-semibold">{h.name}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {formatDate(h.date, { weekday: "long" })}
-                      </p>
-                    </div>
-                    <div className="shrink-0">
-                      {isPast ? (
-                        <Badge variant="secondary">Completed</Badge>
-                      ) : canManage ? (
-                        <div className="flex gap-1">
-                          <Button size="icon-sm" variant="ghost" aria-label="Edit" onClick={() => openEdit(h)}>
-                            <Pencil className="size-3.5" />
-                          </Button>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            aria-label="Delete"
-                            onClick={() => setDeleteTarget(h)}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Badge variant="outline">Upcoming</Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as HolidayType)}>
+          <TabsList>
+            <TabsTrigger value="FIXED">Fixed holidays ({fixedHolidays.length})</TabsTrigger>
+            <TabsTrigger value="NATIONAL">National holidays ({nationalHolidays.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="FIXED" className="mt-4">
+            {renderTable(fixedHolidays)}
+          </TabsContent>
+          <TabsContent value="NATIONAL" className="mt-4">
+            {renderTable(nationalHolidays)}
+          </TabsContent>
+        </Tabs>
       </AsyncSection>
 
       <Dialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>
@@ -245,6 +293,18 @@ export default function HolidaysPage() {
             <div className="space-y-2">
               <Label>Date</Label>
               <DatePicker value={form.date} onChange={(date) => setForm((f) => ({ ...f, date }))} className="w-full" />
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as HolidayType }))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FIXED">Fixed holiday</SelectItem>
+                  <SelectItem value="NATIONAL">National holiday</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

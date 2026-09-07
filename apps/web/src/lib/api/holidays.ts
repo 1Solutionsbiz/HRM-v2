@@ -1,9 +1,12 @@
 import { apiFetch } from "@/lib/api-client";
 
+export type HolidayType = "FIXED" | "NATIONAL";
+
 export interface Holiday {
   id: string;
   name: string;
   date: string;
+  type: HolidayType;
   isActive: boolean;
 }
 
@@ -14,6 +17,7 @@ export function getHolidays(): Promise<Holiday[]> {
 export interface HolidayPayload {
   name: string;
   date: string;
+  type: HolidayType;
 }
 
 export function createHoliday(payload: HolidayPayload): Promise<Holiday> {
