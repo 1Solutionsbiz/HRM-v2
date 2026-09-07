@@ -101,6 +101,20 @@ export function getUpcomingBirthdays(): Promise<UpcomingBirthday[]> {
   return apiFetch<UpcomingBirthday[]>("/employees/birthdays");
 }
 
+export interface UpcomingAnniversary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  department: { name: string } | null;
+  nextAnniversary: string;
+  daysUntil: number;
+  years: number;
+}
+
+export function getUpcomingAnniversaries(): Promise<UpcomingAnniversary[]> {
+  return apiFetch<UpcomingAnniversary[]>("/employees/anniversaries");
+}
+
 export interface OnboardingStepRow {
   id: string;
   isCompleted: boolean;
@@ -144,31 +158,6 @@ export function employeeInitials(e: { firstName: string; lastName: string }): st
   const a = e.firstName.trim().charAt(0);
   const b = e.lastName.trim().charAt(0);
   return `${a}${b}`.toUpperCase() || "?";
-}
-
-/**
- * `dateOfJoining` is already in the general directory select (no privacy
- * restriction like `dateOfBirth` - see EmployeesService.findAll()'s own
- * comment), so unlike upcoming birthdays this doesn't need its own narrow
- * backend endpoint; computed client-side from data already fetched.
- * Mirrors the backend's UTC-based next-occurrence math for
- * getUpcomingBirthdays so the two "upcoming" computations behave
- * identically (leap-year Feb 29, year-boundary wraparound).
- */
-export function nextWorkAnniversary(dateOfJoining: string, today: Date = new Date()) {
-  const doj = new Date(dateOfJoining);
-  const todayUtcMidnight = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  let next = Date.UTC(today.getUTCFullYear(), doj.getUTCMonth(), doj.getUTCDate());
-  let years = today.getUTCFullYear() - doj.getUTCFullYear();
-  if (next < todayUtcMidnight) {
-    next = Date.UTC(today.getUTCFullYear() + 1, doj.getUTCMonth(), doj.getUTCDate());
-    years += 1;
-  }
-  return {
-    nextAnniversary: new Date(next),
-    daysUntil: Math.round((next - todayUtcMidnight) / 86_400_000),
-    years,
-  };
 }
 
 /** Backend enums are SCREAMING_CASE; every status/enum badge in the UI expects Title Case. */

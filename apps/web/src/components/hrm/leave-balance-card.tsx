@@ -42,7 +42,7 @@ export function LeaveBalanceCard() {
             </div>
           )}
         </AsyncSection>
-        <Button variant="outline" asChild className="w-full">
+        <Button asChild className="w-full bg-[#fe9700] text-[#0b0b0b] hover:bg-[#fe9700]/85">
           <Link href="/leave/apply">Apply Leave</Link>
         </Button>
       </CardContent>

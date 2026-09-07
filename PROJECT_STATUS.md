@@ -943,6 +943,30 @@ real substance, `attendance-month-grid.tsx` deleted as dead code. Bucket
 color/label logic centralized in `lib/attendance-status.ts` (already
 existed from the earlier grid work) so both calendars stay in sync.
 
+## Highlights permission fix + dashboard polish (2026-09-07)
+
+User reported Highlights wasn't showing for regular employees on
+`/my-day`. Root cause: `HighlightsCard` called `getEmployees()` (for
+anniversaries) and `/employees/birthdays`, and *both* sit under
+`EmployeesController`'s class-level `@RequirePermissions('employee:manage')`
+- birthdays had no override, so it silently 403'd for anyone who isn't
+HR/admin (worked fine on the admin dashboard purely because admins hold
+that permission). Fixed by adding a bare `@RequirePermissions()` override
+to `/employees/birthdays` and a new narrow `/employees/anniversaries`
+endpoint (`EmployeesService.getUpcomingAnniversaries`, mirroring
+`getUpcomingBirthdays`'s already-established shape/reasoning: only
+name/department/date, never the full directory) with the same override -
+`HighlightsCard` no longer calls `getEmployees()` at all. Removed the
+now-dead client-side `nextWorkAnniversary()` helper along with the stale
+comment explaining why it *used* to be safe to compute client-side (that
+reasoning was about `dateOfJoining` not being privacy-sensitive, not about
+the `employee:manage` gate on its source endpoint - the real bug).
+
+Also: `LeaveBalanceCard`'s Apply Leave button recolored to the user's
+specified orange (`#fe9700`, dark text - white failed contrast at 2.2:1),
+and `YesterdayAttendanceCard`'s In-time/Out-time now sit in a shared
+background box (previously only the label chip had one, not the value).
+
 ## Late-coming deduction suggestion (2026-09-06)
 
 User-stated policy: ₹100 deducted per late arrival beyond the first 3 in a

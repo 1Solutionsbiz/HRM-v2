@@ -49,10 +49,21 @@ export class EmployeesController {
   }
 
   // Before :id for the same reason /me is — registered first so Nest
-  // doesn't match "birthdays" as a literal employee id.
+  // doesn't match "birthdays"/"anniversaries" as a literal employee id.
+  // Bare @RequirePermissions() overrides: the Highlights widget these feed
+  // is shown to every employee, not just employee:manage holders, and both
+  // endpoints already return only what that widget needs (see each
+  // service method's own comment on why it's narrow).
   @Get('birthdays')
+  @RequirePermissions()
   getUpcomingBirthdays() {
     return this.employeesService.getUpcomingBirthdays();
+  }
+
+  @Get('anniversaries')
+  @RequirePermissions()
+  getUpcomingAnniversaries() {
+    return this.employeesService.getUpcomingAnniversaries();
   }
 
   @Get(':id')

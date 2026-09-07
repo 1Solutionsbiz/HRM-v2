@@ -3,15 +3,13 @@
 import { Award, Cake } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDateShort } from "@/lib/format";
-import { getEmployees, getUpcomingBirthdays, employeeFullName, nextWorkAnniversary } from "@/lib/api/employees";
+import { getUpcomingBirthdays, getUpcomingAnniversaries, employeeFullName } from "@/lib/api/employees";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toneClasses } from "@/lib/tone";
 import { cn } from "@/lib/utils";
-
-const HIGHLIGHT_WINDOW_DAYS = 30;
 
 type Highlight =
   | { kind: "birthday"; id: string; name: string; department: string | null; date: Date; daysUntil: number }
@@ -26,22 +24,15 @@ type Highlight =
     };
 
 /**
- * Shared between the admin dashboard and the employee /my-day page - same
- * birthday/anniversary computation, same look, so it doesn't drift into two
- * different "highlights" concepts.
+ * Shared between the admin dashboard and every employee's /my-day page -
+ * same look, same data, so it doesn't drift into two different "highlights"
+ * concepts. Both source endpoints are deliberately narrow and open to any
+ * logged-in employee (not gated behind employee:manage, unlike the general
+ * directory) - see EmployeesService.getUpcomingBirthdays/getUpcomingAnniversaries.
  */
 export function HighlightsCard() {
-  const employees = useAsync(getEmployees);
   const birthdays = useAsync(getUpcomingBirthdays);
-
-  const activeEmployees = (employees.data ?? []).filter((e) => e.status === "ACTIVE");
-
-  const upcomingAnniversaries = activeEmployees
-    .map((e) => {
-      const { nextAnniversary, daysUntil, years } = nextWorkAnniversary(e.dateOfJoining);
-      return { employee: e, nextAnniversary, daysUntil, years };
-    })
-    .filter((a) => a.daysUntil <= HIGHLIGHT_WINDOW_DAYS);
+  const anniversaries = useAsync(getUpcomingAnniversaries);
 
   const highlights: Highlight[] = [
     ...(birthdays.data ?? []).map((b) => ({
@@ -52,12 +43,12 @@ export function HighlightsCard() {
       date: new Date(b.nextBirthday),
       daysUntil: b.daysUntil,
     })),
-    ...upcomingAnniversaries.map((a) => ({
+    ...(anniversaries.data ?? []).map((a) => ({
       kind: "anniversary" as const,
-      id: a.employee.id,
-      name: employeeFullName(a.employee),
-      department: a.employee.department?.name ?? null,
-      date: a.nextAnniversary,
+      id: a.id,
+      name: employeeFullName(a),
+      department: a.department?.name ?? null,
+      date: new Date(a.nextAnniversary),
       daysUntil: a.daysUntil,
       years: a.years,
     })),
@@ -71,11 +62,11 @@ export function HighlightsCard() {
       </CardHeader>
       <CardContent>
         <AsyncSection
-          loading={employees.loading || birthdays.loading}
-          error={employees.error || birthdays.error}
+          loading={birthdays.loading || anniversaries.loading}
+          error={birthdays.error || anniversaries.error}
           onRetry={() => {
-            employees.refetch();
             birthdays.refetch();
+            anniversaries.refetch();
           }}
           loadingFallback={<CardSkeleton lines={3} />}
         >

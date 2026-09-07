@@ -182,6 +182,63 @@ export class EmployeesService {
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }
 
+  /**
+   * Same reasoning and shape as getUpcomingBirthdays() - narrow, Highlights-
+   * widget-only fields (name, department, work anniversary), not the full
+   * directory. dateOfJoining itself has no privacy restriction (unlike
+   * dateOfBirth), but this still deliberately avoids exposing phone/email
+   * to every logged-in employee just to compute an anniversary date.
+   */
+  async getUpcomingAnniversaries(withinDays = 30) {
+    const employees = await this.prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        dateOfJoining: true,
+        department: { select: { name: true } },
+      },
+    });
+
+    const today = new Date();
+    const todayUtcMidnight = Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    );
+
+    return employees
+      .map((e) => {
+        const doj = e.dateOfJoining;
+        let next = Date.UTC(
+          today.getUTCFullYear(),
+          doj.getUTCMonth(),
+          doj.getUTCDate(),
+        );
+        let years = today.getUTCFullYear() - doj.getUTCFullYear();
+        if (next < todayUtcMidnight) {
+          next = Date.UTC(
+            today.getUTCFullYear() + 1,
+            doj.getUTCMonth(),
+            doj.getUTCDate(),
+          );
+          years += 1;
+        }
+        return {
+          id: e.id,
+          firstName: e.firstName,
+          lastName: e.lastName,
+          department: e.department,
+          nextAnniversary: new Date(next),
+          daysUntil: Math.round((next - todayUtcMidnight) / 86_400_000),
+          years,
+        };
+      })
+      .filter((e) => e.daysUntil <= withinDays && e.years > 0)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+  }
+
   async update(id: string, dto: UpdateEmployeeDto, actor: AuthContext) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Employee not found');

@@ -46,16 +46,16 @@ export function YesterdayAttendanceCard() {
               <p className="text-muted-foreground text-xs">Total working hours</p>
             </div>
             <div className="bg-border h-8 w-px" />
-            <div className="flex gap-4">
-              <div className="text-center">
-                <span className="bg-muted rounded-full px-2.5 py-0.5 text-xs font-medium">In-time</span>
-                <p className="mt-1 text-xs font-medium">
+            <div className="flex gap-3">
+              <div className="bg-muted rounded-lg px-3 py-2 text-center">
+                <span className="text-muted-foreground text-xs font-medium">In-time</span>
+                <p className="mt-0.5 text-xs font-semibold">
                   {day?.firstCheckInAt ? formatTime(day.firstCheckInAt) : "-"}
                 </p>
               </div>
-              <div className="text-center">
-                <span className="bg-muted rounded-full px-2.5 py-0.5 text-xs font-medium">Out-time</span>
-                <p className="mt-1 text-xs font-medium">
+              <div className="bg-muted rounded-lg px-3 py-2 text-center">
+                <span className="text-muted-foreground text-xs font-medium">Out-time</span>
+                <p className="mt-0.5 text-xs font-semibold">
                   {day?.lastCheckOutAt ? formatTime(day.lastCheckOutAt) : "-"}
                 </p>
               </div>
