@@ -62,6 +62,7 @@ model User {
   recordedAttendanceEvents AttendanceEvent[]   @relation("AttendanceRecorder")
   assignedUserRoles        UserRole[]          @relation("UserRoleAssignedBy")
   ticketComments           TicketComment[]
+  createdPolls             Poll[]
 
   @@map("users")
 }
@@ -355,6 +356,7 @@ model Employee {
   tasks              Task[]
   tickets            Ticket[]
   moodCheckIns       MoodCheckIn[]
+  pollVotes          PollVote[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -967,6 +969,61 @@ model MoodCheckIn {
 
   @@unique([employeeId, date])
   @@map("mood_checkins")
+}
+
+// =============================================================================
+// Polls — admin-created, single-choice, company-wide. No status column and
+// no scheduled job to flip one: "open" is simply `endsAt > now`, computed
+// at query time (same reasoning as ReviseSalary's effectiveDate rejection —
+// this app has no scheduled-job infrastructure, so state that depends on
+// wall-clock time is always derived, never stored and flipped by a cron).
+// Results are withheld from the employee-facing read until closed; nothing
+// in the schema enforces that, it's a service-layer rule.
+// =============================================================================
+
+model Poll {
+  id              String   @id @default(cuid())
+  question        String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  endsAt          DateTime
+
+  createdByUser User         @relation(fields: [createdByUserId], references: [id])
+  options       PollOption[]
+  votes         PollVote[]
+
+  @@map("polls")
+}
+
+model PollOption {
+  id        String @id @default(cuid())
+  pollId    String
+  label     String
+  sortOrder Int    @default(0)
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@map("poll_options")
+}
+
+/// One vote per employee per poll - re-voting while still open overwrites
+/// the previous choice (upsert on the unique key below) rather than being
+/// rejected, matching how most closed-ballot company polls actually work
+/// ("change your mind before it closes").
+model PollVote {
+  id         String   @id @default(cuid())
+  pollId     String
+  optionId   String
+  employeeId String
+  votedAt    DateTime @default(now())
+
+  poll     Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, employeeId])
+  @@map("poll_votes")
 }
 
 // =============================================================================

@@ -5,6 +5,7 @@ import {
   Wallet,
   FolderOpen,
   Megaphone,
+  Vote,
   Trophy,
   LifeBuoy,
   Ticket,
@@ -152,6 +153,7 @@ export const navGroups: NavGroup[] = [
     label: "Engagement",
     items: [
       { title: "Announcements", url: "/announcements", icon: Megaphone },
+      { title: "Polls", url: "/polls", icon: Vote },
       { title: "Employee of the month", url: "/recognition", icon: Trophy },
       { title: "Help & support", url: "/support", icon: LifeBuoy },
     ],

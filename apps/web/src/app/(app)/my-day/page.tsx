@@ -12,6 +12,7 @@ import { LeaveBalanceCard } from "@/components/hrm/leave-balance-card";
 import { YesterdayAttendanceCard } from "@/components/hrm/yesterday-attendance-card";
 import { TicketsSummaryCard } from "@/components/hrm/tickets-summary-card";
 import { MoodHistoryCard } from "@/components/hrm/mood-history-card";
+import { PollsDashboardWidget } from "@/components/hrm/polls-dashboard-widget";
 import { QuickAction } from "@/components/hrm/quick-action";
 
 export default function MyDayPage() {
@@ -39,6 +40,8 @@ export default function MyDayPage() {
           iconClassName="bg-[#44973d]/10 text-[#44973d]"
         />
       </div>
+
+      <PollsDashboardWidget />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4">
