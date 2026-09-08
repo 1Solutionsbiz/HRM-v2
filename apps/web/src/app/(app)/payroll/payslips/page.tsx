@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Download, Plus, Search } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -26,12 +26,11 @@ import { formatDate, formatINR } from "@/lib/format";
 import { downloadPayslipPdf } from "@/lib/payslip-pdf";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
-import { EmptyState } from "@/components/hrm/empty-state";
 import { EmployeePicker } from "@/components/hrm/employee-picker";
 import { PayslipDocument } from "@/components/hrm/payslip-document";
 import { PayslipCardGrid } from "@/components/hrm/payslip-card-grid";
 import { CardSkeleton } from "@/components/hrm/loading-state";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -297,7 +296,13 @@ function GeneratePayslipDialog({
   );
 }
 
-function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
+function EmployeePayslipsView({
+  employee,
+  onBack,
+}: {
+  employee: EmployeeListItem;
+  onBack: () => void;
+}) {
   const salary = useAsync(() => getEmployeeSalary(employee.id), [employee.id]);
   const payslips = useAsync(() => getEmployeePayslips(employee.id), [employee.id]);
   const [generateOpen, setGenerateOpen] = React.useState(false);
@@ -325,10 +330,16 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
 
   return (
     <div className="space-y-6">
+      <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
+        <ChevronLeft />
+        Back to list
+      </Button>
+
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="size-9 shrink-0">
+              {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
               <AvatarFallback className="text-xs">{employeeInitials(employee)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">
@@ -412,12 +423,59 @@ function EmployeePayslipsView({ employee }: { employee: EmployeeListItem }) {
   );
 }
 
+function EmployeeRoster({
+  employees,
+  onSelect,
+}: {
+  employees: EmployeeListItem[];
+  onSelect: (employee: EmployeeListItem) => void;
+}) {
+  const active = React.useMemo(
+    () =>
+      employees
+        .filter((e) => e.status === "ACTIVE")
+        .sort((a, b) => employeeFullName(a).localeCompare(employeeFullName(b))),
+    [employees],
+  );
+
+  if (active.length === 0) {
+    return <p className="text-muted-foreground p-6 text-sm">No active employees found.</p>;
+  }
+
+  return (
+    <div className="divide-y">
+      {active.map((e) => (
+        <button
+          key={e.id}
+          type="button"
+          onClick={() => onSelect(e)}
+          className="hover:bg-accent flex w-full items-center gap-3 px-4 py-3 text-left"
+        >
+          <Avatar className="size-8 shrink-0">
+            {e.avatarUrl && <AvatarImage src={e.avatarUrl} alt="" />}
+            <AvatarFallback className="text-xs">{employeeInitials(e)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{employeeFullName(e)}</p>
+            <p className="text-muted-foreground truncate text-xs">
+              {e.employeeCode} · {e.designation?.title ?? "—"} · {e.department?.name ?? "—"}
+            </p>
+          </div>
+          <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminPayslipsPage() {
-  // Deliberately not filtered to active-only: HR needs to look up a past
-  // employee's payslip history too (that data is real and imported - see
-  // PROJECT_STATUS.md - but was unreachable through this search before).
-  // Generating a *new* payslip for someone no longer employed is blocked
-  // separately, inside EmployeePayslipsView.
+  // getEmployees() is deliberately not filtered to active-only here: HR
+  // still needs to look up a past employee's payslip history via the
+  // EmployeePicker search (that data is real and imported - see
+  // PROJECT_STATUS.md). The roster list below, though, only ever shows the
+  // active roster - browsing to a former employee's payslips is a search,
+  // not a click. Generating a *new* payslip for someone no longer employed
+  // is blocked separately, inside EmployeePayslipsView.
   const { data: employees } = useAsync(getEmployees);
   const [selected, setSelected] = React.useState<EmployeeListItem | null>(null);
 
@@ -430,11 +488,14 @@ export default function AdminPayslipsPage() {
       />
 
       {selected ? (
-        <EmployeePayslipsView employee={selected} />
+        <EmployeePayslipsView employee={selected} onBack={() => setSelected(null)} />
       ) : (
         <Card>
-          <CardContent className="pt-6">
-            <EmptyState icon={Search} title="Search for an employee" description="Pick someone to view or generate their payslips." />
+          <CardHeader>
+            <CardTitle className="text-base">Active employees</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <EmployeeRoster employees={employees ?? []} onSelect={setSelected} />
           </CardContent>
         </Card>
       )}
