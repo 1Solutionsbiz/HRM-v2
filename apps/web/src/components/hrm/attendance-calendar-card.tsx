@@ -120,27 +120,26 @@ export function AttendanceCalendarCard({ linkHref, className }: AttendanceCalend
               return (
                 <div
                   key={dateStr}
-                  title={bucket ? ATTENDANCE_BUCKET_LABEL[bucket] : undefined}
+                  title={inMonth && bucket ? ATTENDANCE_BUCKET_LABEL[bucket] : undefined}
                   className={cn(
                     "flex aspect-square items-center justify-center rounded-full text-xs",
-                    !inMonth && "text-muted-foreground/40",
-                    bucket && ATTENDANCE_BUCKET_CELL[bucket],
-                    isToday && "ring-primary ring-2",
+                    inMonth && bucket && ATTENDANCE_BUCKET_CELL[bucket],
+                    inMonth && isToday && "ring-primary ring-2",
                   )}
                 >
-                  {d.getDate()}
+                  {inMonth ? d.getDate() : ""}
                 </div>
               );
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
-            <div className="flex items-center gap-1.5">
-              <span className="border-primary size-2.5 rounded-full border-2" />
+          <div className="mt-3 flex flex-nowrap items-center gap-x-2 overflow-x-auto text-[10px] whitespace-nowrap">
+            <div className="flex items-center gap-1">
+              <span className="border-primary size-2 shrink-0 rounded-full border-2" />
               <span className="text-muted-foreground">Today</span>
             </div>
             {ATTENDANCE_LEGEND.map((bucket) => (
-              <div key={bucket} className="flex items-center gap-1.5">
-                <span className={cn("size-2.5 rounded-full", ATTENDANCE_BUCKET_DOT[bucket])} />
+              <div key={bucket} className="flex items-center gap-1">
+                <span className={cn("size-2 shrink-0 rounded-full", ATTENDANCE_BUCKET_DOT[bucket])} />
                 <span className="text-muted-foreground">{ATTENDANCE_BUCKET_LABEL[bucket]}</span>
               </div>
             ))}

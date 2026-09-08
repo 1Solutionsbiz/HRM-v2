@@ -13,6 +13,7 @@ import { YesterdayAttendanceCard } from "@/components/hrm/yesterday-attendance-c
 import { TicketsSummaryCard } from "@/components/hrm/tickets-summary-card";
 import { MoodHistoryCard } from "@/components/hrm/mood-history-card";
 import { PollsDashboardWidget } from "@/components/hrm/polls-dashboard-widget";
+import { ThoughtOfTheDayCard } from "@/components/hrm/thought-of-the-day-card";
 import { QuickAction } from "@/components/hrm/quick-action";
 import { cardToneClasses } from "@/lib/tone";
 
@@ -52,6 +53,7 @@ export default function MyDayPage() {
         <AnnouncementsFeedCard className={cardToneClasses.warning} />
 
         <div className="space-y-4">
+          <ThoughtOfTheDayCard className={cardToneClasses.teal} />
           <LeaveBalanceCard className={cardToneClasses.success} />
           <YesterdayAttendanceCard className={cardToneClasses.primary} />
           <TicketsSummaryCard className={cardToneClasses.destructive} />
