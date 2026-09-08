@@ -10,6 +10,7 @@ import { AnnouncementsFeedCard } from "@/components/hrm/announcements-feed-card"
 import { LeaveBalanceCard } from "@/components/hrm/leave-balance-card";
 import { YesterdayAttendanceCard } from "@/components/hrm/yesterday-attendance-card";
 import { TicketsSummaryCard } from "@/components/hrm/tickets-summary-card";
+import { MoodHistoryCard } from "@/components/hrm/mood-history-card";
 import { QuickAction } from "@/components/hrm/quick-action";
 import { PageHeader } from "@/components/hrm/page-header";
 
@@ -63,6 +64,7 @@ export default function MyDayPage() {
           <LeaveBalanceCard />
           <YesterdayAttendanceCard />
           <TicketsSummaryCard />
+          <MoodHistoryCard />
         </div>
       </div>
     </div>

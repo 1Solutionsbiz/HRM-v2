@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
+import { MoodCheckInGate } from "@/components/hrm/mood-checkin-gate";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getPageTitle } from "@/lib/page-title";
 
@@ -43,6 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </SidebarInset>
       <MobileBottomNav />
+      <MoodCheckInGate />
     </SidebarProvider>
   );
 }

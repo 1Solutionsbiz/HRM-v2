@@ -354,6 +354,7 @@ model Employee {
   recognitions       Recognition[]
   tasks              Task[]
   tickets            Ticket[]
+  moodCheckIns       MoodCheckIn[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -931,6 +932,41 @@ model Resignation {
   decidedByUser User?    @relation("ResignationDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
 
   @@map("resignations")
+}
+
+// =============================================================================
+// Mood check-in — a once-a-day "how are you feeling" popup shown on login.
+// =============================================================================
+
+enum MoodLevel {
+  TERRIBLE
+  POOR
+  GOOD
+  GREAT
+  EXCELLENT
+}
+
+/// One row per day an employee has *handled* the popup — either answered
+/// it (`mood` set) or dismissed it with the X (`mood` null). The null rows
+/// exist purely so the popup doesn't reappear later the same day; they're
+/// filtered out of "my past moods" history, which only shows real answers.
+model MoodCheckIn {
+  id          String     @id @default(cuid())
+  employeeId  String
+  date        DateTime   @db.Date
+  mood        MoodLevel?
+  /// Fixed tag set (Appraisal Salary, Colleagues, Work-life balance, …) —
+  /// no relational querying need, so a plain string array rather than a
+  /// join table (same reasoning as AttendancePolicy.workingWeekdays).
+  tags        Json?
+  comment     String?    @db.Text
+  isAnonymous Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@map("mood_checkins")
 }
 
 // =============================================================================
