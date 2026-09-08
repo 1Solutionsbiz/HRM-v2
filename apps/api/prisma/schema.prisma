@@ -795,18 +795,27 @@ enum OperatingExpenseCategory {
   ELECTRICITY
   INTERNET
   MISCELLANEOUS
+  /// User-added line item beyond the 4 standard categories — `label` names
+  /// it. Unlike the standard 4 (fixed, one row per period), any number of
+  /// CUSTOM rows can exist per period, distinguished by label.
+  CUSTOM
 }
 
 model OperatingExpense {
   id          String                   @id @default(cuid())
   category    OperatingExpenseCategory
+  /// Empty for the 4 standard categories (kept non-null so the unique
+  /// constraint below still enforces one row per category per period —
+  /// MySQL treats NULLs in a unique index as distinct from each other,
+  /// which would defeat that). Required, user-entered text for CUSTOM.
+  label       String                   @default("")
   amount      Decimal                  @db.Decimal(12, 2)
   periodMonth Int
   periodYear  Int
   note        String?                  @db.Text
   updatedAt   DateTime                 @updatedAt
 
-  @@unique([category, periodMonth, periodYear])
+  @@unique([category, label, periodMonth, periodYear])
   @@map("operating_expenses")
 }
 

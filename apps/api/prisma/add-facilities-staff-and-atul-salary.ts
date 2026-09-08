@@ -3,7 +3,12 @@
   import { PrismaMariaDb } from '@prisma/adapter-mariadb';
   import { PrismaClient } from '../src/generated/prisma/client.js';
 
-  const scrypt = promisify(scryptCallback);
+  const scrypt = promisify(scryptCallback) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: { N: number; r: number; p: number },
+) => Promise<Buffer>;
   const SCRYPT_N = 16384;
   const SCRYPT_R = 8;
   const SCRYPT_P = 1;

@@ -8,12 +8,23 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { OperatingExpenseCategory } from '../../generated/prisma/enums.js';
 
 export class UpsertOperatingExpenseDto {
   @IsIn(Object.values(OperatingExpenseCategory))
   category!: OperatingExpenseCategory;
+
+  // Required only for CUSTOM (multiple CUSTOM rows can coexist per period,
+  // distinguished by this) — the 4 standard categories are one row per
+  // period regardless of what's sent here, so the service ignores it there.
+  @ValidateIf((dto: UpsertOperatingExpenseDto) => dto.category === 'CUSTOM')
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  label?: string;
 
   @IsInt()
   @Min(1)

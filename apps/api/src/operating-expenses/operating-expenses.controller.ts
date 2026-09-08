@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
@@ -29,5 +29,10 @@ export class OperatingExpensesController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.operatingExpensesService.upsert(dto, actor);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() actor: AuthContext) {
+    return this.operatingExpensesService.remove(id, actor);
   }
 }
