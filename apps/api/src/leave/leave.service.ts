@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { addDays, parseDateOnly } from '../common/date-only.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { LeaveDayType } from '../generated/prisma/enums.js';
@@ -28,6 +29,7 @@ export class LeaveService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly sequenceService: SequenceService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   getLeaveTypes() {
@@ -392,6 +394,13 @@ export class LeaveService {
       targetType: 'LeaveRequest',
       targetId: requestId,
       description: `Leave request ${request.code} ${dto.decision.toLowerCase()}`,
+    });
+
+    await this.notificationsService.createForEmployee(request.employeeId, {
+      type: 'LEAVE',
+      title: `Leave request ${dto.decision === 'APPROVED' ? 'approved' : 'rejected'}`,
+      description: `Your leave request ${request.code} was ${dto.decision.toLowerCase()}.`,
+      linkUrl: '/leave',
     });
 
     return this.serializeRequest(updated);

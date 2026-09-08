@@ -31,14 +31,16 @@ const actor: AuthContext = {
 describe('ResignationService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
   let auditService: { log: ReturnType<typeof vi.fn> };
+  let notificationsService: { createForEmployee: ReturnType<typeof vi.fn> };
   let service: ResignationService;
 
   beforeEach(() => {
     prisma = buildPrismaMock();
     prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
+    notificationsService = { createForEmployee: vi.fn().mockResolvedValue(undefined) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new ResignationService(prisma as any, auditService as any);
+    service = new ResignationService(prisma as any, auditService as any, notificationsService as any);
   });
 
   describe('submit', () => {
@@ -153,6 +155,7 @@ describe('ResignationService', () => {
         id: 'r1',
         employeeId: 'emp-1',
         status: 'PENDING',
+        lastWorkingDay: new Date('2099-01-01'),
       });
       prisma.resignation.update.mockResolvedValue({
         id: 'r1',

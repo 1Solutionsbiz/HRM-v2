@@ -26,6 +26,37 @@ export class NotificationsService {
     return this.prisma.notification.create({ data: input });
   }
 
+  /**
+   * Bulk fan-out for company-wide events (e.g. a published announcement) -
+   * one `createMany` instead of N sequential `create` calls.
+   */
+  async createForUsers(userIds: string[], input: Omit<CreateNotificationInput, 'userId'>) {
+    if (userIds.length === 0) return { count: 0 };
+    return this.prisma.notification.createMany({
+      data: userIds.map((userId) => ({ ...input, userId })),
+    });
+  }
+
+  /**
+   * `Notification.userId` is a User id, but most domain services (Leave,
+   * Expenses, Resignation, Tickets) only carry an `Employee` id - this
+   * resolves that lookup in one place instead of every call site repeating
+   * it. Silently no-ops if the employee has no linked user (shouldn't
+   * happen for a real employee, but a notification is never worth failing
+   * the actual decision/action over).
+   */
+  async createForEmployee(
+    employeeId: string,
+    input: Omit<CreateNotificationInput, 'userId'>,
+  ) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { userId: true },
+    });
+    if (!employee) return null;
+    return this.create({ ...input, userId: employee.userId });
+  }
+
   async findAllForUser(userId: string) {
     return this.prisma.notification.findMany({
       where: { userId },

@@ -14,6 +14,9 @@ function buildPrismaMock() {
       findMany: vi.fn().mockResolvedValue([]),
       upsert: vi.fn(),
     },
+    employee: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   };
 }
 
@@ -28,13 +31,15 @@ const actor: AuthContext = {
 describe('AnnouncementsService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
   let auditService: { log: ReturnType<typeof vi.fn> };
+  let notificationsService: { createForUsers: ReturnType<typeof vi.fn> };
   let service: AnnouncementsService;
 
   beforeEach(() => {
     prisma = buildPrismaMock();
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
+    notificationsService = { createForUsers: vi.fn().mockResolvedValue({ count: 0 }) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new AnnouncementsService(prisma as any, auditService as any);
+    service = new AnnouncementsService(prisma as any, auditService as any, notificationsService as any);
   });
 
   describe('getAllForUser', () => {

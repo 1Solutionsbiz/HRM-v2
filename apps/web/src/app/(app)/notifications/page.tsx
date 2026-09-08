@@ -4,9 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { Bell, CalendarDays, Clock, Megaphone, Receipt, Settings2 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/mock/mock-api";
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type AppNotification,
+  type NotificationType,
+} from "@/lib/api/notifications";
 import { formatRelativeTime } from "@/lib/format";
-import type { AppNotification } from "@/lib/mock/fixtures";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -14,12 +19,12 @@ import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const typeIcon: Record<AppNotification["type"], React.ElementType> = {
-  leave: CalendarDays,
-  expense: Receipt,
-  attendance: Clock,
-  announcement: Megaphone,
-  system: Settings2,
+const typeIcon: Record<NotificationType, React.ElementType> = {
+  LEAVE: CalendarDays,
+  EXPENSE: Receipt,
+  ATTENDANCE: Clock,
+  ANNOUNCEMENT: Megaphone,
+  SYSTEM: Settings2,
 };
 
 export default function NotificationsPage() {
@@ -31,13 +36,13 @@ export default function NotificationsPage() {
   }
 
   async function handleOpen(n: AppNotification) {
-    if (!n.read) {
+    if (!n.isRead) {
       await markNotificationRead(n.id);
       refetch();
     }
   }
 
-  const unreadCount = (data ?? []).filter((n) => !n.read).length;
+  const unreadCount = (data ?? []).filter((n) => !n.isRead).length;
   const description = loading
     ? "Loading…"
     : unreadCount > 0
@@ -72,7 +77,7 @@ export default function NotificationsPage() {
               const Icon = typeIcon[n.type];
               const content = (
                 <Card
-                  className={n.read ? undefined : "border-primary/30 bg-primary/[0.03]"}
+                  className={n.isRead ? undefined : "border-primary/30 bg-primary/[0.03]"}
                 >
                   <CardContent className="flex items-start gap-3 pt-4 pb-4">
                     <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-full">
@@ -80,7 +85,7 @@ export default function NotificationsPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        {!n.read && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
+                        {!n.isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
                         <p className="text-sm font-medium">{n.title}</p>
                       </div>
                       <p className="text-muted-foreground text-xs">{n.description}</p>
@@ -91,8 +96,8 @@ export default function NotificationsPage() {
                   </CardContent>
                 </Card>
               );
-              return n.href ? (
-                <Link key={n.id} href={n.href} onClick={() => handleOpen(n)} className="block">
+              return n.linkUrl ? (
+                <Link key={n.id} href={n.linkUrl} onClick={() => handleOpen(n)} className="block">
                   {content}
                 </Link>
               ) : (

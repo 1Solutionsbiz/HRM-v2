@@ -307,7 +307,8 @@ on `hrm.1solutions.biz` against real production data, not just typechecked.
 | Admin (Roles & permissions, Company settings, System logs) | ✓ wired |
 | Profile (self-service view + edit) | ✓ wired |
 | Dashboard (Admin/HR/Manager variants) | ✓ wired — see caveat below |
-| Performance, Announcements, Notifications, Settings, Onboarding, Resignations, Payroll reports | ○ still mock — not touched this pass |
+| Performance, Announcements, Notifications, Onboarding, Resignations, Payroll reports | ✓ wired (2026-09-08) — see "Final wiring pass" below |
+| Settings | ✓ wired — Appearance/Security were already real; fake Notification-preference toggles removed (2026-09-08), see below |
 
 Every "✓ wired" row above has been clicked through live on `hrm.1solutions.biz`
 against real production data, not just typechecked — see the 2026-09-06
@@ -1027,6 +1028,76 @@ tickets" count both update to match. Not built: deleting a ticket (no
 route exists, matching how leave requests can only be cancelled, never
 hard-deleted) and importing the ~90 real historical legacy tickets -
 left as a follow-up, not started.
+
+## Final wiring pass (2026-09-08)
+
+Closed out every remaining mock-data page from the "Frontend ↔ API wiring"
+table above, per "wire anything that is pending." Backend modules for all
+of these already existed (built earlier - see "Backend (`apps/api`)" below);
+this pass was frontend wiring plus a few real backend gaps found along the
+way.
+
+- **Announcements** - clean swap to the already-existing `lib/api/
+  announcements.ts` (already used by `AnnouncementsFeedCard` on `/my-day`).
+  Category badges now render the real uppercase enum via `titleCase()`.
+- **Performance** - new `lib/api/performance.ts`. Field names differ from
+  the mock (`progressPercent`/`dueDate` vs. `progress`/`dueLabel`,
+  `maxRating` vs `outOf`) - page updated to match, with a `dueLabel`
+  fallback ("No due date") for goals with a null `dueDate`.
+- **Resignations** (admin review list) - new `lib/api/resignations.ts`.
+  Found and fixed a real backend gap: `ResignationService.
+  getCompanyResignations()`'s Prisma `include` was missing `department`
+  (only had `designation`), so the page couldn't have shown it. No
+  employee-facing resignation page exists (mock never had one either) -
+  `ResignationController`'s `getMine`/`submit`/`cancelMine` routes are real
+  but still have zero frontend surface; not built this pass, flagged as an
+  open gap, not silently left implicit.
+- **Payroll reports** - added `getPayrollTrend`/`getPayrollByDepartment` to
+  `lib/api/payroll.ts`. The two chart components (`payroll-charts.tsx`)
+  hardcoded mock fixture imports directly inside themselves rather than
+  taking data as a prop - refactored both to accept `data` and moved the
+  real fetch to the page. Real field names (`periodMonth`/`periodYear`/
+  `activeHeadcount`) differ from the mock's (`month`/`headcount`).
+- **Onboarding** - real backend gap, not just wiring: no company-wide
+  "who's currently onboarding" roster endpoint existed, only per-employee
+  ones (`GET /employees/:id/onboarding-steps`). Added `EmployeesService.
+  getOnboardingRoster()` + `GET /employees/onboarding` (class-level
+  `employee:manage`, registered before `:id` like `/me`/`/birthdays`) -
+  defines "currently onboarding" as active employees with at least one
+  incomplete `EmployeeOnboardingStep`, not a time-since-join heuristic, so
+  it stays correct regardless of checklist pace.
+- **Notifications** - the deepest gap: `NotificationsService.create()`
+  existed with GET/PATCH routes already real, but had **zero call sites**
+  anywhere in the app - wiring only the read path would have shipped a
+  page that's permanently empty in production. Added `NotificationsService.
+  createForEmployee()` (resolves Employee id -> User id once, instead of
+  every caller repeating that lookup) and `createForUsers()` (bulk
+  `createMany` fan-out for company-wide events), then wired real trigger
+  points: leave decided, expense claim decided, resignation decided,
+  ticket status changed, ticket comment added by HR (not the reverse - no
+  single "HR" recipient exists to notify on an employee's comment without
+  broadcasting to every `ticket:manage` holder, out of scope for this
+  pass), and announcement published (broadcast to every active employee).
+  Each consuming module (`Leave`, `Expenses`, `Resignation`, `Tickets`,
+  `Announcements`) now imports `NotificationsModule` and injects
+  `NotificationsService`. New `lib/api/notifications.ts` on the frontend;
+  page updated for real field names (`isRead` vs `read`, `linkUrl` vs
+  `href`) and the real `NotificationType` enum values.
+- **Settings** - not a wiring gap: `Appearance` (next-themes) and
+  `Security` (password change) were already fully real. The `Notifications`
+  preferences card (4 toggle switches) was 100% fake - local `useState`,
+  never persisted, no backend model at all. Removed rather than wired,
+  per this session's standing "don't ship fake placeholder widgets"
+  precedent - doubly so here, since the switches claimed to gate the
+  notification types this same pass just made real; leaving them in would
+  have actively misled a user into thinking they could turn LEAVE/EXPENSE/
+  ANNOUNCEMENT notifications off. A real `NotificationPreference` model is
+  a reasonable follow-up if wanted, not started.
+
+All 177 existing API unit tests still pass (5 spec files needed updating
+for the new `NotificationsService` constructor dependency: `leave`,
+`expenses`, `resignation`, `tickets`, `announcements`). Both apps'
+`tsc --noEmit`, `eslint`, and full `next build`/`nest build` are clean.
 
 ## Late-coming deduction suggestion (2026-09-06)
 
@@ -1782,10 +1853,10 @@ switcher:**
 
 ## Not started
 
-- ○ Frontend wiring for Performance, Announcements, Notifications, Settings,
-  Onboarding, Resignations, Payroll reports — everything else (see
-  "Frontend ↔ API wiring" above, including Dashboard as of 2026-09-06) is
-  wired.
+- ○ Employee-facing resignation submission page — `ResignationController`'s
+  `getMine`/`submit`/`cancelMine` routes are real, but no frontend page has
+  ever called them (only the admin review list at `/people/resignations`
+  exists, wired 2026-09-08). Found while wiring Resignations, not built.
 - ○ Assets and Complaints backend modules (12/13) — Assets now has a schema
   and passive read access via Employees; neither has real CRUD endpoints.
 - ○ `hrm_attandance_machine_detail` import (the Sep–Dec 2024 bulk, predating

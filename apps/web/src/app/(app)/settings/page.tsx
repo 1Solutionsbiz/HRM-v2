@@ -10,8 +10,6 @@ import { PageHeader } from "@/components/hrm/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import {
   ToggleGroup,
@@ -27,21 +25,8 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const NOTIF_PREFS = [
-  { id: "leave", label: "Leave request updates", description: "Approvals, rejections, and reminders." },
-  { id: "expense", label: "Expense claim updates", description: "Approvals and reimbursement status." },
-  { id: "attendance", label: "Attendance alerts", description: "Missed check-in/check-out reminders." },
-  { id: "announcements", label: "Company announcements", description: "Holiday notices, policy updates, events." },
-] as const;
-
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const [prefs, setPrefs] = React.useState<Record<string, boolean>>({
-    leave: true,
-    expense: true,
-    attendance: true,
-    announcements: false,
-  });
 
   const [passwordDialogOpen, setPasswordDialogOpen] = React.useState(false);
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -112,35 +97,6 @@ export default function SettingsPage() {
               <Monitor /> System
             </ToggleGroupItem>
           </ToggleGroup>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Notifications</CardTitle>
-          <CardDescription>Choose what you get notified about.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {NOTIF_PREFS.map((pref, i) => (
-            <React.Fragment key={pref.id}>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <Label htmlFor={pref.id} className="text-sm font-medium">
-                    {pref.label}
-                  </Label>
-                  <p className="text-muted-foreground text-xs">{pref.description}</p>
-                </div>
-                <Switch
-                  id={pref.id}
-                  checked={prefs[pref.id]}
-                  onCheckedChange={(checked) =>
-                    setPrefs((p) => ({ ...p, [pref.id]: checked }))
-                  }
-                />
-              </div>
-              {i < NOTIF_PREFS.length - 1 && <Separator />}
-            </React.Fragment>
-          ))}
         </CardContent>
       </Card>
 

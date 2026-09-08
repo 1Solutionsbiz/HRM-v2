@@ -2,7 +2,7 @@
 
 import { useAsync } from "@/lib/use-async";
 import { formatINR } from "@/lib/format";
-import { getPayrollByDepartment, getPayrollTrend } from "@/lib/mock/mock-api";
+import { getPayrollByDepartment, getPayrollTrend } from "@/lib/api/payroll";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatCard } from "@/components/hrm/stat-card";
 import { ChartCard } from "@/components/hrm/chart-card";
@@ -12,8 +12,8 @@ import { BadgeIndianRupee, TrendingUp, Users } from "lucide-react";
 import { PayrollByDepartmentChart, PayrollTrendChart } from "./payroll-charts";
 
 export default function PayrollReportsPage() {
-  const trend = useAsync(getPayrollTrend);
-  const byDept = useAsync(getPayrollByDepartment);
+  const trend = useAsync(() => getPayrollTrend());
+  const byDept = useAsync(() => getPayrollByDepartment());
 
   const latest = trend.data?.at(-1);
   const previous = trend.data?.at(-2);
@@ -42,10 +42,10 @@ export default function PayrollReportsPage() {
                   : undefined
               }
             />
-            <StatCard label="Headcount" value={String(latest.headcount)} icon={Users} tone="violet" />
+            <StatCard label="Headcount" value={String(latest.activeHeadcount)} icon={Users} tone="violet" />
             <StatCard
               label="Avg. cost per employee"
-              value={formatINR(Math.round(latest.cost / latest.headcount))}
+              value={formatINR(latest.activeHeadcount > 0 ? Math.round(latest.cost / latest.activeHeadcount) : 0)}
               icon={TrendingUp}
               tone="orange"
             />
@@ -61,7 +61,7 @@ export default function PayrollReportsPage() {
           loadingFallback={<CardSkeleton lines={5} />}
         >
           <ChartCard title="Monthly payroll cost" description="Last 6 months.">
-            <PayrollTrendChart />
+            <PayrollTrendChart data={trend.data ?? []} />
           </ChartCard>
         </AsyncSection>
 
@@ -72,7 +72,7 @@ export default function PayrollReportsPage() {
           loadingFallback={<CardSkeleton lines={5} />}
         >
           <ChartCard title="Cost by department" description="Current month.">
-            <PayrollByDepartmentChart />
+            <PayrollByDepartmentChart data={byDept.data ?? []} />
           </ChartCard>
         </AsyncSection>
       </div>

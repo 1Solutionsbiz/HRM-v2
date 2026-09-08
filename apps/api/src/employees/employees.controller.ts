@@ -66,6 +66,14 @@ export class EmployeesController {
     return this.employeesService.getUpcomingAnniversaries();
   }
 
+  // Class-level employee:manage applies (no override) - this is the
+  // People > Onboarding roster, HR/admin only, unlike birthdays/anniversaries
+  // above. Registered before :id for the same reason as /me.
+  @Get('onboarding')
+  getOnboardingRoster() {
+    return this.employeesService.getOnboardingRoster();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.employeesService.findOne(id);

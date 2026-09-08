@@ -157,3 +157,30 @@ const MONTH_NAMES = [
 export function monthName(periodMonth: number): string {
   return MONTH_NAMES[periodMonth - 1] ?? String(periodMonth);
 }
+
+export interface PayrollTrendPeriod {
+  periodMonth: number;
+  periodYear: number;
+  cost: number;
+  payslipCount: number;
+  activeHeadcount: number;
+}
+
+export function getPayrollTrend(months?: number): Promise<PayrollTrendPeriod[]> {
+  return apiFetch<PayrollTrendPeriod[]>(`/payroll/trend${months ? `?months=${months}` : ""}`);
+}
+
+export interface PayrollByDepartment {
+  departmentId: string | null;
+  departmentName: string | null;
+  cost: number;
+  employeeCount: number;
+}
+
+export function getPayrollByDepartment(periodMonth?: number, periodYear?: number): Promise<PayrollByDepartment[]> {
+  const search = new URLSearchParams();
+  if (periodMonth) search.set("periodMonth", String(periodMonth));
+  if (periodYear) search.set("periodYear", String(periodYear));
+  const qs = search.toString();
+  return apiFetch<PayrollByDepartment[]>(`/payroll/by-department${qs ? `?${qs}` : ""}`);
+}

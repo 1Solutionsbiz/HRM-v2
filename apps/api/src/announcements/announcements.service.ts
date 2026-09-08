@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { PublishAnnouncementDto } from './dto/publish-announcement.dto.js';
 
@@ -9,6 +10,7 @@ export class AnnouncementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -62,6 +64,20 @@ export class AnnouncementsService {
       targetId: announcement.id,
       description: `Published announcement: ${dto.title}`,
     });
+
+    const activeEmployees = await this.prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      select: { userId: true },
+    });
+    await this.notificationsService.createForUsers(
+      activeEmployees.map((e) => e.userId),
+      {
+        type: 'ANNOUNCEMENT',
+        title: dto.title,
+        description: dto.body.length > 140 ? `${dto.body.slice(0, 140)}…` : dto.body,
+        linkUrl: '/announcements',
+      },
+    );
 
     return announcement;
   }

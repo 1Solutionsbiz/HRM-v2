@@ -7,16 +7,18 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { payrollByDepartment, payrollMonthlyTrend } from "@/lib/mock/hr-fixtures";
+import { monthName, type PayrollTrendPeriod, type PayrollByDepartment } from "@/lib/api/payroll";
 
 const trendConfig = {
   cost: { label: "Payroll cost", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
-export function PayrollTrendChart() {
+export function PayrollTrendChart({ data }: { data: PayrollTrendPeriod[] }) {
+  const chartData = data.map((p) => ({ month: monthName(p.periodMonth).slice(0, 3), cost: p.cost }));
+
   return (
     <ChartContainer config={trendConfig} className="aspect-auto h-64 w-full">
-      <BarChart data={payrollMonthlyTrend} barCategoryGap={24}>
+      <BarChart data={chartData} barCategoryGap={24}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
         <ChartTooltip
@@ -36,10 +38,12 @@ const deptConfig = {
   cost: { label: "Cost", color: "var(--chart-3)" },
 } satisfies ChartConfig;
 
-export function PayrollByDepartmentChart() {
+export function PayrollByDepartmentChart({ data }: { data: PayrollByDepartment[] }) {
+  const chartData = data.map((d) => ({ department: d.departmentName ?? "Unassigned", cost: d.cost }));
+
   return (
     <ChartContainer config={deptConfig} className="aspect-auto h-72 w-full">
-      <BarChart data={payrollByDepartment} layout="vertical" margin={{ left: 16 }}>
+      <BarChart data={chartData} layout="vertical" margin={{ left: 16 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" />
         <XAxis type="number" tickLine={false} axisLine={false} hide />
         <YAxis

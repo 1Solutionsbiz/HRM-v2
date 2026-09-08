@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { parseDateOnly } from '../common/date-only.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { SubmitResignationDto } from './dto/submit-resignation.dto.js';
@@ -16,6 +17,7 @@ export class ResignationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getMine(userId: string) {
@@ -115,6 +117,7 @@ export class ResignationService {
             firstName: true,
             lastName: true,
             designation: { select: { title: true } },
+            department: { select: { name: true } },
           },
         },
       },
@@ -157,6 +160,18 @@ export class ResignationService {
       targetType: 'Employee',
       targetId: resignation.employeeId,
       description: `Resignation ${dto.decision === 'APPROVED' ? 'approved' : 'declined'}`,
+    });
+
+    // No linkUrl - there's no employee-facing resignation status page yet
+    // (only the admin review list at /people/resignations), so there's
+    // nowhere real to send this notification's click-through.
+    await this.notificationsService.createForEmployee(resignation.employeeId, {
+      type: 'SYSTEM',
+      title: `Resignation ${dto.decision === 'APPROVED' ? 'approved' : 'declined'}`,
+      description:
+        dto.decision === 'APPROVED'
+          ? `Your resignation was approved. Last working day: ${resignation.lastWorkingDay.toISOString().slice(0, 10)}.`
+          : 'Your resignation was declined.',
     });
 
     return updated;

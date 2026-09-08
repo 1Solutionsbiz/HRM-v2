@@ -37,6 +37,7 @@ describe('TicketService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
   let sequenceService: { next: ReturnType<typeof vi.fn> };
   let auditService: { log: ReturnType<typeof vi.fn> };
+  let notificationsService: { createForEmployee: ReturnType<typeof vi.fn> };
   let service: TicketService;
 
   beforeEach(() => {
@@ -44,7 +45,8 @@ describe('TicketService', () => {
     prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
     sequenceService = { next: vi.fn().mockResolvedValue(7) };
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
-    service = new TicketService(prisma as any, auditService as any, sequenceService as any);
+    notificationsService = { createForEmployee: vi.fn().mockResolvedValue(undefined) };
+    service = new TicketService(prisma as any, auditService as any, sequenceService as any, notificationsService as any);
   });
 
   describe('create', () => {

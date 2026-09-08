@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { parseDateOnly } from '../common/date-only.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { SubmitExpenseClaimDto } from './dto/submit-expense-claim.dto.js';
@@ -20,6 +21,7 @@ export class ExpensesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly sequenceService: SequenceService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   getCategories() {
@@ -164,6 +166,13 @@ export class ExpensesService {
       targetType: 'ExpenseClaim',
       targetId: claimId,
       description: `Expense claim ${claim.code} ${dto.decision.toLowerCase()}`,
+    });
+
+    await this.notificationsService.createForEmployee(claim.employeeId, {
+      type: 'EXPENSE',
+      title: `Expense claim ${dto.decision === 'APPROVED' ? 'approved' : 'rejected'}`,
+      description: `Your expense claim ${claim.code} was ${dto.decision.toLowerCase()}.`,
+      linkUrl: '/expenses',
     });
 
     return this.serializeClaim(updated);

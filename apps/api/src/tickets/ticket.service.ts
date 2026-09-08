@@ -6,11 +6,19 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { TicketStatus } from '../generated/prisma/enums.js';
 import type { CreateTicketDto } from './dto/create-ticket.dto.js';
 import type { UpdateTicketStatusDto } from './dto/update-ticket-status.dto.js';
 import type { AddTicketCommentDto } from './dto/add-ticket-comment.dto.js';
+
+const STATUS_LABEL: Record<TicketStatus, string> = {
+  OPEN: 'Open',
+  IN_PROGRESS: 'Under Progress',
+  RESOLVED: 'Resolved',
+  CLOSED: 'Closed',
+};
 
 const TICKET_INCLUDE = {
   employee: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
@@ -26,6 +34,7 @@ export class TicketService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly sequenceService: SequenceService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getMyTickets(userId: string) {
@@ -98,6 +107,13 @@ export class TicketService {
       description: `Ticket ${ticket.code} status changed to ${dto.status}`,
     });
 
+    await this.notificationsService.createForEmployee(ticket.employeeId, {
+      type: 'SYSTEM',
+      title: `Ticket ${ticket.code} updated`,
+      description: `Your ticket "${ticket.title}" is now ${STATUS_LABEL[dto.status]}.`,
+      linkUrl: '/support',
+    });
+
     return updated;
   }
 
@@ -122,10 +138,25 @@ export class TicketService {
       data: { ticketId, authorUserId: actor.userId, body: dto.body },
     });
 
-    return this.prisma.ticket.findUniqueOrThrow({
+    const fresh = await this.prisma.ticket.findUniqueOrThrow({
       where: { id: ticketId },
       include: TICKET_INCLUDE,
     });
+
+    // Only notify HR->employee - there's no single "HR" recipient to
+    // notify for the reverse direction (employee comments would need a
+    // broadcast to every ticket:manage holder, which is a bigger feature
+    // than this pass covers).
+    if (!isOwner) {
+      await this.notificationsService.createForEmployee(fresh.employeeId, {
+        type: 'SYSTEM',
+        title: `New comment on ticket ${fresh.code}`,
+        description: `HR replied on your ticket "${fresh.title}".`,
+        linkUrl: '/support',
+      });
+    }
+
+    return fresh;
   }
 
   private async requireEmployeeId(userId: string): Promise<string> {

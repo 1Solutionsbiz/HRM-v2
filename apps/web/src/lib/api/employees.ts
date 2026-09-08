@@ -126,6 +126,21 @@ export function getOnboardingSteps(employeeId: string): Promise<OnboardingStepRo
   return apiFetch<OnboardingStepRow[]>(`/employees/${employeeId}/onboarding-steps`);
 }
 
+export interface OnboardingRosterEmployee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  dateOfJoining: string;
+  department: { name: string } | null;
+  designation: { title: string } | null;
+  onboardingSteps: OnboardingStepRow[];
+}
+
+export function getOnboardingRoster(): Promise<OnboardingRosterEmployee[]> {
+  return apiFetch<OnboardingRosterEmployee[]>("/employees/onboarding");
+}
+
 export function getEmployee(id: string): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>(`/employees/${id}`);
 }

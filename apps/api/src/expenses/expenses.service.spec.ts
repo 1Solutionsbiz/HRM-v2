@@ -36,6 +36,7 @@ describe('ExpensesService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
   let sequenceService: { next: ReturnType<typeof vi.fn> };
   let auditService: { log: ReturnType<typeof vi.fn> };
+  let notificationsService: { createForEmployee: ReturnType<typeof vi.fn> };
   let service: ExpensesService;
 
   beforeEach(() => {
@@ -43,11 +44,13 @@ describe('ExpensesService', () => {
     prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
     sequenceService = { next: vi.fn().mockResolvedValue(7) };
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
+    notificationsService = { createForEmployee: vi.fn().mockResolvedValue(undefined) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     service = new ExpensesService(
       prisma as any,
       auditService as any,
       sequenceService as any,
+      notificationsService as any,
     );
   });
 

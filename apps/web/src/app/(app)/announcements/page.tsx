@@ -3,9 +3,9 @@
 import * as React from "react";
 import { Megaphone } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getAnnouncements } from "@/lib/mock/mock-api";
+import { getAnnouncements, markAnnouncementRead, type Announcement, type AnnouncementCategory } from "@/lib/api/announcements";
 import { formatDate } from "@/lib/format";
-import type { Announcement } from "@/lib/mock/fixtures";
+import { titleCase } from "@/lib/api/employees";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -20,11 +20,11 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-const categoryTone: Record<Announcement["category"], "default" | "secondary" | "outline"> = {
-  Holiday: "default",
-  Policy: "secondary",
-  Event: "outline",
-  General: "secondary",
+const categoryTone: Record<AnnouncementCategory, "default" | "secondary" | "outline"> = {
+  HOLIDAY: "default",
+  POLICY: "secondary",
+  EVENT: "outline",
+  GENERAL: "secondary",
 };
 
 export default function AnnouncementsPage() {
@@ -34,7 +34,13 @@ export default function AnnouncementsPage() {
 
   function open(a: Announcement) {
     setSelected(a);
-    setReadIds((prev) => new Set(prev).add(a.id));
+    if (!a.read && !readIds.has(a.id)) {
+      setReadIds((prev) => new Set(prev).add(a.id));
+      markAnnouncementRead(a.id).catch(() => {
+        // Best-effort - the unread dot is cosmetic and will correct itself
+        // on next fetch if this silently fails.
+      });
+    }
   }
 
   return (
@@ -78,7 +84,7 @@ export default function AnnouncementsPage() {
                         <p className="text-muted-foreground text-[11px]">{formatDate(a.publishedAt)}</p>
                       </div>
                       <Badge variant={categoryTone[a.category]} className="shrink-0">
-                        {a.category}
+                        {titleCase(a.category)}
                       </Badge>
                     </CardContent>
                   </button>
@@ -95,7 +101,7 @@ export default function AnnouncementsPage() {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-2">
-                  <Badge variant={categoryTone[selected.category]}>{selected.category}</Badge>
+                  <Badge variant={categoryTone[selected.category]}>{titleCase(selected.category)}</Badge>
                   <span className="text-muted-foreground text-xs">{formatDate(selected.publishedAt)}</span>
                 </div>
                 <DialogTitle>{selected.title}</DialogTitle>

@@ -397,6 +397,36 @@ export class EmployeesService {
     }
   }
 
+  /**
+   * "Currently onboarding" = active employees with at least one incomplete
+   * onboarding step - real accounting off EmployeeOnboardingStep rather
+   * than a time-since-join heuristic, so it stays correct regardless of
+   * how long a checklist item takes to actually clear.
+   */
+  async getOnboardingRoster() {
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        status: 'ACTIVE',
+        onboardingSteps: { some: { isCompleted: false } },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        dateOfJoining: true,
+        department: { select: { name: true } },
+        designation: { select: { title: true } },
+        onboardingSteps: {
+          include: { stepTemplate: true },
+          orderBy: { stepTemplate: { sortOrder: 'asc' } },
+        },
+      },
+      orderBy: { dateOfJoining: 'desc' },
+    });
+    return employees;
+  }
+
   async listOnboardingSteps(employeeId: string) {
     await this.assertExists(employeeId);
     return this.prisma.employeeOnboardingStep.findMany({
