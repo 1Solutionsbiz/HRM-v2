@@ -42,6 +42,7 @@ describe('EmployeesService', () => {
   };
   let sequenceService: { next: ReturnType<typeof vi.fn> };
   let auditService: { log: ReturnType<typeof vi.fn> };
+  let notificationsService: { createForEmployee: ReturnType<typeof vi.fn> };
   let service: EmployeesService;
 
   beforeEach(() => {
@@ -53,6 +54,7 @@ describe('EmployeesService', () => {
     };
     sequenceService = { next: vi.fn().mockResolvedValue(7) };
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
+    notificationsService = { createForEmployee: vi.fn().mockResolvedValue(undefined) };
     service = new EmployeesService(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       prisma as any,
@@ -60,6 +62,7 @@ describe('EmployeesService', () => {
       encryptionService as any,
       sequenceService as any,
       auditService as any,
+      notificationsService as any,
     );
   });
 
@@ -296,6 +299,48 @@ describe('EmployeesService', () => {
         where: { id: 'step-1' },
         data: { isCompleted: true, completedAt: expect.any(Date) },
       });
+    });
+  });
+
+  describe('wishBirthday', () => {
+    it('delivers the message as a notification to the target employee', async () => {
+      prisma.employee.findUnique.mockImplementation(({ where }: { where: { userId?: string; id?: string } }) =>
+        where.userId
+          ? Promise.resolve({ id: 'sender-emp' })
+          : Promise.resolve({ id: 'target-emp' }),
+      );
+
+      const result = await service.wishBirthday(
+        'target-emp',
+        { message: 'Happy birthday!' },
+        actor,
+      );
+
+      expect(notificationsService.createForEmployee).toHaveBeenCalledWith('target-emp', {
+        type: 'BIRTHDAY',
+        title: 'Happy Birthday! 🎂',
+        description: 'Happy birthday!',
+      });
+      expect(result).toEqual({ sent: true });
+    });
+
+    it('refuses to let someone wish themselves happy birthday', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'same-emp' });
+
+      await expect(
+        service.wishBirthday('same-emp', { message: 'Hi me' }, actor),
+      ).rejects.toThrow(BadRequestException);
+      expect(notificationsService.createForEmployee).not.toHaveBeenCalled();
+    });
+
+    it('throws when the target employee does not exist', async () => {
+      prisma.employee.findUnique.mockImplementation(({ where }: { where: { userId?: string; id?: string } }) =>
+        where.userId ? Promise.resolve({ id: 'sender-emp' }) : Promise.resolve(null),
+      );
+
+      await expect(
+        service.wishBirthday('missing-emp', { message: 'Hi' }, actor),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

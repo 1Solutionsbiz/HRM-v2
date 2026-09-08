@@ -101,6 +101,13 @@ export function getUpcomingBirthdays(): Promise<UpcomingBirthday[]> {
   return apiFetch<UpcomingBirthday[]>("/employees/birthdays");
 }
 
+export function wishBirthday(employeeId: string, message: string) {
+  return apiFetch(`/employees/${employeeId}/wish-birthday`, {
+    method: "POST",
+    body: { message },
+  });
+}
+
 export interface UpcomingAnniversary {
   id: string;
   firstName: string;

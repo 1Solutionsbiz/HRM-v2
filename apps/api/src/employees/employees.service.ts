@@ -8,12 +8,14 @@ import { EncryptionService } from '../security/encryption.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { UsersService } from '../users/users.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import type { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import type { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import type { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 import type { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
+import type { WishBirthdayDto } from './dto/wish-birthday.dto.js';
 
 const EMPLOYEE_INCLUDE = {
   user: { select: { email: true, isActive: true } },
@@ -35,6 +37,7 @@ export class EmployeesService {
     private readonly encryptionService: EncryptionService,
     private readonly sequenceService: SequenceService,
     private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(dto: CreateEmployeeDto, actor: AuthContext) {
@@ -237,6 +240,38 @@ export class EmployeesService {
       })
       .filter((e) => e.daysUntil <= withinDays && e.years > 0)
       .sort((a, b) => a.daysUntil - b.daysUntil);
+  }
+
+  /**
+   * Delivers a birthday wish as an in-app notification — there's no
+   * email/SMS channel in this app, and the sender's name is already part
+   * of the message text (composed client-side), so the notification needs
+   * no separate "from" field. Self-service: any employee can wish any
+   * other, same trust level as the Highlights widget that surfaces this
+   * action already being open to every logged-in employee.
+   */
+  async wishBirthday(
+    targetEmployeeId: string,
+    dto: WishBirthdayDto,
+    actor: AuthContext,
+  ) {
+    const senderEmployeeId = await this.requireEmployeeId(actor.userId);
+    if (senderEmployeeId === targetEmployeeId) {
+      throw new BadRequestException("You can't wish yourself a happy birthday.");
+    }
+    const target = await this.prisma.employee.findUnique({
+      where: { id: targetEmployeeId },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('Employee not found');
+
+    await this.notificationsService.createForEmployee(targetEmployeeId, {
+      type: 'BIRTHDAY',
+      title: 'Happy Birthday! 🎂',
+      description: dto.message,
+    });
+
+    return { sent: true };
   }
 
   async update(id: string, dto: UpdateEmployeeDto, actor: AuthContext) {

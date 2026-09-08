@@ -8,6 +8,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
+import { WishBirthdayDto } from './dto/wish-birthday.dto.js';
 
 /**
  * Class-level employee:manage covers every route except the two /me ones
@@ -64,6 +65,19 @@ export class EmployeesController {
   @RequirePermissions()
   getUpcomingAnniversaries() {
     return this.employeesService.getUpcomingAnniversaries();
+  }
+
+  // Same override reasoning as birthdays/anniversaries above - every
+  // employee can wish a colleague happy birthday from the Highlights
+  // widget, not just employee:manage holders.
+  @Post(':id/wish-birthday')
+  @RequirePermissions()
+  wishBirthday(
+    @Param('id') id: string,
+    @Body() dto: WishBirthdayDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.wishBirthday(id, dto, actor);
   }
 
   // Class-level employee:manage applies (no override) - this is the

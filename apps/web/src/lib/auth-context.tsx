@@ -14,6 +14,8 @@ export interface AuthUser {
   designation: string | null;
   lastLoginAt: string | null;
   role: Role;
+  employeeId: string | null;
+  employeeCode: string | null;
 }
 
 interface MeResponse {
@@ -67,6 +69,8 @@ function toAuthUser(me: MeResponse): AuthUser {
     designation: me.employee?.designation?.title ?? null,
     lastLoginAt: me.lastLoginAt,
     role: roleKey,
+    employeeId: me.employee?.id ?? null,
+    employeeCode: me.employee?.employeeCode ?? null,
   };
 }
 

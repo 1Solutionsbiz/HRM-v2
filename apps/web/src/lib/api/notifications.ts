@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type NotificationType = "LEAVE" | "EXPENSE" | "ATTENDANCE" | "ANNOUNCEMENT" | "SYSTEM";
+export type NotificationType = "LEAVE" | "EXPENSE" | "ATTENDANCE" | "ANNOUNCEMENT" | "SYSTEM" | "BIRTHDAY";
 
 export interface AppNotification {
   id: string;

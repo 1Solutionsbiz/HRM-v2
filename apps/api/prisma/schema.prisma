@@ -1175,6 +1175,7 @@ enum NotificationType {
   ATTENDANCE
   ANNOUNCEMENT
   SYSTEM
+  BIRTHDAY
 }
 
 model Notification {

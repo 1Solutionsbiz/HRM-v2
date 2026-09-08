@@ -1,13 +1,17 @@
 "use client";
 
-import { Award, Cake } from "lucide-react";
+import * as React from "react";
+import { Award, Cake, PartyPopper } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDateShort } from "@/lib/format";
 import { getUpcomingBirthdays, getUpcomingAnniversaries, employeeFullName } from "@/lib/api/employees";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { CardSkeleton } from "@/components/hrm/loading-state";
+import { WishBirthdayDialog } from "@/components/hrm/wish-birthday-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { toneClasses } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +37,8 @@ type Highlight =
 export function HighlightsCard() {
   const birthdays = useAsync(getUpcomingBirthdays);
   const anniversaries = useAsync(getUpcomingAnniversaries);
+  const me = useAuthenticatedUser();
+  const [wishTarget, setWishTarget] = React.useState<{ id: string; name: string } | null>(null);
 
   const highlights: Highlight[] = [
     ...(birthdays.data ?? []).map((b) => ({
@@ -93,12 +99,31 @@ export function HighlightsCard() {
                       {h.department && ` · ${h.department}`}
                     </p>
                   </div>
+                  {h.kind === "birthday" && h.daysUntil === 0 && h.id !== me.employeeId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => setWishTarget({ id: h.id, name: h.name })}
+                    >
+                      <PartyPopper />
+                      Wish
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </AsyncSection>
       </CardContent>
+
+      {wishTarget && (
+        <WishBirthdayDialog
+          employeeId={wishTarget.id}
+          name={wishTarget.name}
+          onClose={() => setWishTarget(null)}
+        />
+      )}
     </Card>
   );
 }

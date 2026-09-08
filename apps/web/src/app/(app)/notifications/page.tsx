@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, CalendarDays, Clock, Megaphone, Receipt, Settings2 } from "lucide-react";
+import { Bell, CalendarDays, Cake, Clock, Megaphone, Receipt, Settings2 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import {
   getNotifications,
@@ -25,6 +25,7 @@ const typeIcon: Record<NotificationType, React.ElementType> = {
   ATTENDANCE: Clock,
   ANNOUNCEMENT: Megaphone,
   SYSTEM: Settings2,
+  BIRTHDAY: Cake,
 };
 
 export default function NotificationsPage() {
