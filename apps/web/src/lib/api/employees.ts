@@ -156,6 +156,26 @@ export function getMyProfile(): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>("/employees/me");
 }
 
+/**
+ * 8 checklist items so the result always lands on a clean multiple of
+ * 12.5% - matching how this kind of "profile completeness" meter reads
+ * elsewhere (a jagged percentage like "43.75%" would look like a bug).
+ */
+export function computeProfileCompleteness(profile: EmployeeDetail): number {
+  const checks = [
+    !!profile.avatarUrl,
+    !!profile.phone,
+    !!profile.personalEmail,
+    !!profile.dateOfBirth,
+    !!profile.currentAddress,
+    !!profile.gender,
+    profile.emergencyContacts.length > 0,
+    !!profile.bankDetail,
+  ];
+  const completed = checks.filter(Boolean).length;
+  return Math.round((completed / checks.length) * 1000) / 10;
+}
+
 export interface UpdateMyProfilePayload {
   personalEmail?: string;
   phone?: string;

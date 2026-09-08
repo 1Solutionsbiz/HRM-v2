@@ -2,8 +2,9 @@
 
 import { CalendarDays, FolderOpen, LifeBuoy, Receipt, Wallet } from "lucide-react";
 import { useAuthenticatedUser } from "@/lib/auth-context";
-import { formatDate } from "@/lib/format";
-import { AttendanceCard } from "@/components/hrm/attendance-card";
+import { useAsync } from "@/lib/use-async";
+import { getMyProfile, computeProfileCompleteness } from "@/lib/api/employees";
+import { AttendanceBanner } from "@/components/hrm/attendance-banner";
 import { AttendanceCalendarCard } from "@/components/hrm/attendance-calendar-card";
 import { HighlightsCard } from "@/components/hrm/highlights-card";
 import { AnnouncementsFeedCard } from "@/components/hrm/announcements-feed-card";
@@ -12,32 +13,19 @@ import { YesterdayAttendanceCard } from "@/components/hrm/yesterday-attendance-c
 import { TicketsSummaryCard } from "@/components/hrm/tickets-summary-card";
 import { MoodHistoryCard } from "@/components/hrm/mood-history-card";
 import { QuickAction } from "@/components/hrm/quick-action";
-import { PageHeader } from "@/components/hrm/page-header";
-
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 export default function MyDayPage() {
   const user = useAuthenticatedUser();
-
-  const today = formatDate(new Date().toISOString(), {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const profile = useAsync(getMyProfile);
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`${getGreeting()}, ${user.name.split(" ")[0]}`}
-        description={user.designation ? `${today} · ${user.designation}` : today}
+      <AttendanceBanner
+        firstName={user.name.split(" ")[0]!}
+        description="Hope you are having a great day"
+        profileCompletionPercent={profile.data ? computeProfileCompleteness(profile.data) : undefined}
+        showSettingsLink
       />
-
-      <AttendanceCard variant="compact" />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <QuickAction href="/leave/apply" icon={CalendarDays} label="Apply leave" tone="teal" />
