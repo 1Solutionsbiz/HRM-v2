@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Wallet,
   FolderOpen,
-  Laptop,
   Megaphone,
   Trophy,
   LifeBuoy,
@@ -19,7 +18,6 @@ import {
   ShieldCheck,
   ScrollText,
   Palette,
-  TrendingUp,
   PartyPopper,
 } from "lucide-react";
 import type { NavGroup } from "@/types/nav";
@@ -55,8 +53,6 @@ export const navGroups: NavGroup[] = [
       { title: "Expenses", url: "/expenses", icon: BadgeIndianRupee },
       { title: "Payslips", url: "/payslips", icon: Wallet },
       { title: "Documents", url: "/documents", icon: FolderOpen },
-      { title: "Performance", url: "/performance", icon: TrendingUp },
-      { title: "My assets", url: "/assets", icon: Laptop },
     ],
   },
   {
