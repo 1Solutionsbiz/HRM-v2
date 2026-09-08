@@ -31,7 +31,7 @@ export default function MyDayPage() {
         showSettingsLink
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="hidden gap-3 sm:grid sm:grid-cols-5">
         <QuickAction href="/leave/apply" icon={CalendarDays} label="Apply leave" tone="teal" />
         <QuickAction href="/expenses/add" icon={Receipt} label="Add expense" tone="warning" />
         <QuickAction href="/payslips" icon={Wallet} label="View payslip" tone="success" />

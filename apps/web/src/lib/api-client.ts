@@ -155,5 +155,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   }
 
   if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  // NestJS sends an empty body (not the text "null") when a controller
+  // returns null/undefined - response.json() throws on that, so check text first.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
