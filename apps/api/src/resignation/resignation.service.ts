@@ -116,6 +116,7 @@ export class ResignationService {
             id: true,
             firstName: true,
             lastName: true,
+            dateOfJoining: true,
             designation: { select: { title: true } },
             department: { select: { name: true } },
           },

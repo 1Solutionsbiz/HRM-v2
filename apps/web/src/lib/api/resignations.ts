@@ -37,6 +37,7 @@ export interface CompanyResignation extends Resignation {
     id: string;
     firstName: string;
     lastName: string;
+    dateOfJoining: string;
     designation: { title: string } | null;
     department: { name: string } | null;
   };

@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
+import { type ColumnDef } from "@tanstack/react-table";
 import { UserMinus } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDate } from "@/lib/format";
@@ -16,10 +18,25 @@ import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
-import { CardSkeleton } from "@/components/hrm/loading-state";
+import { TableSkeleton } from "@/components/hrm/loading-state";
+import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+
+function EmployeeCell({ employee }: { employee: CompanyResignation["employee"] }) {
+  return (
+    <Link
+      href={`/people/employees/${employee.id}`}
+      className="flex items-center gap-2.5 text-left hover:underline"
+    >
+      <Avatar className="size-7 shrink-0">
+        <AvatarFallback className="text-[10px]">{employeeInitials(employee)}</AvatarFallback>
+      </Avatar>
+      <span className="truncate text-sm font-medium">{employeeFullName(employee)}</span>
+    </Link>
+  );
+}
 
 export default function ResignationsPage() {
   const { data, loading, error, refetch } = useAsync(getCompanyResignations);
@@ -32,64 +49,89 @@ export default function ResignationsPage() {
     refetch();
   }
 
+  const columns: ColumnDef<CompanyResignation>[] = [
+    {
+      id: "employee",
+      accessorFn: (row) => employeeFullName(row.employee),
+      header: "Employee",
+      cell: ({ row }) => <EmployeeCell employee={row.original.employee} />,
+    },
+    {
+      id: "designation",
+      accessorFn: (row) => row.employee.designation?.title ?? "",
+      header: "Designation",
+      cell: ({ row }) => row.original.employee.designation?.title ?? "—",
+    },
+    {
+      id: "dateOfJoining",
+      accessorFn: (row) => row.employee.dateOfJoining,
+      header: "Date of joining",
+      cell: ({ row }) => formatDate(row.original.employee.dateOfJoining),
+    },
+    {
+      id: "resignationDate",
+      accessorFn: (row) => row.submittedAt,
+      header: "Resignation date",
+      cell: ({ row }) => formatDate(row.original.submittedAt),
+    },
+    {
+      accessorKey: "lastWorkingDay",
+      header: "Last working day",
+      cell: ({ row }) => formatDate(row.original.lastWorkingDay),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={titleCase(row.original.status)} />,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) =>
+        row.original.status === "PENDING" ? (
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setDecision({ id: row.original.id, name: employeeFullName(row.original.employee), kind: "DECLINED" })
+              }
+            >
+              Decline
+            </Button>
+            <Button
+              size="sm"
+              onClick={() =>
+                setDecision({ id: row.original.id, name: employeeFullName(row.original.employee), kind: "APPROVED" })
+              }
+            >
+              Approve
+            </Button>
+          </div>
+        ) : null,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <PageHeader title="Resignations" description="Review resignation requests and notice periods." />
 
-      <AsyncSection
-        loading={loading}
-        error={error}
-        onRetry={refetch}
-        loadingFallback={<CardSkeleton lines={4} />}
-      >
-        {(data ?? []).length === 0 ? (
-          <EmptyState icon={UserMinus} title="No resignation requests" />
-        ) : (
-          <div className="space-y-3">
-            {(data ?? []).map((r: CompanyResignation) => (
-              <Card key={r.id}>
-                <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="size-9 shrink-0">
-                      <AvatarFallback>{employeeInitials(r.employee)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{employeeFullName(r.employee)}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {r.employee.designation?.title ?? "—"} · {r.employee.department?.name ?? "—"}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        Last working day {formatDate(r.lastWorkingDay)} · {r.noticePeriodDays}-day notice ·{" "}
-                        {r.reason}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <StatusBadge status={titleCase(r.status)} />
-                    {r.status === "PENDING" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setDecision({ id: r.id, name: employeeFullName(r.employee), kind: "DECLINED" })}
-                        >
-                          Decline
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => setDecision({ id: r.id, name: employeeFullName(r.employee), kind: "APPROVED" })}
-                        >
-                          Approve
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </AsyncSection>
+      <Card>
+        <CardContent className="pt-6">
+          <AsyncSection
+            loading={loading}
+            error={error}
+            onRetry={refetch}
+            loadingFallback={<TableSkeleton rows={6} columns={6} />}
+          >
+            {(data ?? []).length === 0 ? (
+              <EmptyState icon={UserMinus} title="No resignation requests" />
+            ) : (
+              <DataTable columns={columns} data={data ?? []} searchColumn="employee" searchPlaceholder="Filter by name…" pageSize={10} />
+            )}
+          </AsyncSection>
+        </CardContent>
+      </Card>
 
       <ConfirmDialog
         open={!!decision}
