@@ -432,6 +432,26 @@ export class PayrollService {
   }
 
   /**
+   * The company's actual committed monthly payroll, right now — summed
+   * live from `SalaryStructure.currentAmount` for every `ACTIVE` employee,
+   * not from `Payslip` rows. `getTrend`'s current-period figure only
+   * reflects whichever payslips have already been generated, which is
+   * sporadic (some months only have a couple), so it understates real
+   * cost. This number answers "what are we on the hook for this month"
+   * regardless of how much payroll processing has actually happened yet.
+   */
+  async getCommittedPayroll() {
+    const structures = await this.prisma.salaryStructure.findMany({
+      where: { status: 'ACTIVE', employee: { status: 'ACTIVE' } },
+      select: { currentAmount: true },
+    });
+    return {
+      cost: sumAmounts(structures.map((s) => s.currentAmount.toNumber())),
+      headcount: structures.length,
+    };
+  }
+
+  /**
    * Same `employeeCount` undercounting caveat as `getTrend`'s
    * `payslipCount` — it reflects who has a payslip for the period, not
    * everyone on the books.

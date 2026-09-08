@@ -184,3 +184,13 @@ export function getPayrollByDepartment(periodMonth?: number, periodYear?: number
   const qs = search.toString();
   return apiFetch<PayrollByDepartment[]>(`/payroll/by-department${qs ? `?${qs}` : ""}`);
 }
+
+export interface CommittedPayroll {
+  cost: number;
+  headcount: number;
+}
+
+/** Live sum of active employees' current salaries — not payslip-derived. */
+export function getCommittedPayroll(): Promise<CommittedPayroll> {
+  return apiFetch<CommittedPayroll>("/payroll/committed");
+}

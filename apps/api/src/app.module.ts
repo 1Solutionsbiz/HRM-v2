@@ -24,6 +24,7 @@ import { PayrollModule } from './payroll/payroll.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { HolidaysModule } from './holidays/holidays.module.js';
 import { TicketModule } from './tickets/ticket.module.js';
+import { OperatingExpensesModule } from './operating-expenses/operating-expenses.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -51,6 +52,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     AdminModule,
     HolidaysModule,
     TicketModule,
+    OperatingExpensesModule,
   ],
   controllers: [AppController],
   providers: [

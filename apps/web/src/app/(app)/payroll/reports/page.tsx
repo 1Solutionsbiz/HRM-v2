@@ -2,52 +2,64 @@
 
 import { useAsync } from "@/lib/use-async";
 import { formatINR } from "@/lib/format";
-import { getPayrollByDepartment, getPayrollTrend } from "@/lib/api/payroll";
+import { getCommittedPayroll, getPayrollByDepartment, getPayrollTrend } from "@/lib/api/payroll";
+import { getOperatingExpenses } from "@/lib/api/operating-expenses";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatCard } from "@/components/hrm/stat-card";
 import { ChartCard } from "@/components/hrm/chart-card";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton, StatGridSkeleton } from "@/components/hrm/loading-state";
-import { BadgeIndianRupee, TrendingUp, Users } from "lucide-react";
+import { BadgeIndianRupee, Landmark, TrendingUp, Users } from "lucide-react";
 import { PayrollByDepartmentChart, PayrollTrendChart } from "./payroll-charts";
+import { OperatingExpensesCard } from "./operating-expenses-card";
 
 export default function PayrollReportsPage() {
+  const committed = useAsync(() => getCommittedPayroll());
+  const opex = useAsync(() => getOperatingExpenses());
   const trend = useAsync(() => getPayrollTrend());
   const byDept = useAsync(() => getPayrollByDepartment());
 
-  const latest = trend.data?.at(-1);
-  const previous = trend.data?.at(-2);
-  const momChange = latest && previous ? ((latest.cost - previous.cost) / previous.cost) * 100 : null;
+  const totalCompanyCost =
+    committed.data && opex.data ? committed.data.cost + opex.data.total : null;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payroll reports" description="Company-wide payroll cost and headcount trends." />
+      <PageHeader
+        title="Payroll reports"
+        description="Committed payroll and operating costs, live from the active roster — not from however many payslips happen to exist yet."
+      />
 
       <AsyncSection
-        loading={trend.loading}
-        error={trend.error}
-        onRetry={trend.refetch}
-        loadingFallback={<StatGridSkeleton count={3} />}
+        loading={committed.loading || opex.loading}
+        error={committed.error ?? opex.error}
+        onRetry={() => {
+          committed.refetch();
+          opex.refetch();
+        }}
+        loadingFallback={<StatGridSkeleton count={4} />}
       >
-        {latest && (
-          <div className="grid gap-4 sm:grid-cols-3">
+        {committed.data && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label="This month's payroll"
-              value={formatINR(latest.cost)}
+              label="Committed monthly payroll"
+              value={formatINR(committed.data.cost)}
               icon={BadgeIndianRupee}
               tone="teal"
-              trend={
-                momChange !== null
-                  ? { value: `${momChange >= 0 ? "+" : ""}${momChange.toFixed(1)}% vs last month`, direction: momChange >= 0 ? "up" : "down", positive: false }
-                  : undefined
-              }
             />
-            <StatCard label="Headcount" value={String(latest.activeHeadcount)} icon={Users} tone="violet" />
+            <StatCard label="Active headcount" value={String(committed.data.headcount)} icon={Users} tone="violet" />
             <StatCard
               label="Avg. cost per employee"
-              value={formatINR(latest.activeHeadcount > 0 ? Math.round(latest.cost / latest.activeHeadcount) : 0)}
+              value={formatINR(
+                committed.data.headcount > 0 ? Math.round(committed.data.cost / committed.data.headcount) : 0,
+              )}
               icon={TrendingUp}
               tone="orange"
+            />
+            <StatCard
+              label="Total company cost"
+              value={totalCompanyCost !== null ? formatINR(totalCompanyCost) : "—"}
+              icon={Landmark}
+              tone="primary"
             />
           </div>
         )}
@@ -60,7 +72,7 @@ export default function PayrollReportsPage() {
           onRetry={trend.refetch}
           loadingFallback={<CardSkeleton lines={5} />}
         >
-          <ChartCard title="Monthly payroll cost" description="Last 6 months.">
+          <ChartCard title="Processed payroll" description="Gross amount across generated payslips, last 6 months.">
             <PayrollTrendChart data={trend.data ?? []} />
           </ChartCard>
         </AsyncSection>
@@ -71,11 +83,13 @@ export default function PayrollReportsPage() {
           onRetry={byDept.refetch}
           loadingFallback={<CardSkeleton lines={5} />}
         >
-          <ChartCard title="Cost by department" description="Current month.">
+          <ChartCard title="Cost by department" description="From the latest processed payslips.">
             <PayrollByDepartmentChart data={byDept.data ?? []} />
           </ChartCard>
         </AsyncSection>
       </div>
+
+      <OperatingExpensesCard />
     </div>
   );
 }

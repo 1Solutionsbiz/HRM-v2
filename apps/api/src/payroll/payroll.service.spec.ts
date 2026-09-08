@@ -496,4 +496,28 @@ describe('PayrollService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getCommittedPayroll', () => {
+    it('sums live salary structures for active employees, not payslips', async () => {
+      prisma.salaryStructure.findMany.mockResolvedValue([
+        { currentAmount: decimal(45000) },
+        { currentAmount: decimal(30000) },
+        { currentAmount: decimal(13000) },
+      ]);
+
+      const result = await service.getCommittedPayroll();
+
+      expect(prisma.salaryStructure.findMany).toHaveBeenCalledWith({
+        where: { status: 'ACTIVE', employee: { status: 'ACTIVE' } },
+        select: { currentAmount: true },
+      });
+      expect(result).toEqual({ cost: 88000, headcount: 3 });
+    });
+
+    it('returns zero cost and headcount when nobody has a salary structure yet', async () => {
+      prisma.salaryStructure.findMany.mockResolvedValue([]);
+      const result = await service.getCommittedPayroll();
+      expect(result).toEqual({ cost: 0, headcount: 0 });
+    });
+  });
 });

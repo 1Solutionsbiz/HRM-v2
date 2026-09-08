@@ -91,6 +91,12 @@ export class PayrollController {
     return this.payrollService.markPayslipPaid(id, actor);
   }
 
+  @Get('committed')
+  @RequirePermissions('payroll:manage')
+  getCommittedPayroll() {
+    return this.payrollService.getCommittedPayroll();
+  }
+
   @Get('trend')
   @RequirePermissions('payroll:manage')
   getTrend(@Query('months') months?: string) {

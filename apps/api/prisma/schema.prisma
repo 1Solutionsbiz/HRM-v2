@@ -783,6 +783,34 @@ model PayslipLineItem {
 }
 
 // =============================================================================
+// Operating expenses — recurring non-salary company costs (rent, utilities)
+// that Payroll reports needs to show alongside payroll cost. One row per
+// category per period, not a "recurring template with an override": rent
+// and internet can change too, and electricity varies every month by
+// definition, so every period is entered explicitly rather than assumed.
+// =============================================================================
+
+enum OperatingExpenseCategory {
+  RENT
+  ELECTRICITY
+  INTERNET
+  MISCELLANEOUS
+}
+
+model OperatingExpense {
+  id          String                   @id @default(cuid())
+  category    OperatingExpenseCategory
+  amount      Decimal                  @db.Decimal(12, 2)
+  periodMonth Int
+  periodYear  Int
+  note        String?                  @db.Text
+  updatedAt   DateTime                 @updatedAt
+
+  @@unique([category, periodMonth, periodYear])
+  @@map("operating_expenses")
+}
+
+// =============================================================================
 // Documents — one clean table replacing three overlapping legacy systems
 // (hrm_employee_documents, emp_documents' fixed columns, and the disconnected
 // hrm_employee_document_proof).
