@@ -7,6 +7,7 @@ import { getMyProfile, computeProfileCompleteness } from "@/lib/api/employees";
 import { AttendanceBanner } from "@/components/hrm/attendance-banner";
 import { AttendanceCalendarCard } from "@/components/hrm/attendance-calendar-card";
 import { HighlightsCard } from "@/components/hrm/highlights-card";
+import { EmployeeOfTheMonthCard } from "@/components/hrm/employee-of-the-month-card";
 import { AnnouncementsFeedCard } from "@/components/hrm/announcements-feed-card";
 import { LeaveBalanceCard } from "@/components/hrm/leave-balance-card";
 import { YesterdayAttendanceCard } from "@/components/hrm/yesterday-attendance-card";
@@ -46,7 +47,7 @@ export default function MyDayPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4">
           <HighlightsCard className={cardToneClasses.orange} />
-          <PollsDashboardWidget className={cardToneClasses.violet} />
+          <EmployeeOfTheMonthCard className={cardToneClasses.violet} />
           <AttendanceCalendarCard linkHref="/attendance" className={cardToneClasses.teal} />
         </div>
 
@@ -54,10 +55,11 @@ export default function MyDayPage() {
 
         <div className="space-y-4">
           <ThoughtOfTheDayCard className={cardToneClasses.teal} />
+          <PollsDashboardWidget className={cardToneClasses.violet} />
           <LeaveBalanceCard className={cardToneClasses.success} />
           <YesterdayAttendanceCard className={cardToneClasses.primary} />
           <TicketsSummaryCard className={cardToneClasses.destructive} />
-          <MoodHistoryCard className={cardToneClasses.violet} />
+          <MoodHistoryCard className={cardToneClasses.orange} />
         </div>
       </div>
     </div>

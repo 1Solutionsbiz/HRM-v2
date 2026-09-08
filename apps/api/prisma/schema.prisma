@@ -50,19 +50,20 @@ model User {
   devices       Device[]
   notifications Notification[]
 
-  announcementReads        AnnouncementRead[]
-  approvedLeaveRequests    LeaveRequest[]      @relation("LeaveApprover")
-  approvedExpenseClaims    ExpenseClaim[]      @relation("ExpenseApprover")
-  decidedResignations      Resignation[]       @relation("ResignationDecider")
-  verifiedDocuments        EmployeeDocument[]  @relation("DocumentVerifier")
-  revisedSalaries          SalaryRevision[]    @relation("SalaryReviser")
-  conductedReviews         PerformanceReview[] @relation("ReviewConductor")
-  publishedAnnouncements   Announcement[]      @relation("AnnouncementPublisher")
-  generatedPayslips        Payslip[]           @relation("PayslipGenerator")
-  recordedAttendanceEvents AttendanceEvent[]   @relation("AttendanceRecorder")
-  assignedUserRoles        UserRole[]          @relation("UserRoleAssignedBy")
-  ticketComments           TicketComment[]
-  createdPolls             Poll[]
+  announcementReads            AnnouncementRead[]
+  approvedLeaveRequests        LeaveRequest[]       @relation("LeaveApprover")
+  approvedExpenseClaims        ExpenseClaim[]       @relation("ExpenseApprover")
+  decidedResignations          Resignation[]        @relation("ResignationDecider")
+  verifiedDocuments            EmployeeDocument[]   @relation("DocumentVerifier")
+  revisedSalaries              SalaryRevision[]     @relation("SalaryReviser")
+  conductedReviews             PerformanceReview[]  @relation("ReviewConductor")
+  publishedAnnouncements       Announcement[]       @relation("AnnouncementPublisher")
+  generatedPayslips            Payslip[]            @relation("PayslipGenerator")
+  recordedAttendanceEvents     AttendanceEvent[]    @relation("AttendanceRecorder")
+  assignedUserRoles            UserRole[]           @relation("UserRoleAssignedBy")
+  ticketComments               TicketComment[]
+  createdPolls                 Poll[]
+  nominatedEmployeesOfTheMonth EmployeeOfTheMonth[]
 
   @@map("users")
 }
@@ -340,23 +341,24 @@ model Employee {
   education         EmployeeEducation[]
   assets            Asset[]
 
-  attendanceDays     AttendanceDay[]
-  leaveBalances      LeaveBalance[]
-  leaveRequests      LeaveRequest[]
-  expenseClaims      ExpenseClaim[]
-  salaryStructure    SalaryStructure?
-  salaryRevisions    SalaryRevision[]
-  payslips           Payslip[]
-  documents          EmployeeDocument[]
-  onboardingSteps    EmployeeOnboardingStep[]
-  resignations       Resignation[]
-  goals              Goal[]
-  performanceReviews PerformanceReview[]
-  recognitions       Recognition[]
-  tasks              Task[]
-  tickets            Ticket[]
-  moodCheckIns       MoodCheckIn[]
-  pollVotes          PollVote[]
+  attendanceDays           AttendanceDay[]
+  leaveBalances            LeaveBalance[]
+  leaveRequests            LeaveRequest[]
+  expenseClaims            ExpenseClaim[]
+  salaryStructure          SalaryStructure?
+  salaryRevisions          SalaryRevision[]
+  payslips                 Payslip[]
+  documents                EmployeeDocument[]
+  onboardingSteps          EmployeeOnboardingStep[]
+  resignations             Resignation[]
+  goals                    Goal[]
+  performanceReviews       PerformanceReview[]
+  recognitions             Recognition[]
+  tasks                    Task[]
+  tickets                  Ticket[]
+  moodCheckIns             MoodCheckIn[]
+  pollVotes                PollVote[]
+  employeeOfTheMonthAwards EmployeeOfTheMonth[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1087,6 +1089,27 @@ model Recognition {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("recognitions")
+}
+
+/// Requested directly (2026-09-09) as its own concept, not folded into the
+/// free-text Recognition model above - one admin-picked employee per
+/// calendar month (upsert on the unique key replaces that month's pick if
+/// changed), not a vote/nomination system (the legacy eom/eom_votes tables'
+/// approach, deliberately not ported - see Recognition's own comment).
+model EmployeeOfTheMonth {
+  id                String   @id @default(cuid())
+  employeeId        String
+  periodMonth       Int
+  periodYear        Int
+  note              String?  @db.Text
+  nominatedByUserId String
+  nominatedAt       DateTime @default(now())
+
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  nominatedByUser User     @relation(fields: [nominatedByUserId], references: [id])
+
+  @@unique([periodMonth, periodYear])
+  @@map("employee_of_the_month")
 }
 
 // =============================================================================

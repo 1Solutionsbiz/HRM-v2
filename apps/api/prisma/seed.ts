@@ -35,6 +35,7 @@ const PERMISSIONS = [
   { key: 'audit:view', description: 'View the system-wide audit log (logins, role changes, and every administrative action)' },
   { key: 'ticket:manage', description: 'View every employee-raised ticket and work it through to resolution' },
   { key: 'poll:manage', description: 'Create company-wide polls' },
+  { key: 'recognition:manage', description: 'Nominate the employee of the month' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]> = {
@@ -52,6 +53,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'audit:view',
     'ticket:manage',
     'poll:manage',
+    'recognition:manage',
   ],
   hr: [
     'employee:manage',
@@ -64,6 +66,7 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number]['key'], readonly string[]>
     'payroll:manage',
     'ticket:manage',
     'poll:manage',
+    'recognition:manage',
   ],
   // Manager approval isn't scoped to "my direct reports" yet (no reporting-
   // chain enforcement exists) — granted anyway since some approver has to
