@@ -16,7 +16,7 @@ import {
 import { EmptyState } from "@/components/hrm/empty-state";
 import { useAsync } from "@/lib/use-async";
 import { useAuthenticatedUser } from "@/lib/auth-context";
-import { getNotifications, subscribeToNotificationChanges } from "@/lib/mock/mock-api";
+import { getNotifications, markNotificationRead, type AppNotification } from "@/lib/api/notifications";
 import { formatDate, formatRelativeTime, formatTime } from "@/lib/format";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { LiveClock } from "@/components/layout/live-clock";
@@ -31,10 +31,16 @@ interface TopbarProps {
 export function Topbar({ title, variant = "default" }: TopbarProps) {
   const { data, refetch } = useAsync(getNotifications);
   const user = useAuthenticatedUser();
-  React.useEffect(() => subscribeToNotificationChanges(refetch), [refetch]);
   const notifications = data ?? [];
-  const unread = notifications.filter((n) => !n.read);
+  const unread = notifications.filter((n) => !n.isRead);
   const isHero = variant === "hero";
+
+  async function handleOpenNotification(n: AppNotification) {
+    if (!n.isRead) {
+      await markNotificationRead(n.id);
+      refetch();
+    }
+  }
 
   return (
     <header
@@ -74,7 +80,7 @@ export function Topbar({ title, variant = "default" }: TopbarProps) {
           className={cn(isHero && "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground")}
         />
 
-        <Popover>
+        <Popover onOpenChange={(open) => open && refetch()}>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
@@ -112,11 +118,12 @@ export function Topbar({ title, variant = "default" }: TopbarProps) {
                 {notifications.slice(0, 4).map((n) => (
                   <li key={n.id}>
                     <Link
-                      href={n.href ?? "/notifications"}
+                      href={n.linkUrl ?? "/notifications"}
+                      onClick={() => handleOpenNotification(n)}
                       className="hover:bg-accent block px-4 py-2.5"
                     >
                       <div className="flex items-center gap-2">
-                        {!n.read && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
+                        {!n.isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
                         <p className="truncate text-sm font-medium">{n.title}</p>
                       </div>
                       <p className="text-muted-foreground line-clamp-1 text-xs">{n.description}</p>
