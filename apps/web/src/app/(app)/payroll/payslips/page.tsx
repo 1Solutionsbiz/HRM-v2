@@ -16,11 +16,11 @@ import {
   getEmployeePayslips,
   generatePayslip,
   markPayslipPaid,
-  getLateDeductionSuggestion,
+  getPayslipCalculationPreview,
   monthName,
   type Payslip,
   type PayslipLineItemInput,
-  type LateDeductionSuggestion,
+  type PayslipCalculationPreview,
 } from "@/lib/api/payroll";
 import { formatDate, formatINR } from "@/lib/format";
 import { downloadPayslipPdf } from "@/lib/payslip-pdf";
@@ -114,7 +114,8 @@ function GeneratePayslipDialog({
   );
   const [leaveDeduction, setLeaveDeduction] = React.useState("0");
   const [lateDeduction, setLateDeduction] = React.useState("0");
-  const [lateSuggestion, setLateSuggestion] = React.useState<LateDeductionSuggestion | null>(null);
+  const [absentDeduction, setAbsentDeduction] = React.useState("0");
+  const [preview, setPreview] = React.useState<PayslipCalculationPreview | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
@@ -122,16 +123,19 @@ function GeneratePayslipDialog({
 
   React.useEffect(() => {
     let ignore = false;
-    setLateSuggestion(null);
-    getLateDeductionSuggestion(employee.id, Number(periodMonth), Number(periodYear))
-      .then((suggestion) => {
+    setPreview(null);
+    getPayslipCalculationPreview(employee.id, Number(periodMonth), Number(periodYear))
+      .then((result) => {
         if (ignore) return;
-        setLateSuggestion(suggestion);
-        setLateDeduction(String(suggestion.amount));
+        setPreview(result);
+        setLateDeduction(String(result.lateFineAmount));
+        setLeaveDeduction(String(result.leaveDeductionAmount));
+        setAbsentDeduction(String(result.absentDeductionAmount));
       })
       .catch(() => {
-        // Suggestion is a convenience, not a requirement - leave the field
-        // at whatever it already was and let HR enter it manually.
+        // The computed preview is a convenience, not a requirement - leave
+        // the fields at whatever they already were and let HR enter them
+        // manually.
       });
     return () => {
       ignore = true;
@@ -146,10 +150,13 @@ function GeneratePayslipDialog({
         .filter((r) => Number(r.amount) > 0)
         .map((r) => ({ type: "EARNING", label: r.label, amount: Number(r.amount) }));
       if (Number(leaveDeduction) > 0) {
-        lineItems.push({ type: "DEDUCTION", label: "Leave Deduction", amount: Number(leaveDeduction) });
+        lineItems.push({ type: "DEDUCTION", label: "Unpaid Leave Deduction", amount: Number(leaveDeduction) });
       }
       if (Number(lateDeduction) > 0) {
-        lineItems.push({ type: "DEDUCTION", label: "Late Deduction", amount: Number(lateDeduction) });
+        lineItems.push({ type: "DEDUCTION", label: "Late Coming Fine", amount: Number(lateDeduction) });
+      }
+      if (Number(absentDeduction) > 0) {
+        lineItems.push({ type: "DEDUCTION", label: "Absent Deduction", amount: Number(absentDeduction) });
       }
       if (lineItems.length === 0) {
         setSaveError("Enter at least one earning amount.");
@@ -251,10 +258,10 @@ function GeneratePayslipDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Deductions (optional)</Label>
+            <Label>Deductions</Label>
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-sm">Leave Deduction</span>
+                <span className="text-sm">Unpaid Leave Deduction</span>
                 <Input
                   type="number"
                   className="w-32"
@@ -263,7 +270,7 @@ function GeneratePayslipDialog({
                 />
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-sm">Late Deduction</span>
+                <span className="text-sm">Late Coming Fine</span>
                 <Input
                   type="number"
                   className="w-32"
@@ -271,12 +278,22 @@ function GeneratePayslipDialog({
                   onChange={(e) => setLateDeduction(e.target.value)}
                 />
               </div>
-              {lateSuggestion && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm">Absent Deduction</span>
+                <Input
+                  type="number"
+                  className="w-32"
+                  value={absentDeduction}
+                  onChange={(e) => setAbsentDeduction(e.target.value)}
+                />
+              </div>
+              {preview && (
                 <p className="text-muted-foreground text-xs">
-                  {lateSuggestion.lateCount} late arrival{lateSuggestion.lateCount === 1 ? "" : "s"} in{" "}
-                  {monthName(Number(periodMonth))} ({lateSuggestion.graceOccurrences} free) ·{" "}
-                  {lateSuggestion.chargeableCount} × {formatINR(lateSuggestion.ratePerOccurrence)} suggested — edit
-                  or clear if it&apos;s not right.
+                  {monthName(Number(periodMonth))} has {preview.daysInMonth} days (₹{preview.perDayRate}/day) ·{" "}
+                  {preview.leaveDaysTaken} leave day{preview.leaveDaysTaken === 1 ? "" : "s"} taken (1 free,{" "}
+                  {preview.chargeableLeaveDays} chargeable) · {preview.lateDays} late arrival
+                  {preview.lateDays === 1 ? "" : "s"} × ₹100 · {preview.absentDays} absent day
+                  {preview.absentDays === 1 ? "" : "s"} — computed automatically, edit if it&apos;s not right.
                 </p>
               )}
               <p className="text-muted-foreground text-xs">Left at 0, a deduction won&apos;t appear on the payslip.</p>

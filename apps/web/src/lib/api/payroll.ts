@@ -133,21 +133,26 @@ export function markPayslipPaid(payslipId: string): Promise<Payslip> {
   return apiFetch<Payslip>(`/payroll/payslips/${payslipId}/mark-paid`, { method: "PATCH" });
 }
 
-export interface LateDeductionSuggestion {
-  lateCount: number;
-  graceOccurrences: number;
-  chargeableCount: number;
-  ratePerOccurrence: number;
-  amount: number;
+export interface PayslipCalculationPreview {
+  daysInMonth: number;
+  perDayRate: number;
+  lateDays: number;
+  lateFineAmount: number;
+  leaveDaysTaken: number;
+  chargeableLeaveDays: number;
+  leaveDeductionAmount: number;
+  absentDays: number;
+  absentDeductionAmount: number;
+  totalDeductions: number;
 }
 
-export function getLateDeductionSuggestion(
+export function getPayslipCalculationPreview(
   employeeId: string,
   periodMonth: number,
   periodYear: number,
-): Promise<LateDeductionSuggestion> {
-  return apiFetch<LateDeductionSuggestion>(
-    `/payroll/employees/${employeeId}/late-deduction-suggestion?periodMonth=${periodMonth}&periodYear=${periodYear}`,
+): Promise<PayslipCalculationPreview> {
+  return apiFetch<PayslipCalculationPreview>(
+    `/payroll/employees/${employeeId}/payslip-calculation-preview?periodMonth=${periodMonth}&periodYear=${periodYear}`,
   );
 }
 

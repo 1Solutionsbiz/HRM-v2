@@ -34,6 +34,8 @@ function buildPrismaMock() {
       update: vi.fn(),
     },
     payslipLineItem: { create: vi.fn().mockResolvedValue(undefined) },
+    attendanceDay: { count: vi.fn().mockResolvedValue(0) },
+    leaveRequest: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn(prisma),
     ),
@@ -527,6 +529,76 @@ describe('PayrollService', () => {
       prisma.salaryStructure.findMany.mockResolvedValue([]);
       const result = await service.getCommittedPayroll();
       expect(result).toEqual({ cost: 0, headcount: 0 });
+    });
+  });
+
+  describe('getPayslipCalculationPreview', () => {
+    beforeEach(() => {
+      prisma.salaryStructure.findUnique.mockResolvedValue({ currentAmount: decimal(30000) });
+    });
+
+    it("nets ₹29,000 for a 30-day month with 2 days' leave taken (1 free, 1 chargeable)", async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(2) }]);
+
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+
+      expect(result.daysInMonth).toBe(30);
+      expect(result.perDayRate).toBe(1000);
+      expect(result.leaveDaysTaken).toBe(2);
+      expect(result.chargeableLeaveDays).toBe(1);
+      expect(result.leaveDeductionAmount).toBe(1000);
+      expect(result.totalDeductions).toBe(1000);
+    });
+
+    it("nets ₹29,032.26 for a 31-day month with the same 2 days' leave (rate rounded before multiplying)", async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(2) }]);
+
+      const result = await service.getPayslipCalculationPreview('emp-1', 10, 2026);
+
+      expect(result.daysInMonth).toBe(31);
+      expect(result.perDayRate).toBe(967.74);
+      expect(result.chargeableLeaveDays).toBe(1);
+      expect(result.leaveDeductionAmount).toBe(967.74);
+      expect(30000 - result.totalDeductions).toBeCloseTo(29032.26, 2);
+    });
+
+    it('handles a 28-day February', async () => {
+      const result = await service.getPayslipCalculationPreview('emp-1', 2, 2026);
+      expect(result.daysInMonth).toBe(28);
+    });
+
+    it('charges a flat ₹100 per late day with no monthly-free allowance', async () => {
+      prisma.attendanceDay.count.mockImplementation(({ where }: { where: { lateMinutes?: unknown; status?: string } }) =>
+        Promise.resolve('lateMinutes' in where ? 4 : 0),
+      );
+
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+
+      expect(result.lateDays).toBe(4);
+      expect(result.lateFineAmount).toBe(400);
+    });
+
+    it('deducts a full day per absence, same rate as unpaid leave', async () => {
+      prisma.attendanceDay.count.mockImplementation(({ where }: { where: { lateMinutes?: unknown; status?: string } }) =>
+        Promise.resolve('status' in where ? 2 : 0),
+      );
+
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+
+      expect(result.absentDays).toBe(2);
+      expect(result.absentDeductionAmount).toBe(2000);
+    });
+
+    it('has zero deductions with no lates, no absences, and leave within the free allowance', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(1) }]);
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+      expect(result.totalDeductions).toBe(0);
+    });
+
+    it('treats a missing salary structure as zero salary rather than throwing', async () => {
+      prisma.salaryStructure.findUnique.mockResolvedValue(null);
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+      expect(result.perDayRate).toBe(0);
     });
   });
 });

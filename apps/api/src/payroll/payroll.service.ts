@@ -177,44 +177,92 @@ export class PayrollService {
   }
 
   /**
-   * Suggests, never applies, a late-coming deduction — same "HR reviews
-   * every line item" rule as the rest of this module (see CreatePayslipDto).
-   * Policy: the first 3 LATE-marked attendance days in the period month are
-   * a grace allowance; each one after that costs a flat ₹100. Both numbers
-   * are a business rule stated directly by ops, not derived from anything
-   * in the schema, so they're not configurable yet — if that changes, this
-   * is the one place to add a setting.
+   * Suggests, never applies, a full deduction breakdown for a period —
+   * same "HR reviews every line item" rule as the rest of this module (see
+   * CreatePayslipDto). Policy, stated directly by ops (2026-09-08):
+   * - Late fine: any day with `lateMinutes > 0` (the grace period itself
+   *   lives on `AttendancePolicy.graceMinutes`, currently 5 min — this
+   *   method doesn't re-decide lateness, it just counts days already
+   *   flagged by attendance recompute) costs a flat ₹100.
+   * - Leave: the first 1 day of APPROVED leave taken in the period is
+   *   free; every day beyond that is deducted at the per-day rate. This is
+   *   a flat monthly allowance independent of the employee's real
+   *   per-leave-type balance (which can separately go negative) —
+   *   deliberately not the same thing, confirmed with ops rather than
+   *   inferred.
+   * - Absent: an ABSENT day (no attendance, no approved leave covering it)
+   *   costs a full day at the per-day rate, same as an unpaid leave day.
+   * - Per-day rate = monthly salary ÷ the actual number of days in that
+   *   calendar month (28–31), not a fixed 30 — rounded to 2dp *before*
+   *   multiplying by chargeable days, matching how ops does the math by
+   *   hand (verified against their own worked examples: a 30-day month at
+   *   ₹30,000 with 1 unpaid day nets ₹29,000; a 31-day month nets
+   *   ₹29,032.26, not ₹29,032.25 — that 1-paisa difference only comes out
+   *   right if the rate is rounded first).
    */
-  async getLateDeductionSuggestion(
+  async getPayslipCalculationPreview(
     employeeId: string,
     periodMonth: number,
     periodYear: number,
   ) {
     await this.requireEmployee(employeeId);
 
-    const GRACE_OCCURRENCES = 3;
-    const RATE_PER_OCCURRENCE = 100;
+    const LATE_FINE_PER_DAY = 100;
+    const FREE_LEAVE_DAYS = 1;
+
+    const structure = await this.prisma.salaryStructure.findUnique({
+      where: { employeeId },
+    });
+    const monthlySalary = structure ? structure.currentAmount.toNumber() : 0;
+
+    const daysInMonth = new Date(Date.UTC(periodYear, periodMonth, 0)).getUTCDate();
+    const perDayRate = Math.round((monthlySalary / daysInMonth) * 100) / 100;
 
     const start = new Date(Date.UTC(periodYear, periodMonth - 1, 1));
     const end = new Date(Date.UTC(periodYear, periodMonth, 1));
 
-    const lateCount = await this.prisma.attendanceDay.count({
-      where: {
-        employeeId,
-        status: 'LATE',
-        date: { gte: start, lt: end },
-      },
-    });
+    const [lateDays, absentDays, leaveRequests] = await Promise.all([
+      this.prisma.attendanceDay.count({
+        where: { employeeId, lateMinutes: { gt: 0 }, date: { gte: start, lt: end } },
+      }),
+      this.prisma.attendanceDay.count({
+        where: { employeeId, status: 'ABSENT', date: { gte: start, lt: end } },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          employeeId,
+          status: 'APPROVED',
+          startDate: { gte: start, lt: end },
+        },
+        select: { totalDays: true },
+      }),
+    ]);
 
-    const chargeableCount = Math.max(0, lateCount - GRACE_OCCURRENCES);
-    const amount = chargeableCount * RATE_PER_OCCURRENCE;
+    const leaveDaysTaken = sumAmounts(
+      leaveRequests.map((r) => r.totalDays.toNumber()),
+    );
+    const chargeableLeaveDays = Math.max(0, leaveDaysTaken - FREE_LEAVE_DAYS);
+
+    const lateFineAmount = lateDays * LATE_FINE_PER_DAY;
+    const leaveDeductionAmount = sumAmounts([chargeableLeaveDays * perDayRate]);
+    const absentDeductionAmount = sumAmounts([absentDays * perDayRate]);
+    const totalDeductions = sumAmounts([
+      lateFineAmount,
+      leaveDeductionAmount,
+      absentDeductionAmount,
+    ]);
 
     return {
-      lateCount,
-      graceOccurrences: GRACE_OCCURRENCES,
-      chargeableCount,
-      ratePerOccurrence: RATE_PER_OCCURRENCE,
-      amount,
+      daysInMonth,
+      perDayRate,
+      lateDays,
+      lateFineAmount,
+      leaveDaysTaken,
+      chargeableLeaveDays,
+      leaveDeductionAmount,
+      absentDays,
+      absentDeductionAmount,
+      totalDeductions,
     };
   }
 
