@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { PollsService } from './polls.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 
@@ -12,7 +12,7 @@ function buildPrismaMock() {
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
-    pollVote: { upsert: vi.fn() },
+    pollVote: { findUnique: vi.fn(), create: vi.fn() },
   };
 }
 
@@ -139,7 +139,7 @@ describe('PollsService', () => {
       await expect(service.vote('poll-1', { optionId: 'opt-1' }, actor)).rejects.toThrow(
         BadRequestException,
       );
-      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+      expect(prisma.pollVote.create).not.toHaveBeenCalled();
     });
 
     it('throws when the option does not belong to the poll', async () => {
@@ -161,22 +161,35 @@ describe('PollsService', () => {
       );
     });
 
-    it('upserts the vote for a valid option on an open poll', async () => {
+    it('creates the vote for a valid option on an open poll not yet voted on', async () => {
       prisma.poll.findUnique.mockResolvedValue({
         id: 'poll-1',
         endsAt: new Date(Date.now() + 86_400_000),
         options: [{ id: 'opt-1' }, { id: 'opt-2' }],
       });
-      prisma.pollVote.upsert.mockResolvedValue({});
+      prisma.pollVote.findUnique.mockResolvedValue(null);
+      prisma.pollVote.create.mockResolvedValue({});
 
       const result = await service.vote('poll-1', { optionId: 'opt-2' }, actor);
 
-      expect(prisma.pollVote.upsert).toHaveBeenCalledWith({
-        where: { pollId_employeeId: { pollId: 'poll-1', employeeId: 'emp-1' } },
-        create: { pollId: 'poll-1', optionId: 'opt-2', employeeId: 'emp-1' },
-        update: { optionId: 'opt-2', votedAt: expect.any(Date) },
+      expect(prisma.pollVote.create).toHaveBeenCalledWith({
+        data: { pollId: 'poll-1', optionId: 'opt-2', employeeId: 'emp-1' },
       });
       expect(result).toEqual({ voted: true });
+    });
+
+    it('refuses a second vote from the same employee on the same poll', async () => {
+      prisma.poll.findUnique.mockResolvedValue({
+        id: 'poll-1',
+        endsAt: new Date(Date.now() + 86_400_000),
+        options: [{ id: 'opt-1' }, { id: 'opt-2' }],
+      });
+      prisma.pollVote.findUnique.mockResolvedValue({ id: 'vote-1', optionId: 'opt-1' });
+
+      await expect(service.vote('poll-1', { optionId: 'opt-2' }, actor)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.pollVote.create).not.toHaveBeenCalled();
     });
   });
 

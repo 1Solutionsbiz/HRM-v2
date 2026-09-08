@@ -1007,10 +1007,8 @@ model PollOption {
   @@map("poll_options")
 }
 
-/// One vote per employee per poll - re-voting while still open overwrites
-/// the previous choice (upsert on the unique key below) rather than being
-/// rejected, matching how most closed-ballot company polls actually work
-/// ("change your mind before it closes").
+/// One vote per employee per poll, permanent - PollsService.vote() rejects
+/// a second attempt outright rather than allowing a change of mind.
 model PollVote {
   id         String   @id @default(cuid())
   pollId     String

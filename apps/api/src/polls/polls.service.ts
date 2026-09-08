@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -108,9 +109,10 @@ export class PollsService {
   }
 
   /**
-   * Upserts rather than rejecting a second vote: an open poll lets you
-   * change your mind (same reasoning as the schema comment on PollVote) -
-   * only a closed poll refuses the write.
+   * One vote per employee per poll, permanently - requested directly
+   * (2026-09-09), overriding the earlier "change your mind while open"
+   * behavior the PollVote schema comment used to describe. Rejects a
+   * second vote outright rather than upserting.
    */
   async vote(pollId: string, dto: VotePollDto, actor: AuthContext) {
     const employeeId = await this.requireEmployeeId(actor.userId);
@@ -128,10 +130,15 @@ export class PollsService {
       throw new BadRequestException('That option does not belong to this poll');
     }
 
-    await this.prisma.pollVote.upsert({
+    const existing = await this.prisma.pollVote.findUnique({
       where: { pollId_employeeId: { pollId, employeeId } },
-      create: { pollId, optionId: dto.optionId, employeeId },
-      update: { optionId: dto.optionId, votedAt: new Date() },
+    });
+    if (existing) {
+      throw new ConflictException('You have already voted on this poll');
+    }
+
+    await this.prisma.pollVote.create({
+      data: { pollId, optionId: dto.optionId, employeeId },
     });
 
     return { voted: true };

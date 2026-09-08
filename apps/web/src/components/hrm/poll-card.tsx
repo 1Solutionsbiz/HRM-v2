@@ -35,7 +35,7 @@ export function PollCard({
     setSubmitting(true);
     try {
       await votePoll(poll.id, selected);
-      toast.success(poll.hasVoted ? "Vote updated" : "Vote recorded");
+      toast.success("Vote recorded");
       onVoted();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Couldn't record your vote.");
@@ -86,24 +86,42 @@ export function PollCard({
       </CardHeader>
       <CardContent>
         {poll.isOpen ? (
-          <div className="space-y-3">
-            <RadioGroup value={selected} onValueChange={setSelected}>
+          poll.hasVoted ? (
+            <div className="space-y-2">
               {poll.options.map((o) => (
-                <label key={o.id} className="flex items-center gap-2 text-sm">
-                  <RadioGroupItem value={o.id} />
-                  {o.label}
-                </label>
+                <div key={o.id} className="flex items-center gap-2 text-sm">
+                  <span
+                    className={cn(
+                      "flex size-4 shrink-0 items-center justify-center rounded-full border",
+                      o.id === poll.myOptionId ? "border-primary bg-primary" : "border-input",
+                    )}
+                  >
+                    {o.id === poll.myOptionId && <span className="bg-primary-foreground size-1.5 rounded-full" />}
+                  </span>
+                  <span className={o.id === poll.myOptionId ? "font-medium" : "text-muted-foreground"}>
+                    {o.label}
+                  </span>
+                </div>
               ))}
-            </RadioGroup>
-            <Button size="sm" onClick={handleVote} disabled={!selected || submitting}>
-              {submitting ? "Saving…" : poll.hasVoted ? "Update vote" : "Vote"}
-            </Button>
-            {poll.hasVoted && (
               <p className="text-muted-foreground text-xs">
-                You&apos;ve voted - results show once the poll closes.
+                You&apos;ve voted - your choice is locked in, and results show once the poll closes.
               </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <RadioGroup value={selected} onValueChange={setSelected}>
+                {poll.options.map((o) => (
+                  <label key={o.id} className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value={o.id} />
+                    {o.label}
+                  </label>
+                ))}
+              </RadioGroup>
+              <Button size="sm" onClick={handleVote} disabled={!selected || submitting}>
+                {submitting ? "Saving…" : "Vote"}
+              </Button>
+            </div>
+          )
         ) : (
           <div className="space-y-2">
             {poll.results?.options.map((o) => (
