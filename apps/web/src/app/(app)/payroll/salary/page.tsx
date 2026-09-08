@@ -103,6 +103,12 @@ export default function SalaryManagementPage() {
       cell: ({ row }) => <span className="tabular-nums">{formatINR(row.original.currentAmount)}</span>,
     },
     {
+      id: "dateOfJoining",
+      accessorFn: (row) => row.employee.dateOfJoining,
+      header: "Date of joining",
+      cell: ({ row }) => formatDate(row.original.employee.dateOfJoining),
+    },
+    {
       accessorKey: "lastRevisedAt",
       header: "Last revised",
       cell: ({ row }) => (row.original.lastRevisedAt ? formatDate(row.original.lastRevisedAt) : "—"),

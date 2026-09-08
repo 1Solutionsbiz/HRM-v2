@@ -61,6 +61,7 @@ export class PayrollService {
 
   async getCompanySalaries() {
     const structures = await this.prisma.salaryStructure.findMany({
+      where: { employee: { status: 'ACTIVE' } },
       include: {
         employee: {
           select: {
@@ -68,6 +69,7 @@ export class PayrollService {
             firstName: true,
             lastName: true,
             employeeCode: true,
+            dateOfJoining: true,
             department: { select: { name: true } },
             designation: { select: { title: true } },
           },

@@ -55,11 +55,13 @@ export interface SalaryStructure {
     firstName: string;
     lastName: string;
     employeeCode: string;
+    dateOfJoining: string;
     department: { name: string } | null;
     designation: { title: string } | null;
   };
 }
 
+/** Active employees only - filtered server-side. */
 export function getCompanySalaries(): Promise<SalaryStructure[]> {
   return apiFetch<SalaryStructure[]>("/payroll/salary/company");
 }

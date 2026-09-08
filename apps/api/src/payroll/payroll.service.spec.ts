@@ -497,6 +497,15 @@ describe('PayrollService', () => {
     });
   });
 
+  describe('getCompanySalaries', () => {
+    it('only queries salary structures for active employees', async () => {
+      await service.getCompanySalaries();
+      expect(prisma.salaryStructure.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { employee: { status: 'ACTIVE' } } }),
+      );
+    });
+  });
+
   describe('getCommittedPayroll', () => {
     it('sums live salary structures for active employees, not payslips', async () => {
       prisma.salaryStructure.findMany.mockResolvedValue([
