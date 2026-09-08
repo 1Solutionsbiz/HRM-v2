@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -22,40 +23,66 @@ import { LiveClock } from "@/components/layout/live-clock";
 
 interface TopbarProps {
   title: string;
+  /** Blue strip, no title/clock/last-login - just nav + theme + bell,
+   * matching the hero banner already shown below on that page. */
+  variant?: "default" | "hero";
 }
 
-export function Topbar({ title }: TopbarProps) {
+export function Topbar({ title, variant = "default" }: TopbarProps) {
   const { data, refetch } = useAsync(getNotifications);
   const user = useAuthenticatedUser();
   React.useEffect(() => subscribeToNotificationChanges(refetch), [refetch]);
   const notifications = data ?? [];
   const unread = notifications.filter((n) => !n.read);
+  const isHero = variant === "hero";
 
   return (
-    <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur sm:px-4">
-      <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-1 h-5" />
-      <h1 className="truncate text-sm font-semibold sm:text-base">{title}</h1>
+    <header
+      className={cn(
+        "sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:px-4",
+        isHero
+          ? "bg-primary border-transparent"
+          : "bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur",
+      )}
+    >
+      <SidebarTrigger
+        className={cn("-ml-1", isHero && "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground")}
+      />
+      {!isHero && (
+        <>
+          <Separator orientation="vertical" className="mr-1 h-5" />
+          <h1 className="truncate text-sm font-semibold sm:text-base">{title}</h1>
+        </>
+      )}
       <div className="ml-auto flex items-center gap-1">
-        <div className="text-muted-foreground mr-2 hidden flex-col items-end text-xs leading-tight lg:flex">
-          <LiveClock />
-          {user.lastLoginAt && (
-            <span>
-              Last login {formatDate(user.lastLoginAt, { day: "numeric", month: "short" })},{" "}
-              {formatTime(user.lastLoginAt)}
-            </span>
-          )}
-        </div>
-        <Separator orientation="vertical" className="mr-1 hidden h-6 lg:block" />
+        {!isHero && (
+          <>
+            <div className="text-muted-foreground mr-2 hidden flex-col items-end text-xs leading-tight lg:flex">
+              <LiveClock />
+              {user.lastLoginAt && (
+                <span>
+                  Last login {formatDate(user.lastLoginAt, { day: "numeric", month: "short" })},{" "}
+                  {formatTime(user.lastLoginAt)}
+                </span>
+              )}
+            </div>
+            <Separator orientation="vertical" className="mr-1 hidden h-6 lg:block" />
+          </>
+        )}
 
-        <ThemeToggle />
+        <ThemeToggle
+          className={cn(isHero && "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground")}
+        />
 
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="relative"
+              className={cn(
+                "relative",
+                isHero && "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground",
+              )}
               aria-label="Notifications"
             >
               <Bell />

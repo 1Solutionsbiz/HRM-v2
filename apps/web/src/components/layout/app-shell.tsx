@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <Topbar title={getPageTitle(pathname)} />
+        <Topbar title={getPageTitle(pathname)} variant={pathname === "/my-day" ? "hero" : "default"} />
         <div className="flex-1 space-y-4 p-4 pb-20 sm:p-6 sm:pb-6 md:pb-6">
           {children}
         </div>

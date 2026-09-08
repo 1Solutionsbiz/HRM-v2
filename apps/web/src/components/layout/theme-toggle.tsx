@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
  * action a click takes (Moon in light mode = "go dark"), not the current
  * state. Full control (including "System") stays in Settings.
  */
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
@@ -23,7 +23,7 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon" disabled aria-label="Toggle theme">
+      <Button variant="ghost" size="icon" disabled aria-label="Toggle theme" className={className}>
         <Sun />
       </Button>
     );
@@ -37,6 +37,7 @@ export function ThemeToggle() {
       size="icon"
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       onClick={() => setTheme(isDark ? "light" : "dark")}
+      className={className}
     >
       {isDark ? <Sun /> : <Moon />}
     </Button>
