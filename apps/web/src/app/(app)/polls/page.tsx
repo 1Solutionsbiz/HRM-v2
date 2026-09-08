@@ -50,7 +50,13 @@ export default function PollsPage() {
         ) : (
           <div className="space-y-4">
             {(data ?? []).map((poll) => (
-              <PollCard key={poll.id} poll={poll} onVoted={refetch} />
+              <PollCard
+                key={poll.id}
+                poll={poll}
+                onVoted={refetch}
+                onDeleted={refetch}
+                canManage={canManage}
+              />
             ))}
           </div>
         )}

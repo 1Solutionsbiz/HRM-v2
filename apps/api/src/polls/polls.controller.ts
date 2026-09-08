@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
@@ -28,5 +28,11 @@ export class PollsController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.pollsService.vote(id, dto, actor);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('poll:manage')
+  remove(@Param('id') id: string, @CurrentUser() actor: AuthContext) {
+    return this.pollsService.remove(id, actor);
   }
 }

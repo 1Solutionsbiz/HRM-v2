@@ -10,12 +10,12 @@ import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-export function LeaveBalanceCard() {
+export function LeaveBalanceCard({ className }: { className?: string } = {}) {
   const { data, loading, error, refetch } = useAsync(getLeaveBalances);
   const balances = data ?? [];
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Leave balance</CardTitle>
       </CardHeader>

@@ -15,3 +15,20 @@ export const toneClasses: Record<Tone, string> = {
   orange: "bg-(--chart-2)/10 text-(--chart-2)",
   teal: "bg-(--chart-3)/10 text-(--chart-3)",
 };
+
+/**
+ * Same tone tokens as toneClasses, applied as a full card background
+ * instead of just an icon tint - light enough at 10% opacity to keep text
+ * readable, and (unlike a literal Tailwind palette color such as
+ * bg-violet-50) built on the app's own light/dark-aware CSS variables, so
+ * it doesn't go washed-out or wrong in dark mode.
+ */
+export const cardToneClasses: Record<Tone, string> = {
+  primary: "bg-primary/10",
+  success: "bg-success/10",
+  warning: "bg-warning/15",
+  destructive: "bg-destructive/10",
+  violet: "bg-(--chart-5)/10",
+  orange: "bg-(--chart-2)/10",
+  teal: "bg-(--chart-3)/10",
+};

@@ -20,7 +20,7 @@ function hoursLabel(workedMinutes: number | null) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-export function YesterdayAttendanceCard() {
+export function YesterdayAttendanceCard({ className }: { className?: string } = {}) {
   const yesterday = yesterdayDateOnly();
   const { data, loading, error, refetch } = useAsync(
     () => getAttendanceHistory({ from: yesterday, to: yesterday }),
@@ -29,7 +29,7 @@ export function YesterdayAttendanceCard() {
   const day = data?.[0];
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Yesterday&apos;s attendance</CardTitle>
       </CardHeader>

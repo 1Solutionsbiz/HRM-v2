@@ -137,6 +137,28 @@ export class PollsService {
     return { voted: true };
   }
 
+  /**
+   * Hard delete, unlike most of this app's "cancel, never remove" entities
+   * (leave requests, tickets) - a poll is closer to an announcement or a
+   * one-off admin mistake than a record with its own approval history, and
+   * PollOption/PollVote both cascade so nothing is left orphaned.
+   */
+  async remove(pollId: string, actor: AuthContext) {
+    const poll = await this.prisma.poll.findUnique({ where: { id: pollId } });
+    if (!poll) throw new NotFoundException('Poll not found');
+
+    await this.prisma.poll.delete({ where: { id: pollId } });
+
+    await this.auditService.log({
+      eventType: 'OTHER',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Poll',
+      targetId: pollId,
+      description: `Deleted poll "${poll.question}"`,
+    });
+  }
+
   private async requireEmployeeId(userId: string): Promise<string> {
     const employee = await this.prisma.employee.findUnique({
       where: { userId },

@@ -14,12 +14,12 @@ function moodOption(mood: string) {
   return MOOD_OPTIONS.find((m) => m.value === mood);
 }
 
-export function MoodHistoryCard() {
+export function MoodHistoryCard({ className }: { className?: string } = {}) {
   const { data, loading, error, refetch } = useAsync(getMyMoodCheckIns);
   const entries = (data ?? []).slice(0, 5);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Your recent moods</CardTitle>
       </CardHeader>

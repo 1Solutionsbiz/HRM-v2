@@ -34,7 +34,7 @@ type Highlight =
  * logged-in employee (not gated behind employee:manage, unlike the general
  * directory) - see EmployeesService.getUpcomingBirthdays/getUpcomingAnniversaries.
  */
-export function HighlightsCard() {
+export function HighlightsCard({ className }: { className?: string } = {}) {
   const birthdays = useAsync(getUpcomingBirthdays);
   const anniversaries = useAsync(getUpcomingAnniversaries);
   const me = useAuthenticatedUser();
@@ -61,7 +61,7 @@ export function HighlightsCard() {
   ].sort((a, b) => a.daysUntil - b.daysUntil);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-semibold">Highlights</CardTitle>
         <Cake className="text-muted-foreground size-4" />

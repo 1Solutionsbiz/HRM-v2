@@ -44,3 +44,7 @@ export function createPoll(payload: CreatePollPayload): Promise<Poll> {
 export function votePoll(pollId: string, optionId: string) {
   return apiFetch(`/polls/${pollId}/vote`, { method: "POST", body: { optionId } });
 }
+
+export function deletePoll(pollId: string) {
+  return apiFetch(`/polls/${pollId}`, { method: "DELETE" });
+}

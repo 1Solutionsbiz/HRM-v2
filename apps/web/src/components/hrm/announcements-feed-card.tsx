@@ -18,12 +18,12 @@ const CATEGORY_LABEL: Record<AnnouncementCategory, string> = {
   GENERAL: "General",
 };
 
-export function AnnouncementsFeedCard() {
+export function AnnouncementsFeedCard({ className }: { className?: string } = {}) {
   const { data, loading, error, refetch } = useAsync(getAnnouncements);
   const feed = (data ?? []).slice(0, 8);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-semibold">Feed</CardTitle>
         <Link href="/announcements" className="text-primary text-xs font-medium hover:underline">

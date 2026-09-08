@@ -10,6 +10,7 @@ function buildPrismaMock() {
       create: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
+      delete: vi.fn(),
     },
     pollVote: { upsert: vi.fn() },
   };
@@ -176,6 +177,23 @@ describe('PollsService', () => {
         update: { optionId: 'opt-2', votedAt: expect.any(Date) },
       });
       expect(result).toEqual({ voted: true });
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes the poll and audit-logs it', async () => {
+      prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1', question: 'Q' });
+
+      await service.remove('poll-1', actor);
+
+      expect(prisma.poll.delete).toHaveBeenCalledWith({ where: { id: 'poll-1' } });
+      expect(auditService.log).toHaveBeenCalled();
+    });
+
+    it('throws when the poll does not exist', async () => {
+      prisma.poll.findUnique.mockResolvedValue(null);
+      await expect(service.remove('missing', actor)).rejects.toThrow(NotFoundException);
+      expect(prisma.poll.delete).not.toHaveBeenCalled();
     });
   });
 });

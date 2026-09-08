@@ -1,22 +1,33 @@
 "use client";
 
 import { useAsync } from "@/lib/use-async";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { getPolls } from "@/lib/api/polls";
 import { PollCard } from "@/components/hrm/poll-card";
 
-/** Only open polls, directly votable from the dashboard - closed ones with
- * their results live on the full /polls page instead. */
-export function PollsDashboardWidget() {
+/**
+ * Only ever one poll on the dashboard, not a stack of every open one - the
+ * soonest-closing (most urgent to vote on) wins if several happen to be
+ * open at once. Full history (open + closed) lives on /polls instead.
+ */
+export function PollsDashboardWidget({ className }: { className?: string }) {
+  const user = useAuthenticatedUser();
+  const canManage = user.role === "admin" || user.role === "hr";
   const { data, refetch } = useAsync(getPolls);
-  const open = (data ?? []).filter((p) => p.isOpen);
+  const open = (data ?? [])
+    .filter((p) => p.isOpen)
+    .sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
+  const poll = open[0];
 
-  if (open.length === 0) return null;
+  if (!poll) return null;
 
   return (
-    <div className="space-y-4">
-      {open.map((poll) => (
-        <PollCard key={poll.id} poll={poll} onVoted={refetch} />
-      ))}
-    </div>
+    <PollCard
+      poll={poll}
+      onVoted={refetch}
+      onDeleted={refetch}
+      canManage={canManage}
+      className={className}
+    />
   );
 }

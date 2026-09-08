@@ -14,6 +14,7 @@ import { TicketsSummaryCard } from "@/components/hrm/tickets-summary-card";
 import { MoodHistoryCard } from "@/components/hrm/mood-history-card";
 import { PollsDashboardWidget } from "@/components/hrm/polls-dashboard-widget";
 import { QuickAction } from "@/components/hrm/quick-action";
+import { cardToneClasses } from "@/lib/tone";
 
 export default function MyDayPage() {
   const user = useAuthenticatedUser();
@@ -41,21 +42,20 @@ export default function MyDayPage() {
         />
       </div>
 
-      <PollsDashboardWidget />
-
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4">
-          <HighlightsCard />
-          <AttendanceCalendarCard linkHref="/attendance" />
+          <HighlightsCard className={cardToneClasses.orange} />
+          <PollsDashboardWidget className={cardToneClasses.violet} />
+          <AttendanceCalendarCard linkHref="/attendance" className={cardToneClasses.teal} />
         </div>
 
-        <AnnouncementsFeedCard />
+        <AnnouncementsFeedCard className={cardToneClasses.warning} />
 
         <div className="space-y-4">
-          <LeaveBalanceCard />
-          <YesterdayAttendanceCard />
-          <TicketsSummaryCard />
-          <MoodHistoryCard />
+          <LeaveBalanceCard className={cardToneClasses.success} />
+          <YesterdayAttendanceCard className={cardToneClasses.primary} />
+          <TicketsSummaryCard className={cardToneClasses.destructive} />
+          <MoodHistoryCard className={cardToneClasses.violet} />
         </div>
       </div>
     </div>

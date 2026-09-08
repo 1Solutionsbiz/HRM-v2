@@ -34,9 +34,10 @@ function monthGrid(year: number, month: number) {
 interface AttendanceCalendarCardProps {
   /** When set, shows a "Go to calendar" link in the header pointing here. */
   linkHref?: string;
+  className?: string;
 }
 
-export function AttendanceCalendarCard({ linkHref }: AttendanceCalendarCardProps) {
+export function AttendanceCalendarCard({ linkHref, className }: AttendanceCalendarCardProps) {
   const [cursor, setCursor] = React.useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -60,7 +61,7 @@ export function AttendanceCalendarCard({ linkHref }: AttendanceCalendarCardProps
   const monthLabel = cursor.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="text-base">Calendar</CardTitle>
         <div className="flex items-center gap-2">

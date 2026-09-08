@@ -9,13 +9,13 @@ import { CardSkeleton } from "@/components/hrm/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-export function TicketsSummaryCard() {
+export function TicketsSummaryCard({ className }: { className?: string } = {}) {
   const { data, loading, error, refetch } = useAsync(getMyTickets);
   const tickets = data ?? [];
   const openCount = tickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS").length;
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle className="text-sm font-semibold">My tickets</CardTitle>
       </CardHeader>
