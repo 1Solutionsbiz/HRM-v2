@@ -6,6 +6,11 @@ import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Behind LiteSpeed's TLS-terminating proxy, req.protocol otherwise
+  // always reads back as "http" (the internal connection to Node is
+  // plain HTTP) - trust the proxy's X-Forwarded-Proto so anything built
+  // from req.protocol (the receipt-upload URL below) comes out https.
+  app.set('trust proxy', true);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
