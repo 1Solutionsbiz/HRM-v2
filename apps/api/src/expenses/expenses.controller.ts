@@ -60,15 +60,12 @@ export class ExpensesController {
 
   @Get('receipts/:filename')
   async getReceipt(@Param('filename') filename: string, @Res() response: Response): Promise<void> {
-    // Deliberately not app.useStaticAssets()/express.static: on this
-    // Passenger/LiteSpeed deploy target, streaming an existing static file
-    // through it returns a bare 500 "Internal error" with no trace in this
-    // app's own logs (confirmed: a 404 for a missing file DOES come back as
-    // this app's normal JSON error - only an existing file's stream fails,
-    // which points at Passenger's response handling, not this app). Reading
-    // the whole file into memory and sending it as a complete buffer avoids
-    // whatever that streaming interaction is - fine at the 5MB cap these
-    // are limited to.
+    // Reads the whole file into memory rather than streaming it via
+    // app.useStaticAssets(); fine at the 5MB cap uploads are already
+    // limited to. (Earlier 500/503s while building this were traced to
+    // testing with malformed placeholder PNG bytes, which broke on
+    // Hostinger's CDN image-optimization layer in front of this route -
+    // not a bug in this handler. A genuinely valid image round-trips fine.)
     if (!RECEIPT_FILENAME_PATTERN.test(filename)) {
       throw new NotFoundException('Receipt not found.');
     }
