@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { validateEnv } from './config/environment.js';
@@ -37,6 +38,14 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    // Global backstop against request floods/scraping - route-specific
+    // limits (login, forgot/reset-password) are tighter, set via @Throttle
+    // on those controllers. Keyed by request.ip, which resolves correctly
+    // behind LiteSpeed because of `app.set('trust proxy', true)` in
+    // main.ts - verified empirically against recorded Session.ipAddress
+    // rows (real external IPs since that fix deployed, vs 127.0.0.1
+    // before it).
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
     PrismaModule,
     SecurityModule,
     MailModule,
@@ -68,8 +77,10 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
   providers: [
     AppService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
-    // Order matters: JwtAuthGuard runs first and attaches `authContext`,
-    // which PermissionsGuard then reads.
+    // Order matters: ThrottlerGuard runs first (IP-only, no auth context
+    // needed) so a flood is rejected before hitting auth/DB work; then
+    // JwtAuthGuard attaches `authContext`, which PermissionsGuard reads.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

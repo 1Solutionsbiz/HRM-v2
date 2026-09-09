@@ -18,7 +18,7 @@ import type { RequestPasswordResetDto } from './dto/request-password-reset.dto.j
 import type { ResetPasswordDto } from './dto/reset-password.dto.js';
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
-const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 // A second reset request within this window silently reuses the pending
 // token's cooldown instead of minting (and emailing) another one — cheap
