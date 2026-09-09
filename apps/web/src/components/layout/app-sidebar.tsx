@@ -34,23 +34,27 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard" onClick={closeOnMobile}>
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center">
-                  <Image
-                    src="/hrm-icon.png"
-                    alt=""
-                    width={320}
-                    height={320}
-                    className="size-7 object-contain"
-                    priority
-                  />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">HRM V2</span>
-                  <span className="text-muted-foreground truncate text-xs">
-                    1Solutions
-                  </span>
-                </div>
+              {/* Collapsed-to-icon desktop state clips this button to a 32x32
+                  square, so the full wordmark logo below would render as an
+                  unrecognizable sliver - the square icon-only mark takes over
+                  there instead, purely via the collapsible=icon data attr. */}
+              <Link href="/my-day" onClick={closeOnMobile}>
+                <Image
+                  src="/hrm-icon.png"
+                  alt="1Solutions HRM"
+                  width={320}
+                  height={320}
+                  className="hidden size-7 shrink-0 object-contain group-data-[collapsible=icon]:block"
+                  priority
+                />
+                <Image
+                  src="/1solutions-hrm-logo.webp"
+                  alt="1Solutions HRM"
+                  width={1600}
+                  height={611}
+                  className="h-8 w-auto group-data-[collapsible=icon]:hidden"
+                  priority
+                />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

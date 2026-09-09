@@ -40,10 +40,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl sm:p-10 dark:bg-neutral-900">
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
           <Image
-            src="/1solutions-hrm-logo.jpeg"
+            src="/1solutions-hrm-logo.webp"
             alt="1Solutions HRM"
-            width={800}
-            height={305}
+            width={1600}
+            height={611}
             className="h-16 w-auto"
             priority
           />
