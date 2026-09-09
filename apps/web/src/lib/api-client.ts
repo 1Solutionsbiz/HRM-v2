@@ -160,3 +160,41 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
+
+/**
+ * Same auth-attach/401-refresh-retry behavior as apiFetch, but for a file
+ * upload - deliberately not folded into apiFetch itself, since that always
+ * JSON.stringifies `body` and sets Content-Type: application/json, which
+ * would corrupt a multipart request. No explicit Content-Type header here:
+ * the browser sets the multipart boundary itself from the FormData body.
+ */
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  async function attempt(): Promise<Response> {
+    const headers: Record<string, string> = {};
+    const tokens = getStoredTokens();
+    if (tokens) headers.Authorization = `Bearer ${tokens.accessToken}`;
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetch(`${API_URL}${path}`, { method: "POST", headers, body: formData });
+  }
+
+  let response = await attempt();
+
+  if (response.status === 401) {
+    const newAccessToken = await refreshAccessToken();
+    if (!newAccessToken) {
+      dispatchSessionExpired();
+      throw new ApiError(401, "Your session has expired. Please sign in again.");
+    }
+    response = await attempt();
+  }
+
+  if (!response.ok) {
+    const message = await readErrorMessage(response);
+    if (response.status === 401) dispatchSessionExpired();
+    throw new ApiError(response.status, message);
+  }
+
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}

@@ -101,6 +101,20 @@ class EnvironmentVariables {
   @IsString()
   @MinLength(1)
   MAIL_FROM: string = '1Solutions HRM <hr@1solutions.biz>';
+
+  /**
+   * Absolute path to a directory that survives redeploys, for uploaded
+   * files (expense receipts today). Deliberately NOT inside the app's own
+   * working directory: this Hostinger deploy target rebuilds into a fresh
+   * versioned directory on every push (see hbuilds/versions/<id>/nodejs in
+   * the deploy notes), so anything written under the app root would vanish
+   * on the next deploy. Defaults to a local ./uploads for dev, where that
+   * durability concern doesn't apply.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  UPLOADS_DIR: string = './uploads';
 }
 
 export function validateEnv(

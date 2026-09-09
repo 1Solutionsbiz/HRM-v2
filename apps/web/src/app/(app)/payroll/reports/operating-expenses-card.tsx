@@ -27,6 +27,11 @@ import {
 import { CardSkeleton } from "@/components/hrm/loading-state";
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+// A fixed, generous window rather than deriving from existing data - this
+// period picker needs to let you both look back at history and set up a
+// future month's expenses in advance.
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 6 }, (_, i) => String(CURRENT_YEAR - 4 + i));
 
 function AmountEditor({
   label,
@@ -233,7 +238,7 @@ export function OperatingExpensesCard() {
         </div>
         <div className="flex shrink-0 gap-2">
           <Select value={String(periodMonth)} onValueChange={(v) => setPeriodMonth(Number(v))}>
-            <SelectTrigger className="h-8 w-[110px]">
+            <SelectTrigger className="h-8 w-[130px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -244,12 +249,18 @@ export function OperatingExpensesCard() {
               ))}
             </SelectContent>
           </Select>
-          <Input
-            type="number"
-            value={periodYear}
-            onChange={(e) => setPeriodYear(e.target.value)}
-            className="h-8 w-20"
-          />
+          <Select value={periodYear} onValueChange={setPeriodYear}>
+            <SelectTrigger className="h-8 w-[90px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {YEARS.map((y) => (
+                <SelectItem key={y} value={y}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardHeader>
       <CardContent>

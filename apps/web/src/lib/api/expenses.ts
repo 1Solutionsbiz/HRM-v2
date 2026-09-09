@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiUpload } from "@/lib/api-client";
 
 export type ExpenseClaimStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
@@ -12,6 +12,10 @@ export interface ExpenseCategory {
 
 export function getExpenseCategories(): Promise<ExpenseCategory[]> {
   return apiFetch<ExpenseCategory[]>("/expenses/categories");
+}
+
+export function uploadReceipt(file: File): Promise<{ url: string }> {
+  return apiUpload<{ url: string }>("/expenses/receipts", file);
 }
 
 export interface ExpenseClaim {
