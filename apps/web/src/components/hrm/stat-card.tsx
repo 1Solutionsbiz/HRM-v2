@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { toneClasses, type Tone as StatTone } from "@/lib/tone";
+import { cardToneClasses, toneClasses, type Tone as StatTone } from "@/lib/tone";
 
 export type { StatTone };
 
@@ -37,7 +37,7 @@ export function StatCard({
     : null;
 
   return (
-    <Card className={className}>
+    <Card className={cn(cardToneClasses[tone], className)}>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
         <CardTitle className="text-muted-foreground text-sm font-medium">
           {label}

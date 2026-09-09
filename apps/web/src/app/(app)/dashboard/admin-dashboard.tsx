@@ -4,12 +4,13 @@ import Link from "next/link";
 import {
   Building2,
   ClipboardList,
+  Megaphone,
   ScrollText,
   ShieldCheck,
   Users,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { formatRelativeTime } from "@/lib/format";
+import { formatDate, formatRelativeTime } from "@/lib/format";
 import { titleCase } from "@/lib/api/employees";
 import {
   getAuditLogs,
@@ -21,6 +22,7 @@ import {
   getDepartments,
 } from "@/lib/api/admin";
 import { getEmployees } from "@/lib/api/employees";
+import { getAnnouncements } from "@/lib/api/announcements";
 import { StatCard } from "@/components/hrm/stat-card";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -35,10 +37,12 @@ function WidgetHeader({
   title,
   icon: Icon,
   href,
+  linkLabel = "View all",
 }: {
   title: string;
   icon: React.ElementType;
   href?: string;
+  linkLabel?: string;
 }) {
   return (
     <CardHeader className="flex flex-row items-center justify-between">
@@ -46,7 +50,7 @@ function WidgetHeader({
       <div className="flex items-center gap-2">
         {href && (
           <Link href={href} className="text-primary text-xs font-medium hover:underline">
-            View all
+            {linkLabel}
           </Link>
         )}
         <Icon className="text-muted-foreground size-4" />
@@ -64,6 +68,8 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
   const resignations = useAsync(getCompanyResignations);
   const leaveRequests = useAsync(getCompanyLeaveRequests);
   const expenseClaims = useAsync(getCompanyExpenseClaims);
+  const announcements = useAsync(getAnnouncements);
+  const recentAnnouncements = (announcements.data ?? []).slice(0, 4);
 
   const activeEmployees = (employees.data ?? []).filter((e) => e.status === "ACTIVE");
   const activeEmployeeIds = new Set(activeEmployees.map((e) => e.id));
@@ -191,6 +197,41 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         <HighlightsCard />
+
+        <Card>
+          <WidgetHeader
+            title="Announcements"
+            icon={Megaphone}
+            href="/announcements?compose=1"
+            linkLabel="Add announcement"
+          />
+          <CardContent>
+            <AsyncSection
+              loading={announcements.loading}
+              error={announcements.error}
+              onRetry={announcements.refetch}
+              loadingFallback={<CardSkeleton lines={3} />}
+            >
+              {recentAnnouncements.length === 0 ? (
+                <EmptyState size="sm" icon={Megaphone} title="No announcements yet" />
+              ) : (
+                <ul className="space-y-3">
+                  {recentAnnouncements.map((a) => (
+                    <li key={a.id} className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium">{a.title}</p>
+                        <p className="text-muted-foreground truncate text-[11px]">{titleCase(a.category)}</p>
+                      </div>
+                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                        {formatDate(a.publishedAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </AsyncSection>
+          </CardContent>
+        </Card>
 
         <Card>
           <WidgetHeader title="Pending resignations" icon={Users} href="/people/resignations" />
