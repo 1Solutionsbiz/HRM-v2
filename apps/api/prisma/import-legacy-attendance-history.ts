@@ -1,14 +1,16 @@
-// One-off legacy-data import: historical attendance from `newuser_attendance`
-// (238 rows, Dec 2024 - Feb 2025, 14 distinct employees). Queued since Phase
-// 3 - see PROJECT_STATUS.md's "Deliberately still not imported" note - and
-// safe to run unlike `hrm_attandance_machine_detail` (which identifies
-// employees by ambiguous first-name strings, not id, and needs manual
-// disambiguation first).
+// One-off legacy-data import: historical attendance from `newuser_attendance`.
+// Queued since Phase 3 - see PROJECT_STATUS.md's "Deliberately still not
+// imported" note - and safe to run unlike `hrm_attandance_machine_detail`
+// (which identifies employees by ambiguous first-name strings, not id, and
+// needs manual disambiguation first).
 //
 // Parses the same phpMyAdmin dump used by every prior phase. Idempotent:
 // each (employeeId, date) this script would produce is deleted and
 // recreated on every run (AttendanceDay's onDelete: Cascade takes its
-// AttendanceEvent children with it), so it can be safely re-run.
+// AttendanceEvent children with it), so it can be safely re-run - EXCEPT
+// where a day already has a real, non-legacy-sourced event on it (see
+// "Don't clobber live data" below), which is deliberately left alone even
+// on a re-run.
 //
 // Timezone note: `clock_in_time`/`clock_out_time` are naive
 // "YYYY-MM-DD HH:MM:SS" strings recorded by the legacy PHP app running on
@@ -24,6 +26,30 @@
 // own `status`/`late_status` labels), so imported days classify identically
 // to a live check-in under today's AttendancePolicy.
 //
+// 2026-09-09 re-run against a fresh, much larger dump (5,542 rows vs the
+// original 238, now spanning through 2026-09-08) surfaced two new hazards
+// the original 238-row slice didn't have:
+//
+// 1. Fabricated `status='absent'` rows. 245 rows carry status='absent'; a
+//    `clock_in_time`-vs-`created_at` gap check (real punches are created
+//    within 0-2 days of their own date 99.3% of the time - 5,259/5,296)
+//    shows 214 of the 245 were bulk-inserted long after the date they claim
+//    (one employee, legacy user_id 1, has "absent" rows for literally every
+//    weekday from 2012-05-01 through 2025, all with `created_at` on a single
+//    day in 2025-04 and an empty `clock_in_ip` - a synthetic calendar
+//    backfill, not real attendance). Confirmed this isn't a real signal
+//    worth partially trusting: even the 31 small-gap 'absent' rows are from
+//    the same contaminated batch and status field, so status='absent' is
+//    skipped outright rather than kept/discarded row-by-row.
+// 2. Don't clobber live data. The live V2 app has been recording real
+//    check-ins since 2026-09-05 (AttendanceEvent.source='WEB'), and this
+//    dump's dates now run right up to 2026-09-08 - overlapping the live
+//    window. Blindly deleting+recreating every (employeeId, date) this
+//    script touches would silently overwrite a real employee-entered check-
+//    in with stale legacy data for the same day. Before writing a day, this
+//    script now checks for any existing AttendanceEvent on it whose source
+//    isn't BIOMETRIC_IMPORT, and skips (not overwrites) if one exists.
+//
 // Run: npx tsx --env-file=<path-to-hrm-api.env> prisma/import-legacy-attendance-history.ts <path-to-dump.sql>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
@@ -31,14 +57,28 @@ import { PrismaClient } from '../src/generated/prisma/client.js';
 
 type Row = Record<string, string>;
 
-function extractInsertBlock(sql: string, table: string): { cols: string[]; body: string } | null {
+/**
+ * A large table's dump is split across multiple `INSERT INTO ... VALUES
+ * (...), (...);` statements by phpMyAdmin (chunked, not one per table) -
+ * this dump's `newuser_attendance` alone is 26 separate statements. Collects
+ * every one and concatenates their row bodies, rather than the single
+ * `.exec()` this used to be, which silently returned only the first chunk
+ * (238 of 5,542 rows) with no error - see the 2026-09-09 file-header note.
+ */
+function extractInsertBlocks(sql: string, table: string): { cols: string[]; bodies: string[] } | null {
   const re = new RegExp(
     `INSERT INTO \`${table}\`\\s*\\(([^)]*)\\)\\s*VALUES\\s*\\n([\\s\\S]*?);\\n`,
+    'g',
   );
-  const m = re.exec(sql);
-  if (!m) return null;
-  const cols = m[1]!.split(',').map((c) => c.trim().replace(/`/g, ''));
-  return { cols, body: m[2]! };
+  let cols: string[] | null = null;
+  const bodies: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sql))) {
+    cols ??= m[1]!.split(',').map((c) => c.trim().replace(/`/g, ''));
+    bodies.push(m[2]!);
+  }
+  if (!cols) return null;
+  return { cols, bodies };
 }
 
 function parseSqlRow(row: string): string[] {
@@ -68,18 +108,21 @@ function parseSqlRow(row: string): string[] {
 }
 
 function parseTable(sql: string, table: string): Row[] {
-  const block = extractInsertBlock(sql, table);
+  const block = extractInsertBlocks(sql, table);
   if (!block) return [];
-  let body = block.body.trim();
-  if (body.startsWith('(')) body = body.slice(1);
-  if (body.endsWith(')')) body = body.slice(0, -1);
-  const rawRows = body.split('),\n(');
-  return rawRows.map((r) => {
-    const values = parseSqlRow(r);
-    const row: Row = {};
-    block.cols.forEach((c, i) => (row[c] = values[i] ?? ''));
-    return row;
-  });
+  const out: Row[] = [];
+  for (const rawBody of block.bodies) {
+    let body = rawBody.trim();
+    if (body.startsWith('(')) body = body.slice(1);
+    if (body.endsWith(')')) body = body.slice(0, -1);
+    for (const r of body.split('),\n(')) {
+      const values = parseSqlRow(r);
+      const row: Row = {};
+      block.cols.forEach((c, i) => (row[c] = values[i] ?? ''));
+      out.push(row);
+    }
+  }
+  return out;
 }
 
 function isNullish(v: string | undefined): boolean {
@@ -145,6 +188,8 @@ async function main() {
 
   let imported = 0;
   let skippedNoEmployee = 0;
+  let skippedFabricated = 0;
+  let skippedLiveDataExists = 0;
   const perEmployeeCount = new Map<string, number>();
 
   for (const r of rows) {
@@ -158,6 +203,37 @@ async function main() {
     if (isNullish(r.clock_in_time)) {
       report.push(`SKIPPED row id=${r.id} (${employee.firstName} ${employee.lastName}): no clock_in_time.`);
       continue;
+    }
+    // See the file-header note: status='absent' in this dump is a
+    // fabricated bulk calendar-backfill, not a real attendance record.
+    if (r.status?.trim() === 'absent') {
+      skippedFabricated++;
+      continue;
+    }
+    // The same backfill batches also produced a handful of non-'absent'
+    // rows (a batch's last day was sometimes tagged 'logout'/'present'
+    // instead) - real punches are created within 0-2 days of their own
+    // date 99%+ of the time, so a >30-day gap between clock_in_time and
+    // created_at is treated as the same fabrication, not a late manual
+    // entry. Confirmed by hand: every row this catches has a created_at
+    // matching one of the known mass-backfill event dates (2025-03-31,
+    // 2025-04-07, 2025-04-09).
+    if (!isNullish(r.created_at)) {
+      const clockInDay = parseIst(r.clock_in_time!);
+      const createdDay = parseIst(r.created_at!);
+      const gapDays = Math.abs(
+        (Date.UTC(createdDay.y, createdDay.mo - 1, createdDay.d) -
+          Date.UTC(clockInDay.y, clockInDay.mo - 1, clockInDay.d)) /
+          86_400_000,
+      );
+      if (gapDays > 30) {
+        skippedFabricated++;
+        report.push(
+          `SKIPPED row id=${r.id} (${employee.firstName} ${employee.lastName}): ` +
+            `created_at is ${gapDays} days from clock_in_time's own date - fabricated backfill, not a real punch.`,
+        );
+        continue;
+      }
     }
 
     const checkIn = parseIst(r.clock_in_time!);
@@ -193,6 +269,27 @@ async function main() {
       status = hours < halfDayThresholdHours ? 'HALF_DAY' : lateMinutes > 0 ? 'LATE' : 'PRESENT';
     } else {
       status = lateMinutes > 0 ? 'LATE' : 'PRESENT';
+    }
+
+    // Don't clobber live data: if this (employee, date) already has a real,
+    // non-legacy-sourced event on it (the live app has been recording real
+    // check-ins since 2026-09-05), leave it alone rather than overwriting a
+    // genuine employee-entered day with stale legacy data.
+    const liveEvent = await prisma.attendanceEvent.findFirst({
+      where: {
+        employeeId: employee.id,
+        source: { not: 'BIOMETRIC_IMPORT' },
+        attendanceDay: { date },
+      },
+      select: { id: true },
+    });
+    if (liveEvent) {
+      skippedLiveDataExists++;
+      report.push(
+        `SKIPPED row id=${r.id} (${employee.firstName} ${employee.lastName}, ${date.toISOString().slice(0, 10)}): ` +
+          `a real (non-import) event already exists for this day - not overwriting live data.`,
+      );
+      continue;
     }
 
     // Idempotent: wipe any prior import of this exact (employee, date) —
@@ -242,6 +339,8 @@ async function main() {
 
   report.push(`Imported: ${imported}`);
   report.push(`Skipped (no matching employee): ${skippedNoEmployee}`);
+  report.push(`Skipped (fabricated backfill row - status='absent' or >30-day created_at gap): ${skippedFabricated}`);
+  report.push(`Skipped (real/live data already exists for that day): ${skippedLiveDataExists}`);
   report.push('Per-employee day counts:');
   for (const [name, count] of [...perEmployeeCount.entries()].sort((a, b) => b[1] - a[1])) {
     report.push(`  ${name}: ${count}`);
