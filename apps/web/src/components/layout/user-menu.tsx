@@ -28,7 +28,12 @@ export function UserMenu() {
   // On mobile the sidebar itself is a near-full-width sheet, so opening the
   // menu to the right of the trigger pushes it past the viewport edge -
   // open it below the trigger there instead.
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
+  // Navigating to Profile/Settings doesn't unmount this component the way
+  // logging out does, so the mobile Sheet is left open on top of the new
+  // page unless closed explicitly here too (app-sidebar.tsx's nav links
+  // already do this via the same setOpenMobile call).
+  const closeOnMobile = () => isMobile && setOpenMobile(false);
 
   async function handleLogout() {
     await logout();
@@ -80,13 +85,13 @@ export function UserMenu() {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/profile">
+                <Link href="/profile" onClick={closeOnMobile}>
                   <UserCircle />
                   Profile
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/settings">
+                <Link href="/settings" onClick={closeOnMobile}>
                   <Settings />
                   Settings
                 </Link>
