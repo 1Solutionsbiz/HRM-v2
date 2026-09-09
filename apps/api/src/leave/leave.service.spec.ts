@@ -136,7 +136,9 @@ describe('LeaveService', () => {
     beforeEach(() => {
       prisma.leaveType.findUnique.mockResolvedValue({
         id: 'lt-1',
+        key: 'earned',
         isActive: true,
+        isPaid: true,
         defaultAnnualDays: decimal(12),
       });
     });
@@ -204,6 +206,87 @@ describe('LeaveService', () => {
           data: expect.objectContaining({ code: 'LV-0042', totalDays: 1 }),
         }),
       );
+      expect(result.code).toBe('LV-0042');
+    });
+
+    it('auto-converts a Casual Leave request to Loss of Pay past the monthly cap', async () => {
+      prisma.leaveType.findUnique.mockResolvedValue({
+        id: 'lt-casual',
+        key: 'casual-leave-1-day',
+        isActive: true,
+        isPaid: true,
+        defaultAnnualDays: decimal(12),
+      });
+      prisma.leaveType.findUniqueOrThrow.mockResolvedValue({
+        id: 'lt-lop',
+        key: 'loss-of-pay',
+        name: 'Loss of Pay',
+        isPaid: false,
+        defaultAnnualDays: decimal(0),
+      });
+      // Already 1 Casual Leave day committed this month (the monthly cap).
+      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(1) }]);
+      prisma.leaveBalance.findUnique.mockResolvedValue(null);
+      prisma.leaveRequest.create.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0042',
+        totalDays: decimal(1),
+      });
+
+      const result = await service.applyLeave('user-1', dto, actor);
+
+      expect(prisma.leaveType.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { key: 'loss-of-pay' },
+      });
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ leaveTypeId: 'lt-lop' }) }),
+      );
+      expect(result.autoConvertedToLossOfPay).toBe(true);
+    });
+
+    it('keeps a Casual Leave request as-is within the monthly cap', async () => {
+      prisma.leaveType.findUnique.mockResolvedValue({
+        id: 'lt-casual',
+        key: 'casual-leave-1-day',
+        isActive: true,
+        isPaid: true,
+        defaultAnnualDays: decimal(12),
+      });
+      prisma.leaveRequest.findMany.mockResolvedValue([]); // nothing committed yet this month
+      prisma.leaveBalance.findUnique.mockResolvedValue(null);
+      prisma.leaveRequest.create.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0042',
+        totalDays: decimal(1),
+      });
+
+      const result = await service.applyLeave('user-1', dto, actor);
+
+      expect(prisma.leaveType.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ leaveTypeId: 'lt-casual' }) }),
+      );
+      expect(result.autoConvertedToLossOfPay).toBe(false);
+    });
+
+    it('does not cap an unpaid leave type against an annual balance', async () => {
+      prisma.leaveType.findUnique.mockResolvedValue({
+        id: 'lt-lop',
+        key: 'loss-of-pay',
+        isActive: true,
+        isPaid: false,
+        defaultAnnualDays: decimal(0),
+      });
+      prisma.leaveBalance.findUnique.mockResolvedValue(null);
+      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(50) }]); // already "over" a 0-day allocation
+      prisma.leaveRequest.create.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0042',
+        totalDays: decimal(1),
+      });
+
+      const result = await service.applyLeave('user-1', dto, actor);
+
       expect(result.code).toBe('LV-0042');
     });
   });

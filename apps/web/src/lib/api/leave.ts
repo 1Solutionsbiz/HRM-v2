@@ -116,8 +116,13 @@ export interface ApplyLeavePayload {
   reason: string;
 }
 
-export function applyLeave(payload: ApplyLeavePayload): Promise<LeaveRequest> {
-  return apiFetch<LeaveRequest>("/leave/requests", { method: "POST", body: payload });
+export interface ApplyLeaveResult extends LeaveRequest {
+  /** True when this was submitted as Casual Leave but exceeded the 1-day/month allowance, so it was recorded as Loss of Pay instead. */
+  autoConvertedToLossOfPay: boolean;
+}
+
+export function applyLeave(payload: ApplyLeavePayload): Promise<ApplyLeaveResult> {
+  return apiFetch<ApplyLeaveResult>("/leave/requests", { method: "POST", body: payload });
 }
 
 export function cancelLeaveRequest(id: string): Promise<LeaveRequest> {

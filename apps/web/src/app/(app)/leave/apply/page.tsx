@@ -79,9 +79,16 @@ export default function ApplyLeavePage() {
         halfDayPeriod: dayType === "HALF_DAY" ? halfDayPeriod : undefined,
         reason: reason.trim(),
       });
-      toast.success(`Leave request ${request.code} submitted`, {
-        description: "Your manager will review it shortly.",
-      });
+      if (request.autoConvertedToLossOfPay) {
+        toast.success(`Leave request ${request.code} submitted as Loss of Pay`, {
+          description:
+            "This exceeds your 1 Casual Leave/month allowance, so it was recorded as Loss of Pay (salary deduction) instead.",
+        });
+      } else {
+        toast.success(`Leave request ${request.code} submitted`, {
+          description: "Your manager will review it shortly.",
+        });
+      }
       router.push("/leave");
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : "Couldn't submit your request. Please try again.");

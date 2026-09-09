@@ -17,6 +17,16 @@ import type { DecideLeaveRequestDto } from './dto/decide-leave-request.dto.js';
 
 const ACTIVE_REQUEST_STATUSES = ['PENDING', 'APPROVED'] as const;
 
+// Company policy (verbal, 2026-09-09 — not yet its own schema field): only
+// 1 Casual Leave day is drawn from balance per calendar month, and it does
+// not carry forward. A request that would exceed that in a given month is
+// recorded as Loss of Pay instead, not rejected — see applyLeave's handling
+// below. Scoped to this one leave type; every other type keeps the existing
+// annual-balance check untouched.
+const CASUAL_LEAVE_KEY = 'casual-leave-1-day';
+const CASUAL_LEAVE_MONTHLY_CAP_DAYS = 1;
+const LOSS_OF_PAY_KEY = 'loss-of-pay';
+
 function daysBetweenInclusive(start: Date, end: Date): number {
   return (
     Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
@@ -269,9 +279,27 @@ export class LeaveService {
         : daysBetweenInclusive(startDate, endDate);
 
     await this.assertNoOverlap(employeeId, startDate, endDate);
+
+    let effectiveLeaveType = leaveType;
+    let autoConvertedToLossOfPay = false;
+    if (leaveType.key === CASUAL_LEAVE_KEY) {
+      const monthCommittedDays = await this.getCommittedCasualLeaveDaysInMonth(
+        employeeId,
+        leaveType.id,
+        startDate.getFullYear(),
+        startDate.getMonth(),
+      );
+      if (monthCommittedDays + totalDays > CASUAL_LEAVE_MONTHLY_CAP_DAYS) {
+        effectiveLeaveType = await this.prisma.leaveType.findUniqueOrThrow({
+          where: { key: LOSS_OF_PAY_KEY },
+        });
+        autoConvertedToLossOfPay = true;
+      }
+    }
+
     await this.assertWithinBalance(
       employeeId,
-      leaveType,
+      effectiveLeaveType,
       startDate.getFullYear(),
       totalDays,
     );
@@ -283,7 +311,7 @@ export class LeaveService {
       data: {
         code,
         employeeId,
-        leaveTypeId: dto.leaveTypeId,
+        leaveTypeId: effectiveLeaveType.id,
         startDate,
         endDate,
         dayType,
@@ -299,10 +327,33 @@ export class LeaveService {
       actorEmail: actor.email,
       targetType: 'LeaveRequest',
       targetId: request.id,
-      description: `Applied for ${leaveType.name}: ${dto.startDate} to ${dto.endDate} (${totalDays} day(s))`,
+      description: autoConvertedToLossOfPay
+        ? `Applied for ${leaveType.name}: ${dto.startDate} to ${dto.endDate} (${totalDays} day(s)) — recorded as ${effectiveLeaveType.name} instead, exceeds the 1-day/month Casual Leave allowance`
+        : `Applied for ${leaveType.name}: ${dto.startDate} to ${dto.endDate} (${totalDays} day(s))`,
     });
 
-    return this.serializeRequest(request);
+    return { ...this.serializeRequest(request), autoConvertedToLossOfPay };
+  }
+
+  /** Sums PENDING/APPROVED Casual Leave days for this employee within one calendar month — the monthly-cap check's input. */
+  private async getCommittedCasualLeaveDaysInMonth(
+    employeeId: string,
+    leaveTypeId: string,
+    year: number,
+    monthIndex: number,
+  ): Promise<number> {
+    const monthStart = new Date(Date.UTC(year, monthIndex, 1));
+    const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 0));
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        employeeId,
+        leaveTypeId,
+        status: { in: [...ACTIVE_REQUEST_STATUSES] },
+        startDate: { lte: monthEnd },
+        endDate: { gte: monthStart },
+      },
+    });
+    return requests.reduce((sum, r) => sum + r.totalDays.toNumber(), 0);
   }
 
   async cancelMyRequest(userId: string, requestId: string, actor: AuthContext) {
@@ -520,13 +571,21 @@ export class LeaveService {
    * deliberate: it prevents double-booking across multiple pending
    * requests without needing to reserve/release a counter at submission
    * time.
+   *
+   * Unpaid leave types (isPaid: false, e.g. Loss of Pay) are exempt — an
+   * unpaid day has no balance to exhaust by definition. Without this,
+   * Loss of Pay's own defaultAnnualDays: 0 made every LOP request
+   * unconditionally fail this check (0 remaining before the first day) -
+   * a pre-existing bug, fixed here since applyLeave's Casual Leave
+   * monthly-cap handling now routes real requests through this type.
    */
   private async assertWithinBalance(
     employeeId: string,
-    leaveType: { id: string; defaultAnnualDays: { toNumber(): number } },
+    leaveType: { id: string; defaultAnnualDays: { toNumber(): number }; isPaid: boolean },
     year: number,
     requestedDays: number,
   ): Promise<void> {
+    if (!leaveType.isPaid) return;
     const [balance, activeRequests] = await Promise.all([
       this.prisma.leaveBalance.findUnique({
         where: {
