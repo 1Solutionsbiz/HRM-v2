@@ -26,7 +26,9 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function monthGrid(year: number, month: number) {
   const firstOfMonth = new Date(year, month, 1);
   const gridStart = new Date(year, month, 1 - firstOfMonth.getDay());
-  return Array.from({ length: 42 }, (_, i) => {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const weeksNeeded = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7);
+  return Array.from({ length: weeksNeeded * 7 }, (_, i) => {
     const d = new Date(gridStart);
     d.setDate(gridStart.getDate() + i);
     return d;
@@ -118,7 +120,49 @@ export function AttendanceMonthGrid() {
           }}
           loadingFallback={<CardSkeleton lines={6} />}
         >
-          <div className="overflow-x-auto">
+          {/* Below sm, the 7-wide grid can't fit a per-day card (weekday
+              header + date + hours + status) without horizontal scrolling,
+              which read as broken rather than an intentional swipe - a
+              vertical day list fits the same information without it. */}
+          <div className="divide-y rounded-md border sm:hidden">
+            {days
+              .filter((d) => d.getMonth() === month)
+              .map((d) => {
+                const dateStr = toDateOnlyString(d);
+                const record: AttendanceHistoryDay | undefined = byDate.get(dateStr);
+                const isoWeekday = d.getDay() === 0 ? 7 : d.getDay();
+                const bucket = record
+                  ? toAttendanceBucket(record.status)
+                  : !workingWeekdays.has(isoWeekday)
+                    ? "WEEKEND"
+                    : null;
+
+                return (
+                  <button
+                    key={dateStr}
+                    type="button"
+                    onClick={() => setSelectedDate(dateStr)}
+                    className="hover:bg-accent flex w-full items-center justify-between gap-3 p-3 text-left transition-colors"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">
+                        {d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                      </p>
+                      {record?.workedMinutes != null && (
+                        <p className="text-muted-foreground text-xs tabular-nums">
+                          {hoursLabel(record.workedMinutes)}
+                        </p>
+                      )}
+                    </div>
+                    {bucket && (
+                      <StatusBadge status={ATTENDANCE_BUCKET_LABEL[bucket]} tone={ATTENDANCE_BUCKET_TONE[bucket]} />
+                    )}
+                  </button>
+                );
+              })}
+          </div>
+
+          <div className="hidden overflow-x-auto sm:block">
             <div className="min-w-[640px]">
               <div className="bg-muted grid grid-cols-7 rounded-t-md">
                 {WEEKDAY_LABELS.map((w) => (
