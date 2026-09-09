@@ -50,7 +50,7 @@ export function ThoughtOfTheDayCard({ className }: { className?: string } = {}) 
 
   return (
     <Card className={className}>
-      <CardContent className="flex items-start gap-3 pt-6">
+      <CardContent className="flex items-start gap-3">
         <Sparkles className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         <div>
           <p className="text-muted-foreground text-xs font-medium">Thought of the day</p>

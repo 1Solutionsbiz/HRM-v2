@@ -31,7 +31,7 @@ export function EmployeeOfTheMonthDisplay({
 
   return (
     <Card className={className}>
-      <CardContent className="flex items-center gap-4 pt-6">
+      <CardContent className="flex items-center gap-4">
         <div className="relative shrink-0">
           <Sparkles className="text-primary absolute -top-2 -left-2 size-4 animate-pulse" />
           <Sparkles className="text-primary absolute -right-2 -bottom-1 size-3 animate-pulse [animation-delay:300ms]" />
