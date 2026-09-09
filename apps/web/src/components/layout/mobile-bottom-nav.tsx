@@ -6,11 +6,8 @@ import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { getMobilePrimaryNav, navGroups } from "@/config/nav-config";
 import { useAuthenticatedUser } from "@/lib/auth-context";
-import { toneClasses, type Tone } from "@/lib/tone";
+import { toneClasses, cardToneClasses, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
-
-/** Cycled by position so items within a group read as visually distinct, not tied to any per-item meaning. */
-const TONE_CYCLE: Tone[] = ["primary", "success", "warning", "violet", "orange", "teal", "destructive"];
 import {
   Sheet,
   SheetClose,
@@ -18,6 +15,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+
+/** Cycled by position so items within a group read as visually distinct, not tied to any per-item meaning. */
+const TONE_CYCLE: Tone[] = ["primary", "success", "warning", "violet", "orange", "teal", "destructive"];
 
 /**
  * Bottom tab bar for mobile - the four highest-frequency employee actions
@@ -76,24 +76,30 @@ export function MobileBottomNav() {
                     {group.label}
                   </p>
                   <div className="grid grid-cols-3 gap-2">
-                    {items.map((item, i) => (
-                      <SheetClose asChild key={item.url}>
-                        <Link
-                          href={item.url}
-                          className="hover:bg-accent flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center text-xs font-medium"
-                        >
-                          <div
+                    {items.map((item, i) => {
+                      const tone = TONE_CYCLE[i % TONE_CYCLE.length]!;
+                      return (
+                        <SheetClose asChild key={item.url}>
+                          <Link
+                            href={item.url}
                             className={cn(
-                              "flex size-9 items-center justify-center rounded-full",
-                              toneClasses[TONE_CYCLE[i % TONE_CYCLE.length]!],
+                              "flex flex-col items-center gap-1.5 rounded-lg p-3 text-center text-xs font-medium",
+                              cardToneClasses[tone],
                             )}
                           >
-                            <item.icon className="size-4.5" />
-                          </div>
-                          {item.title}
-                        </Link>
-                      </SheetClose>
-                    ))}
+                            <div
+                              className={cn(
+                                "flex size-9 items-center justify-center rounded-full",
+                                toneClasses[tone],
+                              )}
+                            >
+                              <item.icon className="size-4.5" />
+                            </div>
+                            {item.title}
+                          </Link>
+                        </SheetClose>
+                      );
+                    })}
                   </div>
                 </div>
               );
