@@ -8,6 +8,7 @@ import { useAsync } from "@/lib/use-async";
 import { getMyExpenseClaims, cancelExpenseClaim } from "@/lib/api/expenses";
 import { titleCase } from "@/lib/api/employees";
 import { formatDate, formatINR } from "@/lib/format";
+import { monthName } from "@/lib/api/payroll";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -16,18 +17,35 @@ import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cardToneClasses, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 
 /** Cycled by position so the summary tiles read as visually distinct, not tied to any per-metric meaning. */
 const SUMMARY_TONE_CYCLE: Tone[] = ["teal", "warning", "success"];
 
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 6 }, (_, i) => String(CURRENT_YEAR - 4 + i));
+const ALL_MONTHS_VALUE = "all";
+
 export default function ExpensesPage() {
   const { data, loading, error, refetch } = useAsync(getMyExpenseClaims);
   const [cancelId, setCancelId] = React.useState<string | null>(null);
+  const today = new Date();
+  const [month, setMonth] = React.useState<string>(String(today.getMonth() + 1));
+  const [year, setYear] = React.useState<string>(String(today.getFullYear()));
 
-  const pending = (data ?? []).filter((e) => e.status === "PENDING");
-  const approved = (data ?? []).filter((e) => e.status === "APPROVED");
+  const filtered = React.useMemo(() => {
+    if (month === ALL_MONTHS_VALUE) return data ?? [];
+    return (data ?? []).filter((e) => {
+      const d = new Date(e.expenseDate);
+      return d.getMonth() + 1 === Number(month) && d.getFullYear() === Number(year);
+    });
+  }, [data, month, year]);
+
+  const pending = filtered.filter((e) => e.status === "PENDING");
+  const approved = filtered.filter((e) => e.status === "APPROVED");
   const totalApproved = approved.reduce((sum, e) => sum + e.amount, 0);
 
   async function handleCancel() {
@@ -95,8 +113,37 @@ export default function ExpensesPage() {
       </AsyncSection>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
           <CardTitle className="text-base">Your claims</CardTitle>
+          <div className="flex shrink-0 gap-2">
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="h-8 w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_MONTHS_VALUE}>All months</SelectItem>
+                {MONTHS.map((m) => (
+                  <SelectItem key={m} value={String(m)}>
+                    {monthName(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {month !== ALL_MONTHS_VALUE && (
+              <Select value={year} onValueChange={setYear}>
+                <SelectTrigger className="h-8 w-[90px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map((y) => (
+                    <SelectItem key={y} value={y}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <AsyncSection
@@ -105,10 +152,10 @@ export default function ExpensesPage() {
             onRetry={refetch}
             loadingFallback={<TableSkeleton rows={4} columns={4} />}
           >
-            {(data ?? []).length === 0 ? (
+            {filtered.length === 0 ? (
               <EmptyState
                 icon={Receipt}
-                title="No expense claims yet"
+                title={month === ALL_MONTHS_VALUE ? "No expense claims yet" : `No expense claims for ${monthName(Number(month))} ${year}`}
                 description="Submit a claim and it will show up here."
                 action={
                   <Button size="sm" asChild>
@@ -118,7 +165,7 @@ export default function ExpensesPage() {
               />
             ) : (
               <ul className="divide-y">
-                {(data ?? []).map((e) => (
+                {filtered.map((e) => (
                   <li key={e.id} className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{e.category.name}</p>
