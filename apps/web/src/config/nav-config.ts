@@ -194,7 +194,9 @@ export const navGroups: NavGroup[] = [
  * Kept short and employee-first per the mobile design priority - the
  * remaining items are one tap away in the "More" sheet. Employees get the
  * four things they touch most often day-to-day (attendance and leave beat
- * payslips, which is a once-a-month check tucked into "More" instead).
+ * payslips, which is a once-a-month check tucked into "More" instead;
+ * tickets beat the more general leave/expense "Requests" list, per user
+ * feedback that raising a ticket is the more common action here).
  */
 export function getMobilePrimaryNav(role: Role) {
   const home =
@@ -205,6 +207,6 @@ export function getMobilePrimaryNav(role: Role) {
     home,
     { title: "Attendance", url: "/attendance", icon: Clock },
     { title: "Leave", url: "/leave", icon: CalendarDays },
-    { title: "Requests", url: "/requests", icon: ClipboardList },
+    { title: "Tickets", url: "/support", icon: Ticket },
   ];
 }
