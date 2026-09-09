@@ -24,7 +24,12 @@ const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 function monthGrid(year: number, month: number) {
   const firstOfMonth = new Date(year, month, 1);
   const gridStart = new Date(year, month, 1 - firstOfMonth.getDay());
-  return Array.from({ length: 42 }, (_, i) => {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // A fixed 6 rows leaves a trailing all-blank week for months that only
+  // need 5 (e.g. one starting on a Tuesday) - size the grid to what this
+  // month actually needs instead.
+  const weeksNeeded = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7);
+  return Array.from({ length: weeksNeeded * 7 }, (_, i) => {
     const d = new Date(gridStart);
     d.setDate(gridStart.getDate() + i);
     return d;
