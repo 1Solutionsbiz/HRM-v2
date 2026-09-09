@@ -29,6 +29,7 @@ import { OperatingExpensesModule } from './operating-expenses/operating-expenses
 import { MoodCheckInsModule } from './mood-checkins/mood-checkins.module.js';
 import { PollsModule } from './polls/polls.module.js';
 import { EmployeeOfTheMonthModule } from './employee-of-the-month/employee-of-the-month.module.js';
+import { HandbookModule } from './handbook/handbook.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -61,6 +62,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     MoodCheckInsModule,
     PollsModule,
     EmployeeOfTheMonthModule,
+    HandbookModule,
   ],
   controllers: [AppController],
   providers: [

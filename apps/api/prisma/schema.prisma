@@ -59,6 +59,7 @@ model User {
   revisedSalaries              SalaryRevision[]     @relation("SalaryReviser")
   conductedReviews             PerformanceReview[]  @relation("ReviewConductor")
   publishedAnnouncements       Announcement[]       @relation("AnnouncementPublisher")
+  editedHandbookSections       HandbookSection[]    @relation("HandbookSectionEditor")
   generatedPayslips            Payslip[]            @relation("PayslipGenerator")
   recordedAttendanceEvents     AttendanceEvent[]    @relation("AttendanceRecorder")
   assignedUserRoles            UserRole[]           @relation("UserRoleAssignedBy")
@@ -1178,6 +1179,24 @@ model Announcement {
   reads           AnnouncementRead[]
 
   @@map("announcements")
+}
+
+/// A single named section of the company HR handbook (Working Hours, Leave
+/// Policy, Code of Conduct, ...), shown in a fixed order to every employee.
+/// Plain text body (no markdown/rich-text rendering exists in this app yet -
+/// matches Announcement.body) - rendered with `whitespace-pre-wrap` on the
+/// frontend, editable in place by hr/admin.
+model HandbookSection {
+  id              String   @id @default(cuid())
+  title           String
+  body            String   @db.Text
+  order           Int
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+
+  updatedByUser User? @relation("HandbookSectionEditor", fields: [updatedByUserId], references: [id])
+
+  @@map("handbook_sections")
 }
 
 /// Per-viewer read state — the legacy `announcement.status`-style single

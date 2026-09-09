@@ -20,6 +20,7 @@ import {
   ScrollText,
   Palette,
   PartyPopper,
+  BookOpen,
 } from "lucide-react";
 import type { NavGroup } from "@/types/nav";
 import type { Role } from "@/types/role";
@@ -35,11 +36,18 @@ export const navGroups: NavGroup[] = [
   {
     label: "Overview",
     items: [
-      { title: "My Day", url: "/my-day", icon: LayoutDashboard, roles: ["employee"] },
+      {
+        title: "My Day",
+        url: "/my-day",
+        icon: LayoutDashboard,
+        color: "text-sky-500",
+        roles: ["employee"],
+      },
       {
         title: "Dashboard",
         url: "/dashboard",
         icon: LayoutDashboard,
+        color: "text-blue-500",
         roles: ["manager", "hr", "admin"],
       },
     ],
@@ -47,13 +55,13 @@ export const navGroups: NavGroup[] = [
   {
     label: "My work",
     items: [
-      { title: "Attendance", url: "/attendance", icon: Clock },
-      { title: "Leave", url: "/leave", icon: CalendarDays },
-      { title: "Holidays", url: "/holidays", icon: PartyPopper },
-      { title: "Requests", url: "/requests", icon: ClipboardList },
-      { title: "Expenses", url: "/expenses", icon: BadgeIndianRupee },
-      { title: "Payslips", url: "/payslips", icon: Wallet },
-      { title: "Documents", url: "/documents", icon: FolderOpen },
+      { title: "Attendance", url: "/attendance", icon: Clock, color: "text-amber-500" },
+      { title: "Leave", url: "/leave", icon: CalendarDays, color: "text-emerald-500" },
+      { title: "Holidays", url: "/holidays", icon: PartyPopper, color: "text-rose-500" },
+      { title: "Requests", url: "/requests", icon: ClipboardList, color: "text-violet-500" },
+      { title: "Expenses", url: "/expenses", icon: BadgeIndianRupee, color: "text-orange-500" },
+      { title: "Payslips", url: "/payslips", icon: Wallet, color: "text-teal-500" },
+      { title: "Documents", url: "/documents", icon: FolderOpen, color: "text-indigo-500" },
     ],
   },
   {
@@ -63,6 +71,7 @@ export const navGroups: NavGroup[] = [
         title: "Team attendance",
         url: "/team/attendance",
         icon: Clock,
+        color: "text-cyan-500",
         // Not "manager" - attendance:manage (this page's permission) is
         // only granted to hr/admin in seed.ts's ROLE_PERMISSIONS, unlike
         // leave:approve/expense:approve just below, which manager does
@@ -73,30 +82,28 @@ export const navGroups: NavGroup[] = [
         title: "Leave approvals",
         url: "/team/leave-approvals",
         icon: ClipboardList,
+        color: "text-lime-500",
         roles: ["manager", "hr", "admin"],
       },
       {
         title: "Leave balances",
         url: "/team/leave-balances",
         icon: CalendarDays,
+        color: "text-fuchsia-500",
         roles: ["manager", "hr", "admin"],
       },
       {
         title: "Expense approvals",
         url: "/team/expense-approvals",
         icon: BadgeIndianRupee,
-        roles: ["manager", "hr", "admin"],
-      },
-      {
-        title: "Team directory",
-        url: "/team/directory",
-        icon: Users,
+        color: "text-red-500",
         roles: ["manager", "hr", "admin"],
       },
       {
         title: "Ticket management",
         url: "/team/tickets",
         icon: Ticket,
+        color: "text-purple-500",
         // ticket:manage is only granted to hr/admin in seed.ts, same
         // reasoning as "Team attendance" above.
         roles: ["hr", "admin"],
@@ -110,18 +117,21 @@ export const navGroups: NavGroup[] = [
         title: "Employees",
         url: "/people/employees",
         icon: Users,
+        color: "text-pink-500",
         roles: ["hr", "admin"],
       },
       {
         title: "Onboarding",
         url: "/people/onboarding",
         icon: UserPlus,
+        color: "text-green-500",
         roles: ["hr", "admin"],
       },
       {
         title: "Resignations",
         url: "/people/resignations",
         icon: UserMinus,
+        color: "text-stone-500",
         roles: ["hr", "admin"],
       },
     ],
@@ -133,18 +143,21 @@ export const navGroups: NavGroup[] = [
         title: "Salary management",
         url: "/payroll/salary",
         icon: BadgeIndianRupee,
+        color: "text-yellow-500",
         roles: ["hr", "admin"],
       },
       {
         title: "Payslips",
         url: "/payroll/payslips",
         icon: Wallet,
+        color: "text-blue-600",
         roles: ["hr", "admin"],
       },
       {
         title: "Payroll reports",
         url: "/payroll/reports",
         icon: BarChart3,
+        color: "text-orange-600",
         roles: ["hr", "admin"],
       },
     ],
@@ -152,10 +165,16 @@ export const navGroups: NavGroup[] = [
   {
     label: "Engagement",
     items: [
-      { title: "Announcements", url: "/announcements", icon: Megaphone },
-      { title: "Polls", url: "/polls", icon: Vote },
-      { title: "Employee of the month", url: "/recognition", icon: Trophy },
-      { title: "Help & support", url: "/support", icon: LifeBuoy },
+      { title: "Announcements", url: "/announcements", icon: Megaphone, color: "text-red-600" },
+      { title: "Polls", url: "/polls", icon: Vote, color: "text-violet-600" },
+      {
+        title: "Employee of the month",
+        url: "/recognition",
+        icon: Trophy,
+        color: "text-yellow-600",
+      },
+      { title: "HR Handbook", url: "/handbook", icon: BookOpen, color: "text-teal-600" },
+      { title: "Help & support", url: "/support", icon: LifeBuoy, color: "text-lime-600" },
     ],
   },
   {
@@ -165,24 +184,28 @@ export const navGroups: NavGroup[] = [
         title: "Company settings",
         url: "/admin/company",
         icon: Building2,
+        color: "text-cyan-600",
         roles: ["admin"],
       },
       {
         title: "Roles & permissions",
         url: "/admin/roles",
         icon: ShieldCheck,
+        color: "text-fuchsia-600",
         roles: ["admin"],
       },
       {
         title: "System logs",
         url: "/admin/logs",
         icon: ScrollText,
+        color: "text-purple-600",
         roles: ["admin"],
       },
       {
         title: "Design system",
         url: "/style-guide",
         icon: Palette,
+        color: "text-pink-600",
         roles: ["admin"],
       },
     ],

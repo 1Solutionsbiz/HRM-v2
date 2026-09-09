@@ -5,6 +5,8 @@ export interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
+  /** Tailwind text-color class applied to the icon (e.g. "text-amber-500"). */
+  color?: string;
   /** Roles that can see this item. Omit to show to every role. */
   roles?: Role[];
   badge?: string;

@@ -86,7 +86,7 @@ export function AppSidebar() {
                           tooltip={item.title}
                         >
                           <Link href={item.url} onClick={closeOnMobile}>
-                            <item.icon />
+                            <item.icon className={item.color} />
                             <span>{item.title}</span>
                           </Link>
                         </SidebarMenuButton>
