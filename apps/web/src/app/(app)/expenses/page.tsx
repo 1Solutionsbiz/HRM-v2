@@ -10,13 +10,17 @@ import { titleCase } from "@/lib/api/employees";
 import { formatDate, formatINR } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
-import { StatCard } from "@/components/hrm/stat-card";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cardToneClasses, type Tone } from "@/lib/tone";
+import { cn } from "@/lib/utils";
+
+/** Cycled by position so the summary tiles read as visually distinct, not tied to any per-metric meaning. */
+const SUMMARY_TONE_CYCLE: Tone[] = ["teal", "warning", "success"];
 
 export default function ExpensesPage() {
   const { data, loading, error, refetch } = useAsync(getMyExpenseClaims);
@@ -58,16 +62,36 @@ export default function ExpensesPage() {
         onRetry={refetch}
         loadingFallback={<StatGridSkeleton count={3} />}
       >
-        {data && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard label="Pending claims" value={String(pending.length)} icon={Receipt} />
-            <StatCard
-              label="Pending amount"
-              value={formatINR(pending.reduce((s, e) => s + e.amount, 0))}
-            />
-            <StatCard label="Approved (reimbursed)" value={formatINR(totalApproved)} />
-          </div>
-        )}
+        {data &&
+          (() => {
+            const summary = [
+              { label: "Pending claims", value: String(pending.length) },
+              { label: "Pending amount", value: formatINR(pending.reduce((s, e) => s + e.amount, 0)) },
+              { label: "Approved (reimbursed)", value: formatINR(totalApproved) },
+            ];
+            return (
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                {summary.map((s, i) => (
+                  <Card
+                    key={s.label}
+                    className={cn(
+                      "[--card-spacing:--spacing(3)] sm:[--card-spacing:--spacing(4)]",
+                      cardToneClasses[SUMMARY_TONE_CYCLE[i % SUMMARY_TONE_CYCLE.length]!],
+                    )}
+                  >
+                    <CardHeader className="pb-1 sm:pb-2">
+                      <CardTitle className="text-muted-foreground text-xs font-medium sm:text-sm">
+                        {s.label}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-lg font-semibold tabular-nums sm:text-2xl">{s.value}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            );
+          })()}
       </AsyncSection>
 
       <Card>
