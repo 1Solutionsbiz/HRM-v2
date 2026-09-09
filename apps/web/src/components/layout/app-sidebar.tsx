@@ -33,11 +33,13 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" className="h-20" asChild>
               {/* Collapsed-to-icon desktop state clips this button to a 32x32
-                  square, so the full wordmark logo below would render as an
-                  unrecognizable sliver - the square icon-only mark takes over
-                  there instead, purely via the collapsible=icon data attr. */}
+                  square (the `!`-important size-8 override on lg still wins
+                  over the h-20 above), so the full wordmark logo below would
+                  render as an unrecognizable sliver - the square icon-only
+                  mark takes over there instead, purely via the
+                  collapsible=icon data attr. */}
               <Link href="/my-day" onClick={closeOnMobile}>
                 <Image
                   src="/hrm-icon.png"
@@ -52,7 +54,7 @@ export function AppSidebar() {
                   alt="1Solutions HRM"
                   width={1600}
                   height={611}
-                  className="h-8 w-auto group-data-[collapsible=icon]:hidden"
+                  className="h-16 w-auto group-data-[collapsible=icon]:hidden"
                   priority
                 />
               </Link>
