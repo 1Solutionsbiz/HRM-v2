@@ -16,12 +16,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/layout/user-menu";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const { role } = useAuthenticatedUser();
+  // On mobile the sidebar renders as a Sheet overlay - close it after
+  // navigating, same as the bottom-nav "More" sheet does via SheetClose.
+  const { isMobile, setOpenMobile } = useSidebar();
+  const closeOnMobile = () => isMobile && setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon">
@@ -29,7 +34,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
+              <Link href="/dashboard" onClick={closeOnMobile}>
                 <div className="flex aspect-square size-8 shrink-0 items-center justify-center">
                   <Image
                     src="/hrm-icon.png"
@@ -74,7 +79,7 @@ export function AppSidebar() {
                           isActive={isActive}
                           tooltip={item.title}
                         >
-                          <Link href={item.url}>
+                          <Link href={item.url} onClick={closeOnMobile}>
                             <item.icon />
                             <span>{item.title}</span>
                           </Link>
