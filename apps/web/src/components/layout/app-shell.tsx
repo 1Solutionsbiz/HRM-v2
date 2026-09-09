@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { MoodCheckInGate } from "@/components/hrm/mood-checkin-gate";
+import { InstallPromptBanner } from "@/components/layout/install-prompt-banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarInset>
         <Topbar pathname={pathname} />
         <div className="flex-1 space-y-4 p-4 pb-20 sm:p-6 sm:pb-6 md:pb-6">
+          <InstallPromptBanner />
           {children}
         </div>
       </SidebarInset>

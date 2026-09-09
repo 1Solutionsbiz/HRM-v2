@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   title: "HRM V2 | 1Solutions",
   description: "1Solutions HR Management System",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "HRM V2",
+  },
 };
 
 export const viewport: Viewport = {
