@@ -62,7 +62,7 @@ function rangeForPeriod(period: Period, ref: Date): { from: string; to: string }
 }
 
 function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem; onClear: () => void }) {
-  const [period, setPeriod] = React.useState<Period>("week");
+  const [period, setPeriod] = React.useState<Period>("month");
   const [refDate, setRefDate] = React.useState<Date>(new Date());
   const { from, to } = React.useMemo(() => rangeForPeriod(period, refDate), [period, refDate]);
 
@@ -101,8 +101,9 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
   ];
 
   const rows = data ?? [];
-  const present = rows.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+  const present = rows.filter((r) => r.status === "PRESENT").length;
   const absent = rows.filter((r) => r.status === "ABSENT").length;
+  const late = rows.filter((r) => r.status === "LATE").length;
   const totalHours = rows.reduce((sum, r) => sum + (r.workedMinutes ?? 0), 0) / 60;
 
   return (
@@ -156,9 +157,10 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
         loadingFallback={<StatGridSkeleton count={3} />}
       >
         {data && (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Present" value={String(present)} icon={CheckCircle2} tone="success" />
             <StatCard label="Absent" value={String(absent)} icon={UserX} />
+            <StatCard label="Late" value={String(late)} icon={Clock} tone="warning" />
             <StatCard label="Total hours" value={totalHours.toFixed(1)} icon={Clock} />
           </div>
         )}
