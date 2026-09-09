@@ -2,77 +2,30 @@
 
 import * as React from "react";
 import { Download, Share, X } from "lucide-react";
+import { useInstallPrompt } from "@/lib/use-install-prompt";
 import { Button } from "@/components/ui/button";
 
 const DISMISSED_KEY = "hrm-install-prompt-dismissed";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
-function isStandalone(): boolean {
-  if (typeof window === "undefined") return true;
-  return (
-    window.matchMedia?.("(display-mode: standalone)").matches ||
-    // iOS Safari's own non-standard flag - no matchMedia equivalent there.
-    (navigator as { standalone?: boolean }).standalone === true
-  );
-}
-
-function isIos(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /iPad|iPhone|iPod/.test(navigator.userAgent);
-}
-
 /**
  * Surfaces the app's installability, which otherwise depends entirely on a
- * user noticing the browser's own (easy to miss) install affordance.
- * Android/Chrome/Edge get a real one-tap install via `beforeinstallprompt`;
- * iOS Safari has no such API, so it gets static "Share -> Add to Home
- * Screen" instructions instead. Dismissal is remembered per-device in
- * localStorage - this is a lightweight per-viewer convenience, not data
- * that needs to sync anywhere.
+ * user noticing the browser's own (easy to miss) install affordance. A
+ * permanent backup entry point also lives in Settings for anyone who
+ * dismisses this. Dismissal here is remembered per-device in localStorage -
+ * a lightweight per-viewer convenience, not data that needs to sync
+ * anywhere.
  */
 export function InstallPromptBanner() {
-  const [installEvent, setInstallEvent] = React.useState<BeforeInstallPromptEvent | null>(null);
-  const [showIosInstructions, setShowIosInstructions] = React.useState(false);
-  const [dismissed, setDismissed] = React.useState(true); // default hidden until effects decide otherwise
+  const { canInstall, isIos, isInstalled, promptInstall } = useInstallPrompt();
+  const [dismissed, setDismissed] = React.useState(true); // default hidden until the effect below decides otherwise
 
   React.useEffect(() => {
-    if (isStandalone()) return;
     try {
-      if (localStorage.getItem(DISMISSED_KEY) === "1") return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage, unknowable during SSR (see useInstallPrompt for the same pattern)
+      setDismissed(localStorage.getItem(DISMISSED_KEY) === "1");
     } catch {
-      // Private browsing / storage blocked - fall through and just show it.
+      setDismissed(false);
     }
-    // Reading browser-only state (localStorage/matchMedia/UA) that isn't
-    // known during SSR - `dismissed` must default true on the server and
-    // first client render alike to avoid a hydration mismatch, then flip
-    // here once mounted. Same sanctioned pattern as the effects in
-    // lib/use-async.ts and operating-expenses-card.tsx.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDismissed(false);
-
-    if (isIos()) {
-      setShowIosInstructions(true);
-      return;
-    }
-
-    function onBeforeInstallPrompt(e: Event) {
-      e.preventDefault();
-      setInstallEvent(e as BeforeInstallPromptEvent);
-    }
-    function onAppInstalled() {
-      setInstallEvent(null);
-      setDismissed(true);
-    }
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onAppInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onAppInstalled);
-    };
   }, []);
 
   function dismiss() {
@@ -85,19 +38,16 @@ export function InstallPromptBanner() {
   }
 
   async function handleInstall() {
-    if (!installEvent) return;
-    await installEvent.prompt();
-    const { outcome } = await installEvent.userChoice;
-    setInstallEvent(null);
-    if (outcome === "accepted") setDismissed(true);
+    await promptInstall();
+    setDismissed(true);
   }
 
-  if (dismissed) return null;
-  if (!showIosInstructions && !installEvent) return null;
+  if (isInstalled || dismissed) return null;
+  if (!isIos && !canInstall) return null;
 
   return (
     <div className="bg-primary text-primary-foreground flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm">
-      {showIosInstructions ? (
+      {isIos ? (
         <>
           <Share className="size-4 shrink-0" />
           <span className="min-w-0 flex-1">

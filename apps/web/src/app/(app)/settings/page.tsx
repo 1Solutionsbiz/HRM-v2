@@ -3,9 +3,10 @@
 import * as React from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { KeyRound, Monitor, Moon, Sun } from "lucide-react";
+import { CheckCircle2, Download, KeyRound, Monitor, Moon, Share, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { changePassword } from "@/lib/api/auth";
+import { useInstallPrompt } from "@/lib/use-install-prompt";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { canInstall, isIos, isInstalled, promptInstall } = useInstallPrompt();
 
   const [passwordDialogOpen, setPasswordDialogOpen] = React.useState(false);
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -110,6 +112,35 @@ export default function SettingsPage() {
             <KeyRound />
             Change password
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">App</CardTitle>
+          <CardDescription>Install HRM V2 on this device for quicker access.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isInstalled ? (
+            <p className="text-muted-foreground flex items-center gap-2 text-sm">
+              <CheckCircle2 className="size-4" />
+              Already installed on this device.
+            </p>
+          ) : isIos ? (
+            <p className="flex items-start gap-2 text-sm">
+              <Share className="mt-0.5 size-4 shrink-0" />
+              Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.
+            </p>
+          ) : canInstall ? (
+            <Button variant="outline" onClick={promptInstall}>
+              <Download />
+              Install app
+            </Button>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Not available in this browser yet — try Chrome or Edge, or open this page on your phone.
+            </p>
+          )}
         </CardContent>
       </Card>
 
