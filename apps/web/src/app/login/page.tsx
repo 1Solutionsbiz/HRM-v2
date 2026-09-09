@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -94,13 +95,12 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => toast.info("Password reset isn't wired up yet.")}
+            <Link
+              href="/forgot-password"
               className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
             >
               Forgot your password?
-            </button>
+            </Link>
           </div>
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting && <Loader2 className="size-4 animate-spin" />}

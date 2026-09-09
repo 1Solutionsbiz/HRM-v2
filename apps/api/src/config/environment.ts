@@ -1,8 +1,10 @@
-import { Type, plainToInstance } from 'class-transformer';
+import { Transform, Type, plainToInstance } from 'class-transformer';
 import {
+  IsBoolean,
   IsHexadecimal,
   IsIn,
   IsInt,
+  IsOptional,
   IsString,
   Length,
   Max,
@@ -58,6 +60,47 @@ class EnvironmentVariables {
     message: 'ENCRYPTION_KEY must be exactly 64 hex characters (32 raw bytes)',
   })
   ENCRYPTION_KEY!: string;
+
+  /**
+   * SMTP config for outbound mail (forgot-password today, more later).
+   * Deliberately @IsOptional — unlike the secrets above, a missing value
+   * here must not fail startup: MailService falls back to a logged no-op,
+   * so the API (including login) stays up while mail is unconfigured.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  SMTP_HOST?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  SMTP_PORT: number = 587;
+
+  // Not @Type(() => Boolean): class-transformer's Boolean(...) coercion
+  // maps the string "false" to `true` (any non-empty string is truthy) —
+  // an explicit string comparison instead.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @IsBoolean()
+  SMTP_SECURE: boolean = false;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  SMTP_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  SMTP_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  MAIL_FROM: string = '1Solutions HRM <hr@1solutions.biz>';
 }
 
 export function validateEnv(

@@ -6,3 +6,19 @@ export function changePassword(currentPassword: string, newPassword: string): Pr
     body: { currentPassword, newPassword },
   });
 }
+
+export function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+    skipAuth: true,
+  });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<void> {
+  return apiFetch<void>("/auth/reset-password", {
+    method: "POST",
+    body: { token, newPassword },
+    skipAuth: true,
+  });
+}

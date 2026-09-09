@@ -5,16 +5,25 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service.js';
 import { PasswordService } from '../security/password.service.js';
+import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { ChangePasswordDto } from './dto/change-password.dto.js';
+import type { RequestPasswordResetDto } from './dto/request-password-reset.dto.js';
+import type { ResetPasswordDto } from './dto/reset-password.dto.js';
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+// A second reset request within this window silently reuses the pending
+// token's cooldown instead of minting (and emailing) another one — cheap
+// abuse resistance on an unauthenticated, mail-triggering endpoint.
+const RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
 
 /**
  * New requirements — legacy had no lockout or rate limiting at all (rule 13
@@ -44,6 +53,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordService,
     private readonly auditService: AuditService,
+    private readonly mailService: MailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async login(dto: LoginDto, meta: RequestMeta): Promise<TokenPair> {
@@ -283,6 +294,120 @@ export class AuthService {
       actorUserId: user.id,
       actorEmail: user.email,
       description: 'Password changed by user',
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+  }
+
+  /**
+   * Always resolves with the same generic outcome regardless of whether the
+   * email matches an account — response content must not reveal account
+   * existence, the same stance `login`'s GENERIC_LOGIN_ERROR takes.
+   */
+  async requestPasswordReset(
+    dto: RequestPasswordResetDto,
+    meta: RequestMeta,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user || !user.isActive) {
+      await this.auditService.log({
+        eventType: 'PASSWORD_RESET_REQUESTED',
+        actorEmail: dto.email,
+        description: user
+          ? 'Password reset requested for an inactive account'
+          : 'Password reset requested for an email with no account',
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      return;
+    }
+
+    const recentToken = await this.prisma.passwordResetToken.findFirst({
+      where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (
+      recentToken &&
+      recentToken.createdAt.getTime() > Date.now() - RESET_REQUEST_COOLDOWN_MS
+    ) {
+      return;
+    }
+
+    const token = randomBytes(32).toString('base64url');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashToken(token),
+        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+        ipAddress: meta.ipAddress,
+      },
+    });
+
+    const webOrigin = this.configService.getOrThrow<string>('WEB_ORIGIN');
+    const resetUrl = `${webOrigin}/reset-password?token=${token}`;
+    await this.mailService.sendPasswordResetEmail(user.email, resetUrl);
+
+    await this.auditService.log({
+      eventType: 'PASSWORD_RESET_REQUESTED',
+      actorUserId: user.id,
+      actorEmail: user.email,
+      description: 'Password reset link emailed',
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+  }
+
+  async resetPassword(dto: ResetPasswordDto, meta: RequestMeta): Promise<void> {
+    const tokenHash = this.hashToken(dto.token);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt < new Date() ||
+      !resetToken.user.isActive
+    ) {
+      throw new UnauthorizedException(
+        'This reset link is invalid or has expired.',
+      );
+    }
+
+    const newHash = await this.passwordService.hash(dto.newPassword);
+    await this.prisma.user.update({
+      where: { id: resetToken.userId },
+      data: {
+        passwordHash: newHash,
+        passwordUpdatedAt: new Date(),
+        failedLoginCount: 0,
+        lockedUntil: null,
+      },
+    });
+
+    // Single-use, and any other outstanding link for this user dies with
+    // it — the same defense-in-depth as refresh-token rotation.
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: resetToken.userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    // No "current session to spare" here, unlike changePassword — the
+    // caller isn't authenticated, so every session is suspect.
+    await this.prisma.session.updateMany({
+      where: { userId: resetToken.userId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: 'PASSWORD_RESET' },
+    });
+
+    await this.auditService.log({
+      eventType: 'PASSWORD_RESET_COMPLETED',
+      actorUserId: resetToken.userId,
+      actorEmail: resetToken.user.email,
+      description: 'Password reset via emailed link',
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });

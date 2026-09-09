@@ -15,6 +15,8 @@ import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 
 function requestMeta(request: Request): {
   ipAddress?: string;
@@ -39,6 +41,28 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshTokenDto, @Req() request: Request) {
     return this.authService.refresh(dto, requestMeta(request));
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(
+    @Body() dto: RequestPasswordResetDto,
+    @Req() request: Request,
+  ) {
+    await this.authService.requestPasswordReset(dto, requestMeta(request));
+    // Same message whether or not the email matched an account.
+    return {
+      message:
+        "If an account exists for that email, we've sent a password reset link.",
+    };
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  resetPassword(@Body() dto: ResetPasswordDto, @Req() request: Request) {
+    return this.authService.resetPassword(dto, requestMeta(request));
   }
 
   @Post('logout')
