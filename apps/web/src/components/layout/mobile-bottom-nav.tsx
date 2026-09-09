@@ -31,7 +31,7 @@ export function MobileBottomNav() {
   const mobilePrimaryNav = getMobilePrimaryNav(role);
 
   return (
-    <nav className="bg-background/95 supports-[backdrop-filter]:bg-background/80 fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch border-t backdrop-blur md:hidden">
+    <nav className="bg-primary border-primary-foreground/10 fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch border-t md:hidden">
       {mobilePrimaryNav.map((item) => {
         const isActive =
           pathname === item.url || pathname.startsWith(`${item.url}/`);
@@ -41,11 +41,11 @@ export function MobileBottomNav() {
             href={item.url}
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
-              isActive ? "text-primary" : "text-muted-foreground",
+              isActive ? "text-primary-foreground" : "text-primary-foreground/60",
             )}
           >
             <item.icon
-              className={cn("size-5", isActive && "fill-primary/15")}
+              className={cn("size-5", isActive && "fill-primary-foreground/15")}
             />
             {item.title}
           </Link>
@@ -55,7 +55,7 @@ export function MobileBottomNav() {
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium"
+          className="text-primary-foreground/60 flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium"
         >
           <Menu className="size-5" />
           More
