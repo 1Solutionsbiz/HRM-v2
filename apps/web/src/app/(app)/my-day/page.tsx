@@ -17,6 +17,7 @@ import { PollsDashboardWidget } from "@/components/hrm/polls-dashboard-widget";
 import { ThoughtOfTheDayCard } from "@/components/hrm/thought-of-the-day-card";
 import { QuickAction } from "@/components/hrm/quick-action";
 import { cardToneClasses } from "@/lib/tone";
+import { cn } from "@/lib/utils";
 
 export default function MyDayPage() {
   const user = useAuthenticatedUser();
@@ -44,6 +45,14 @@ export default function MyDayPage() {
         />
       </div>
 
+      {/* Mobile-only: Thought of the day ahead of Highlights, per request - the
+          lg+ grid below keeps its own copy (hidden here) in its usual column
+          position. The card is a pure day-of-year lookup with no data fetch,
+          so rendering it twice at different breakpoints is free. */}
+      <div className="lg:hidden">
+        <ThoughtOfTheDayCard className={cardToneClasses.teal} />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4">
           <HighlightsCard className={cardToneClasses.orange} />
@@ -54,7 +63,7 @@ export default function MyDayPage() {
         <AnnouncementsFeedCard className={cardToneClasses.warning} />
 
         <div className="space-y-4">
-          <ThoughtOfTheDayCard className={cardToneClasses.teal} />
+          <ThoughtOfTheDayCard className={cn(cardToneClasses.teal, "hidden lg:block")} />
           <PollsDashboardWidget className={cardToneClasses.violet} />
           <LeaveBalanceCard className={cardToneClasses.success} />
           <YesterdayAttendanceCard className={cardToneClasses.primary} />
