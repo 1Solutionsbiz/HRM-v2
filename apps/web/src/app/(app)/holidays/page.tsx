@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { CalendarCheck, CalendarClock, Pencil, PartyPopper, Plus, Trash2 } from "lucide-react";
+import { Pencil, PartyPopper, Plus, Trash2 } from "lucide-react";
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
@@ -16,11 +16,10 @@ import {
 } from "@/lib/api/holidays";
 import { formatDate, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
-import { StatCard } from "@/components/hrm/stat-card";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
-import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
+import { TableSkeleton } from "@/components/hrm/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -88,10 +87,6 @@ export default function HolidaysPage() {
   );
 
   const today = todayDateOnly();
-  const thisMonthPrefix = today.slice(0, 7);
-  const completed = forYear.filter((h) => h.date < today);
-  const upcoming = forYear.filter((h) => h.date >= today);
-  const thisMonth = forYear.filter((h) => h.date.startsWith(thisMonthPrefix));
 
   const fixedHolidays = forYear.filter((h) => h.type === "FIXED");
   const nationalHolidays = forYear.filter((h) => h.type === "NATIONAL");
@@ -232,22 +227,6 @@ export default function HolidaysPage() {
           </div>
         }
       />
-
-      <AsyncSection
-        loading={loading}
-        error={error}
-        onRetry={refetch}
-        loadingFallback={<StatGridSkeleton count={4} />}
-      >
-        {data && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label={`Completed (${year})`} value={String(completed.length)} icon={CalendarCheck} tone="success" />
-            <StatCard label="This month" value={String(thisMonth.length)} icon={CalendarClock} />
-            <StatCard label={`Upcoming (${year})`} value={String(upcoming.length)} icon={PartyPopper} tone="warning" />
-            <StatCard label={`Total (${year})`} value={String(forYear.length)} />
-          </div>
-        )}
-      </AsyncSection>
 
       <AsyncSection
         loading={loading}
