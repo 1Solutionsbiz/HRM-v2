@@ -45,11 +45,14 @@ export default function MyDayPage() {
         />
       </div>
 
-      {/* Mobile-only: Thought of the day ahead of Highlights, per request - the
-          lg+ grid below keeps its own copy (hidden here) in its usual column
-          position. The card is a pure day-of-year lookup with no data fetch,
-          so rendering it twice at different breakpoints is free. */}
-      <div className="lg:hidden">
+      {/* Mobile-only: Mood history then Thought of the day ahead of
+          Highlights, per request - the lg+ grid below keeps its own copies
+          (hidden here) in their usual column position. Thought of the day
+          is a pure day-of-year lookup with no data fetch, so rendering it
+          twice is free; Mood history does fetch, so this duplicates one
+          lightweight own-history call on mobile only. */}
+      <div className="space-y-4 lg:hidden">
+        <MoodHistoryCard className={cardToneClasses.orange} />
         <ThoughtOfTheDayCard className={cardToneClasses.teal} />
       </div>
 
@@ -63,12 +66,12 @@ export default function MyDayPage() {
         <AnnouncementsFeedCard className={cardToneClasses.warning} />
 
         <div className="space-y-4">
+          <MoodHistoryCard className={cn(cardToneClasses.orange, "hidden lg:block")} />
           <ThoughtOfTheDayCard className={cn(cardToneClasses.teal, "hidden lg:block")} />
           <PollsDashboardWidget className={cardToneClasses.violet} />
           <LeaveBalanceCard className={cardToneClasses.success} />
           <YesterdayAttendanceCard className={cardToneClasses.primary} />
           <TicketsSummaryCard className={cardToneClasses.destructive} />
-          <MoodHistoryCard className={cardToneClasses.orange} />
         </div>
       </div>
     </div>
