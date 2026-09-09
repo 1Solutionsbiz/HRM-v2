@@ -24,3 +24,27 @@ export function getPageTitle(pathname: string): string {
     .map((word) => word[0]?.toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+export interface BreadcrumbItem {
+  label: string;
+  url?: string;
+}
+
+/** Group label + page title (and, for a subpage, its parent nav item) for the topbar's breadcrumb. */
+export function getBreadcrumb(pathname: string): BreadcrumbItem[] {
+  for (const group of navGroups) {
+    for (const item of group.items) {
+      if (pathname === item.url) {
+        return [{ label: group.label }, { label: item.title }];
+      }
+      if (pathname.startsWith(`${item.url}/`)) {
+        return [
+          { label: group.label },
+          { label: item.title, url: item.url },
+          { label: getPageTitle(pathname) },
+        ];
+      }
+    }
+  }
+  return [{ label: getPageTitle(pathname) }];
+}

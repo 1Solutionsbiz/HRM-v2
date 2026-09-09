@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, ChevronRight } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -14,21 +14,20 @@ import {
 } from "@/components/ui/popover";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { useAsync } from "@/lib/use-async";
-import { useAuthenticatedUser } from "@/lib/auth-context";
 import { getNotifications, markNotificationRead, type AppNotification } from "@/lib/api/notifications";
-import { formatDate, formatRelativeTime, formatTime } from "@/lib/format";
+import { formatRelativeTime } from "@/lib/format";
+import { getBreadcrumb } from "@/lib/page-title";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { LiveClock } from "@/components/layout/live-clock";
 
 interface TopbarProps {
-  title: string;
+  pathname: string;
 }
 
-export function Topbar({ title }: TopbarProps) {
+export function Topbar({ pathname }: TopbarProps) {
   const { data, refetch } = useAsync(getNotifications);
-  const user = useAuthenticatedUser();
   const notifications = data ?? [];
   const unread = notifications.filter((n) => !n.isRead);
+  const breadcrumb = getBreadcrumb(pathname);
 
   async function handleOpenNotification(n: AppNotification) {
     if (!n.isRead) {
@@ -41,19 +40,28 @@ export function Topbar({ title }: TopbarProps) {
     <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur sm:px-4">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 h-5" />
-      <h1 className="truncate text-sm font-semibold sm:text-base">{title}</h1>
+      <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
+        <ol className="text-muted-foreground flex items-center gap-1 truncate text-sm">
+          {breadcrumb.map((crumb, i) => {
+            const isLast = i === breadcrumb.length - 1;
+            return (
+              <li key={i} className="flex min-w-0 items-center gap-1">
+                {i > 0 && <ChevronRight className="size-3.5 shrink-0" />}
+                {crumb.url ? (
+                  <Link href={crumb.url} className="hover:text-foreground truncate">
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className={isLast ? "text-foreground truncate font-medium" : "truncate"}>
+                    {crumb.label}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
       <div className="ml-auto flex items-center gap-1">
-        <div className="text-muted-foreground mr-2 hidden flex-col items-end text-xs leading-tight lg:flex">
-          <LiveClock />
-          {user.lastLoginAt && (
-            <span>
-              Last login {formatDate(user.lastLoginAt, { day: "numeric", month: "short" })},{" "}
-              {formatTime(user.lastLoginAt)}
-            </span>
-          )}
-        </div>
-        <Separator orientation="vertical" className="mr-1 hidden h-6 lg:block" />
-
         <ThemeToggle />
 
         <Popover onOpenChange={(open) => open && refetch()}>
