@@ -24,7 +24,11 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  // max-w-full + overflow-x-auto: TabsList sizes to its content (w-fit) and
+  // its triggers never wrap (whitespace-nowrap), so a row with enough tabs
+  // is wider than a narrow viewport by design - without a cap here that
+  // overflow escapes onto the whole page instead of scrolling just this row.
+  "group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {

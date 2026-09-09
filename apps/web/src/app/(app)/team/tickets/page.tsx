@@ -62,7 +62,42 @@ export default function TicketManagementPage() {
     }
     return (
       <Card>
-        <CardContent className="pt-6">
+        {/* Below sm, a 6-column table needs horizontal scrolling that reads
+            as clipped rather than intentional (same fix as /support's
+            ticket table) - a stacked list fits instead. */}
+        <CardContent className="divide-y p-0 sm:hidden">
+          {rows.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setSelected(t)}
+              className="hover:bg-accent flex w-full flex-col gap-1.5 p-4 text-left transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{t.title}</p>
+                  <p className="text-muted-foreground text-xs">{t.code}</p>
+                </div>
+                <StatusBadge
+                  status={TICKET_STATUS_LABEL[t.status]}
+                  tone={TICKET_STATUS_TONE[t.status]}
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Avatar className="size-5 shrink-0">
+                  <AvatarFallback className="text-[9px]">{employeeInitials(t.employee)}</AvatarFallback>
+                </Avatar>
+                <span className="text-muted-foreground truncate text-xs">{employeeFullName(t.employee)}</span>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {TICKET_CATEGORY_LABEL[t.category]} · {formatDate(t.createdAt)}
+              </p>
+            </button>
+          ))}
+        </CardContent>
+
+        <CardContent className="hidden pt-6 sm:block">
           <Table>
             <TableHeader>
               <TableRow>

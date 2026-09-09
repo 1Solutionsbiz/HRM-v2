@@ -57,7 +57,7 @@ export default function MyDayPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <HighlightsCard className={cardToneClasses.orange} />
           <EmployeeOfTheMonthCard className={cardToneClasses.violet} />
           <AttendanceCalendarCard linkHref="/attendance" className={cardToneClasses.teal} />
@@ -65,7 +65,7 @@ export default function MyDayPage() {
 
         <AnnouncementsFeedCard className={cardToneClasses.warning} />
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <MoodHistoryCard className={cn(cardToneClasses.orange, "hidden lg:block")} />
           <ThoughtOfTheDayCard className={cn(cardToneClasses.teal, "hidden lg:block")} />
           <PollsDashboardWidget className={cardToneClasses.violet} />
