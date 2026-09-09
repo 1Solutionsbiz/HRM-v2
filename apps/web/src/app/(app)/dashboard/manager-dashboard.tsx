@@ -20,6 +20,7 @@ import { CardSkeleton, StatGridSkeleton } from "@/components/hrm/loading-state";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cardToneClasses } from "@/lib/tone";
 import { AttendanceTrendChart, type AttendanceTrendPoint } from "./attendance-trend-chart";
 
 interface TeamRequestRow {
@@ -158,7 +159,7 @@ export function ManagerDashboard({ firstName }: { firstName: string }) {
           </ChartCard>
         </div>
 
-        <Card>
+        <Card className={cardToneClasses.orange}>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Announcements</CardTitle>
             <Megaphone className="text-muted-foreground size-4" />
@@ -190,7 +191,7 @@ export function ManagerDashboard({ firstName }: { firstName: string }) {
         </Card>
       </div>
 
-      <Card>
+      <Card className={cardToneClasses.primary}>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Team requests</CardTitle>
           <ClipboardList className="text-muted-foreground size-4" />

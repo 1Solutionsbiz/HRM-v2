@@ -43,6 +43,7 @@ import { CardSkeleton, StatGridSkeleton } from "@/components/hrm/loading-state";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cardToneClasses } from "@/lib/tone";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -195,7 +196,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {/* Attendance */}
-        <Card>
+        <Card className={cardToneClasses.success}>
           <WidgetHeader title="Attendance" icon={UserCheck} href="/team/attendance" />
           <CardContent>
             <AsyncSection
@@ -233,7 +234,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         {/* Leave requests */}
-        <Card>
+        <Card className={cardToneClasses.violet}>
           <WidgetHeader title="Leave requests" icon={Clock} href="/team/leave-approvals" />
           <CardContent>
             <AsyncSection
@@ -293,7 +294,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         {/* Expense claims */}
-        <Card>
+        <Card className={cardToneClasses.orange}>
           <WidgetHeader title="Expense claims" icon={Receipt} href="/team/expense-approvals" />
           <CardContent>
             <AsyncSection
@@ -352,7 +353,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         {/* New employees */}
-        <Card>
+        <Card className={cardToneClasses.primary}>
           <WidgetHeader title="New employees" icon={UserPlus} href="/people/onboarding" />
           <CardContent>
             <AsyncSection
@@ -389,7 +390,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         {/* Upcoming birthdays */}
-        <Card>
+        <Card className={cardToneClasses.teal}>
           <WidgetHeader title="Upcoming birthdays" icon={Cake} />
           <CardContent>
             <AsyncSection
@@ -423,7 +424,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
         </Card>
 
         {/* Announcements */}
-        <Card>
+        <Card className={cardToneClasses.warning}>
           <WidgetHeader title="Announcements" icon={Megaphone} href="/announcements" />
           <CardContent>
             <AsyncSection

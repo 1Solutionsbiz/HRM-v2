@@ -31,6 +31,7 @@ import { CardSkeleton, StatGridSkeleton } from "@/components/hrm/loading-state";
 import { AttendanceBanner } from "@/components/hrm/attendance-banner";
 import { HighlightsCard } from "@/components/hrm/highlights-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cardToneClasses } from "@/lib/tone";
 import { ROLE_LABELS, ROLES } from "@/types/role";
 
 function WidgetHeader({
@@ -104,7 +105,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <Card>
+        <Card className={cardToneClasses.primary}>
           <WidgetHeader title="System logs" icon={ScrollText} href="/admin/logs" />
           <CardContent>
             <AsyncSection
@@ -134,7 +135,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cardToneClasses.orange}>
           <WidgetHeader title="Roles distribution" icon={ShieldCheck} href="/admin/roles" />
           <CardContent>
             <AsyncSection
@@ -163,7 +164,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cardToneClasses.teal}>
           <WidgetHeader title="Company profile" icon={Building2} href="/admin/company" />
           <CardContent>
             <AsyncSection
@@ -196,9 +197,9 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
           </CardContent>
         </Card>
 
-        <HighlightsCard />
+        <HighlightsCard className={cardToneClasses.violet} />
 
-        <Card>
+        <Card className={cardToneClasses.success}>
           <WidgetHeader
             title="Announcements"
             icon={Megaphone}
@@ -233,7 +234,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cardToneClasses.warning}>
           <WidgetHeader title="Pending resignations" icon={Users} href="/people/resignations" />
           <CardContent>
             <AsyncSection
