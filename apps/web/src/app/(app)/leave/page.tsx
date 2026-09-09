@@ -27,10 +27,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cardToneClasses, type Tone } from "@/lib/tone";
+import { cn } from "@/lib/utils";
 
 interface LedgerRow extends LeaveLedgerRequest {
   month: number;
 }
+
+/** Cycled by position so the balance tiles read as visually distinct, not tied to any per-type meaning. */
+const BALANCE_TONE_CYCLE: Tone[] = ["teal", "warning", "violet", "success", "orange", "primary", "destructive"];
 
 export default function LeavePage() {
   const balances = useAsync(getLeaveBalances);
@@ -66,7 +71,7 @@ export default function LeavePage() {
         error={balances.error}
         onRetry={balances.refetch}
         loadingFallback={
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <CardSkeleton lines={2} />
             <CardSkeleton lines={2} />
             <CardSkeleton lines={2} />
@@ -74,18 +79,25 @@ export default function LeavePage() {
         }
       >
         {balances.data && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            {balances.data.map((b) => {
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
+            {balances.data.map((b, i) => {
               const total = b.allocatedDays + b.carriedOverDays;
+              const tone = BALANCE_TONE_CYCLE[i % BALANCE_TONE_CYCLE.length]!;
               return (
-                <Card key={b.leaveTypeId}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">{b.leaveTypeName}</CardTitle>
+                <Card
+                  key={b.leaveTypeId}
+                  className={cn(
+                    "[--card-spacing:--spacing(3)] sm:[--card-spacing:--spacing(4)]",
+                    cardToneClasses[tone],
+                  )}
+                >
+                  <CardHeader className="pb-1 sm:pb-2">
+                    <CardTitle className="text-xs font-medium sm:text-sm">{b.leaveTypeName}</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <p className="text-2xl font-semibold tabular-nums">
+                  <CardContent className="space-y-1.5 sm:space-y-2">
+                    <p className="text-lg font-semibold tabular-nums sm:text-2xl">
                       {b.remainingDays}
-                      <span className="text-muted-foreground ml-1 text-sm font-normal">
+                      <span className="text-muted-foreground ml-1 text-[10px] font-normal sm:text-sm">
                         / {total} days left
                       </span>
                     </p>
