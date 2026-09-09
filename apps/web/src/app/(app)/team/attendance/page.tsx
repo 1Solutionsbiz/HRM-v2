@@ -157,11 +157,33 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
         loadingFallback={<StatGridSkeleton count={3} />}
       >
         {data && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Present" value={String(present)} icon={CheckCircle2} tone="success" />
-            <StatCard label="Absent" value={String(absent)} icon={UserX} />
-            <StatCard label="Late" value={String(late)} icon={Clock} tone="warning" />
-            <StatCard label="Total hours" value={totalHours.toFixed(1)} icon={Clock} />
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-4">
+            <StatCard
+              label="Present"
+              value={String(present)}
+              icon={CheckCircle2}
+              tone="success"
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
+            <StatCard
+              label="Absent"
+              value={String(absent)}
+              icon={UserX}
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
+            <StatCard
+              label="Late"
+              value={String(late)}
+              icon={Clock}
+              tone="warning"
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
+            <StatCard
+              label="Total hours"
+              value={totalHours.toFixed(1)}
+              icon={Clock}
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
           </div>
         )}
       </AsyncSection>
@@ -218,11 +240,32 @@ function TeamRosterView({
         loadingFallback={<StatGridSkeleton count={4} />}
       >
         {data && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Present" value={String(present)} icon={CheckCircle2} tone="success" />
-            <StatCard label="Late" value={String(late)} icon={Clock} tone="warning" />
-            <StatCard label="Absent" value={String(absent)} icon={UserX} />
-            <StatCard label="On leave" value={String(onLeave)} />
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-4">
+            <StatCard
+              label="Present"
+              value={String(present)}
+              icon={CheckCircle2}
+              tone="success"
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
+            <StatCard
+              label="Late"
+              value={String(late)}
+              icon={Clock}
+              tone="warning"
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
+            <StatCard
+              label="Absent"
+              value={String(absent)}
+              icon={UserX}
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
+            <StatCard
+              label="On leave"
+              value={String(onLeave)}
+              className="[--card-spacing:--spacing(2)] sm:[--card-spacing:--spacing(4)]"
+            />
           </div>
         )}
       </AsyncSection>
