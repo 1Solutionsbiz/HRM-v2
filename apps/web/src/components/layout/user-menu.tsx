@@ -19,11 +19,16 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 export function UserMenu() {
   const user = useAuthenticatedUser();
   const { logout } = useAuth();
+  // On mobile the sidebar itself is a near-full-width sheet, so opening the
+  // menu to the right of the trigger pushes it past the viewport edge -
+  // open it below the trigger there instead.
+  const { isMobile } = useSidebar();
 
   async function handleLogout() {
     await logout();
@@ -53,7 +58,7 @@ export function UserMenu() {
           <DropdownMenuContent
             className="w-64"
             align="end"
-            side="right"
+            side={isMobile ? "bottom" : "right"}
             sideOffset={4}
           >
             <DropdownMenuLabel className="p-0 font-normal">
