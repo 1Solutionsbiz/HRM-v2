@@ -5,6 +5,7 @@ import type { AuthContext } from '../common/auth-context.js';
 import { AdminService } from './admin.service.js';
 import { UpdateCompanySettingsDto } from './dto/update-company-settings.dto.js';
 import { UpdateGeofenceSettingsDto } from './dto/update-geofence-settings.dto.js';
+import { UpdateDailyReportPolicyDto } from './dto/update-daily-report-policy.dto.js';
 import { AssignEmployeeRoleDto } from './dto/assign-employee-role.dto.js';
 
 @Controller('admin')
@@ -33,6 +34,15 @@ export class AdminController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.adminService.updateGeofenceSettings(dto, actor);
+  }
+
+  @Put('company-settings/daily-report-policy')
+  @RequirePermissions('company:manage')
+  updateDailyReportPolicy(
+    @Body() dto: UpdateDailyReportPolicyDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.adminService.updateDailyReportPolicy(dto, actor);
   }
 
   @Get('roles/permissions')

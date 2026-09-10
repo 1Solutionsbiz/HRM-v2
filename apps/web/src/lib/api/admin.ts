@@ -13,6 +13,9 @@ export interface CompanySettings {
   geofenceLatitude: number | null;
   geofenceLongitude: number | null;
   geofenceRadiusMeters: number | null;
+  dailyReportRequired: boolean;
+  dailyReportDeadline: string | null;
+  dailyReportGraceMinutes: number | null;
   updatedAt: string;
   updatedByUserId: string | null;
 }
@@ -42,6 +45,17 @@ export interface UpdateGeofenceSettingsPayload {
 
 export function updateGeofenceSettings(payload: UpdateGeofenceSettingsPayload): Promise<CompanySettings> {
   return apiFetch<CompanySettings>("/admin/company-settings/geofence", { method: "PUT", body: payload });
+}
+
+export interface UpdateDailyReportPolicyPayload {
+  required?: boolean;
+  /** 24-hour "HH:mm", company local time. */
+  deadline?: string;
+  graceMinutes?: number;
+}
+
+export function updateDailyReportPolicy(payload: UpdateDailyReportPolicyPayload): Promise<CompanySettings> {
+  return apiFetch<CompanySettings>("/admin/company-settings/daily-report-policy", { method: "PUT", body: payload });
 }
 
 export type RolePermissions = Record<Role, string[]>;

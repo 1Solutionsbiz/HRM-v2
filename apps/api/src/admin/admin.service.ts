@@ -10,6 +10,7 @@ import { UsersService } from '../users/users.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { UpdateCompanySettingsDto } from './dto/update-company-settings.dto.js';
 import type { UpdateGeofenceSettingsDto } from './dto/update-geofence-settings.dto.js';
+import type { UpdateDailyReportPolicyDto } from './dto/update-daily-report-policy.dto.js';
 
 const SETTINGS_ID = 'singleton';
 
@@ -107,6 +108,57 @@ export class AdminService {
       description: allProvided
         ? `Enabled attendance geofencing (${dto.radiusMeters}m radius)`
         : 'Disabled attendance geofencing',
+    });
+
+    return updated;
+  }
+
+  /**
+   * Same "own dedicated endpoint" reasoning as updateGeofenceSettings above
+   * — a routine company-profile edit must never accidentally touch this.
+   * Enabling `required` without ever configuring a deadline would mean
+   * every required employee is permanently "MISSING" with no grace window
+   * to submit within, so that combination is rejected rather than silently
+   * accepted.
+   */
+  async updateDailyReportPolicy(dto: UpdateDailyReportPolicyDto, actor: AuthContext) {
+    const current = await this.getCompanySettings();
+
+    const deadline = dto.deadline
+      ? (() => {
+          const [hours, minutes] = dto.deadline!.split(':').map(Number);
+          return new Date(Date.UTC(1970, 0, 1, hours, minutes, 0));
+        })()
+      : (current.dailyReportDeadline ?? null);
+
+    const graceMinutes = dto.graceMinutes ?? current.dailyReportGraceMinutes;
+    const required = dto.required ?? current.dailyReportRequired;
+
+    if (required && !deadline) {
+      throw new BadRequestException(
+        'A deadline must be configured before Daily Report Required can be enabled.',
+      );
+    }
+
+    const updated = await this.prisma.companySettings.update({
+      where: { id: SETTINGS_ID },
+      data: {
+        dailyReportRequired: required,
+        dailyReportDeadline: deadline,
+        dailyReportGraceMinutes: graceMinutes,
+        updatedByUserId: actor.userId,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'SETTINGS_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'CompanySettings',
+      targetId: SETTINGS_ID,
+      description: required
+        ? `Enabled Daily Work Report requirement (deadline ${dto.deadline ?? '(unchanged)'}, grace ${graceMinutes ?? 0}m)`
+        : 'Disabled Daily Work Report requirement',
     });
 
     return updated;

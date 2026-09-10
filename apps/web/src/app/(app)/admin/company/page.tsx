@@ -10,6 +10,7 @@ import {
   getCompanySettings,
   updateCompanySettings,
   updateGeofenceSettings,
+  updateDailyReportPolicy,
   type CompanySettings,
 } from "@/lib/api/admin";
 import { PageHeader } from "@/components/hrm/page-header";
@@ -20,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 interface FormState {
   legalName: string;
@@ -273,6 +275,121 @@ function GeofenceSettingsForm({ initial, onSaved }: { initial: CompanySettings; 
   );
 }
 
+interface DailyReportPolicyFormState {
+  required: boolean;
+  deadline: string;
+  graceMinutes: string;
+}
+
+function toDailyReportPolicyForm(settings: CompanySettings): DailyReportPolicyFormState {
+  let deadline = "";
+  if (settings.dailyReportDeadline) {
+    // A MySQL TIME column, anchored at the Unix epoch in UTC regardless of
+    // host timezone - same UTC-getter convention as the backend reads it
+    // with (see AdminService.updateDailyReportPolicy).
+    const d = new Date(settings.dailyReportDeadline);
+    deadline = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  }
+  return {
+    required: settings.dailyReportRequired,
+    deadline,
+    graceMinutes: settings.dailyReportGraceMinutes != null ? String(settings.dailyReportGraceMinutes) : "",
+  };
+}
+
+/**
+ * Deliberately deployed OFF (dailyReportRequired defaults to false) - this
+ * form is the only way to turn it on, and turning it on is rejected
+ * server-side without a deadline configured first (see
+ * AdminService.updateDailyReportPolicy).
+ */
+function DailyReportPolicyForm({ initial, onSaved }: { initial: CompanySettings; onSaved: () => void }) {
+  const [form, setForm] = React.useState(toDailyReportPolicyForm(initial));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (form.required && !form.deadline) {
+      setSaveError("Set a deadline before turning Daily Report Required on.");
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateDailyReportPolicy({
+        required: form.required,
+        deadline: form.deadline || undefined,
+        graceMinutes: form.graceMinutes.trim() ? Number(form.graceMinutes) : undefined,
+      });
+      toast.success(form.required ? "Daily Work Report requirement enabled" : "Daily Work Report requirement disabled");
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save these changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Daily Work Report policy</CardTitle>
+        <CardDescription>
+          {initial.dailyReportRequired
+            ? `On — required employees must submit by ${form.deadline || "—"}${
+                initial.dailyReportGraceMinutes ? ` (+${initial.dailyReportGraceMinutes}m grace)` : ""
+              }.`
+            : "Off — no employee is currently required to submit a Daily Work Report."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={handleSave}>
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="flex items-center gap-3">
+            <Switch
+              id="dr-required"
+              checked={form.required}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, required: v }))}
+            />
+            <Label htmlFor="dr-required">Daily Report Required</Label>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="dr-deadline">Deadline</Label>
+              <Input
+                id="dr-deadline"
+                type="time"
+                value={form.deadline}
+                onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dr-grace">Grace period (minutes)</Label>
+              <Input
+                id="dr-grace"
+                type="number"
+                min={0}
+                max={240}
+                placeholder="e.g. 30"
+                value={form.graceMinutes}
+                onChange={(e) => setForm((f) => ({ ...f, graceMinutes: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CompanySettingsPage() {
   const { data, loading, error, refetch } = useAsync(getCompanySettings);
 
@@ -290,6 +407,7 @@ export default function CompanySettingsPage() {
           <>
             <CompanyProfileForm initial={data} />
             <GeofenceSettingsForm initial={data} onSaved={refetch} />
+            <DailyReportPolicyForm initial={data} onSaved={refetch} />
           </>
         )}
       </AsyncSection>

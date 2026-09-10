@@ -1,12 +1,16 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
+  IsEnum,
   IsIn,
   IsOptional,
   IsString,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import {
+  DailyReportTemplate,
   EmployeeStatus,
   EmploymentType,
 } from '../../generated/prisma/enums.js';
@@ -71,4 +75,14 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
   managerId?: string;
+
+  /** Wins over the Designation's template when set; explicit null clears it back to the Designation/GENERAL fallback. */
+  @ValidateIf((o: UpdateEmployeeDto) => o.dailyReportTemplateOverride !== null)
+  @IsOptional()
+  @IsEnum(DailyReportTemplate)
+  dailyReportTemplateOverride?: DailyReportTemplate | null;
+
+  @IsOptional()
+  @IsBoolean()
+  dailyReportExempt?: boolean;
 }

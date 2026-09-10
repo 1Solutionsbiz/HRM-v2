@@ -33,6 +33,7 @@ import { PollsModule } from './polls/polls.module.js';
 import { EmployeeOfTheMonthModule } from './employee-of-the-month/employee-of-the-month.module.js';
 import { HandbookModule } from './handbook/handbook.module.js';
 import { ReportsModule } from './reports/reports.module.js';
+import { DailyReportsModule } from './daily-reports/daily-reports.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -76,6 +77,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     EmployeeOfTheMonthModule,
     HandbookModule,
     ReportsModule,
+    DailyReportsModule,
   ],
   controllers: [AppController],
   providers: [

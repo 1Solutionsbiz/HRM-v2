@@ -13,6 +13,7 @@ import {
   UserPlus,
   UserMinus,
   ClipboardList,
+  NotebookPen,
   BadgeIndianRupee,
   BarChart3,
   Building2,
@@ -56,6 +57,7 @@ export const navGroups: NavGroup[] = [
     label: "My work",
     items: [
       { title: "Attendance", url: "/attendance", icon: Clock, color: "text-amber-500" },
+      { title: "Daily Report", url: "/daily-report", icon: NotebookPen, color: "text-sky-600" },
       { title: "Leave", url: "/leave", icon: CalendarDays, color: "text-emerald-500" },
       { title: "Holidays", url: "/holidays", icon: PartyPopper, color: "text-rose-500" },
       { title: "Requests", url: "/requests", icon: ClipboardList, color: "text-violet-500" },
@@ -77,6 +79,15 @@ export const navGroups: NavGroup[] = [
         // leave:approve/expense:approve just below, which manager does
         // hold. Showing this to a manager would 403 on load.
         roles: ["hr", "admin"],
+      },
+      {
+        title: "Daily Reports",
+        url: "/team/daily-reports",
+        icon: NotebookPen,
+        color: "text-sky-500",
+        // performance:manage (this page's permission) is granted to
+        // manager/hr/admin in seed.ts, same as Leave approvals below.
+        roles: ["manager", "hr", "admin"],
       },
       {
         title: "Leave approvals",

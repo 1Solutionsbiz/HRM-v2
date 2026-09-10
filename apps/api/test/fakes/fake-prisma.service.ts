@@ -63,6 +63,8 @@ export interface FakeEmployee {
   designationId: string | null;
   managerId: string | null;
   createdAt: Date;
+  dailyReportTemplateOverride?: string | null;
+  dailyReportExempt?: boolean;
 }
 
 interface FakeBankDetail {
@@ -181,7 +183,39 @@ export class FakePrismaService {
   >();
   designations = new Map<
     string,
-    { id: string; title: string; departmentId: string }
+    { id: string; title: string; departmentId: string; dailyReportTemplate?: string | null }
+  >();
+  dailyReports = new Map<
+    string,
+    {
+      id: string;
+      employeeId: string;
+      date: Date;
+      status: string;
+      summary: string | null;
+      blockers: string | null;
+      tomorrowPlan: string | null;
+      submittedAt: Date | null;
+      excusedByUserId: string | null;
+      excusedAt: Date | null;
+      excuseReason: string | null;
+    }
+  >();
+  dailyReportTaskEntries = new Map<
+    string,
+    {
+      id: string;
+      dailyReportId: string;
+      title: string;
+      projectOrClient: string | null;
+      status: string;
+      expectedMinutes: number | null;
+      actualMinutes: number | null;
+      output: string | null;
+      blockerCategory: string | null;
+      blockerNote: string | null;
+      sortOrder: number;
+    }
   >();
 
   private rolesForUser(userId: string): FakeRole[] {
@@ -552,10 +586,25 @@ export class FakePrismaService {
       this.employees.set(id, employee);
       return employee;
     },
-    findMany: async () =>
-      [...this.employees.values()].map((employee) =>
-        this.employeeWithRelations(employee),
-      ),
+    findMany: async (
+      args: {
+        where?: {
+          status?: string;
+          managerId?: string;
+          id?: { in: string[] };
+        };
+      } = {},
+    ) =>
+      [...this.employees.values()]
+        .filter((employee) => {
+          const where = args.where;
+          if (!where) return true;
+          if (where.status && employee.status !== where.status) return false;
+          if (where.managerId && employee.managerId !== where.managerId) return false;
+          if (where.id?.in && !where.id.in.includes(employee.id)) return false;
+          return true;
+        })
+        .map((employee) => this.employeeWithRelations(employee)),
     findUnique: async ({
       where,
     }: {
@@ -569,6 +618,20 @@ export class FakePrismaService {
       }
       return employee ? this.employeeWithRelations(employee) : null;
     },
+    findUniqueOrThrow: async ({
+      where,
+    }: {
+      where: { id?: string; userId?: string };
+    }) => {
+      let employee: FakeEmployee | undefined;
+      if (where.id) employee = this.employees.get(where.id);
+      if (where.userId) {
+        for (const candidate of this.employees.values())
+          if (candidate.userId === where.userId) employee = candidate;
+      }
+      if (!employee) throw new Error(`no fake employee matching ${JSON.stringify(where)}`);
+      return this.employeeWithRelations(employee);
+    },
     update: async ({
       where,
       data,
@@ -580,6 +643,86 @@ export class FakePrismaService {
       if (!employee) throw new Error(`no fake employee ${where.id}`);
       Object.assign(employee, data);
       return employee;
+    },
+  };
+
+  private dailyReportKey(employeeId: string, date: Date): string {
+    return `${employeeId}:${this.dateKey(date)}`;
+  }
+
+  dailyReport = {
+    findUnique: async ({
+      where,
+      include,
+    }: {
+      where: { employeeId_date: { employeeId: string; date: Date } };
+      include?: { tasks?: boolean | { orderBy?: unknown } };
+    }) => {
+      const { employeeId, date } = where.employeeId_date;
+      const report = [...this.dailyReports.values()].find(
+        (r) => r.employeeId === employeeId && this.dateKey(r.date) === this.dateKey(date),
+      );
+      if (!report) return null;
+      if (!include?.tasks) return report;
+      const tasks = [...this.dailyReportTaskEntries.values()]
+        .filter((t) => t.dailyReportId === report.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      return { ...report, tasks };
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: { employeeId_date: { employeeId: string; date: Date } };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    }) => {
+      const { employeeId, date } = where.employeeId_date;
+      const existing = [...this.dailyReports.values()].find(
+        (r) => r.employeeId === employeeId && this.dateKey(r.date) === this.dateKey(date),
+      );
+      if (existing) {
+        Object.assign(existing, update);
+        return existing;
+      }
+      const id = `daily-report-${this.dailyReports.size + 1}`;
+      const record = {
+        id,
+        employeeId,
+        date,
+        status: null,
+        summary: null,
+        blockers: null,
+        tomorrowPlan: null,
+        submittedAt: null,
+        excusedByUserId: null,
+        excusedAt: null,
+        excuseReason: null,
+        ...create,
+      };
+      this.dailyReports.set(id, record as never);
+      return record;
+    },
+  };
+
+  dailyReportTaskEntry = {
+    deleteMany: async ({ where }: { where: { dailyReportId: string } }) => {
+      let count = 0;
+      for (const [id, task] of this.dailyReportTaskEntries) {
+        if (task.dailyReportId === where.dailyReportId) {
+          this.dailyReportTaskEntries.delete(id);
+          count++;
+        }
+      }
+      return { count };
+    },
+    createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+      for (const task of data) {
+        const id = `daily-report-task-${this.dailyReportTaskEntries.size + 1}`;
+        this.dailyReportTaskEntries.set(id, { id, ...task } as never);
+      }
+      return { count: data.length };
     },
   };
 
@@ -745,24 +888,26 @@ export class FakePrismaService {
     phone: string | null;
     address: string | null;
     timezone: string;
+    dailyReportRequired: boolean;
+    dailyReportDeadline: Date | null;
+    dailyReportGraceMinutes: number | null;
     updatedAt: Date;
     updatedByUserId: string | null;
   } | null = null;
 
   companySettings = {
     findUnique: async () => this.companySettings_,
+    findUniqueOrThrow: async () => {
+      if (!this.companySettings_)
+        throw new Error(
+          'no fake company settings — call seedCompanySettings() first',
+        );
+      return this.companySettings_;
+    },
     update: async ({
       data,
     }: {
-      data: {
-        legalName: string;
-        brandName: string;
-        website: string | null;
-        supportEmail: string;
-        phone: string | null;
-        address: string | null;
-        updatedByUserId: string;
-      };
+      data: Partial<NonNullable<FakePrismaService['companySettings_']>>;
     }) => {
       if (!this.companySettings_)
         throw new Error(
@@ -789,6 +934,9 @@ export class FakePrismaService {
       phone: '+91 11 4567 8900',
       address: 'F Block, Laxmi Nagar, New Delhi, Delhi 110092',
       timezone: 'Asia/Kolkata',
+      dailyReportRequired: false,
+      dailyReportDeadline: null,
+      dailyReportGraceMinutes: null,
       updatedAt: new Date(),
       updatedByUserId: null,
       ...overrides,
@@ -910,6 +1058,16 @@ export class FakePrismaService {
           holiday.date >= where.date.gte &&
           holiday.date <= where.date.lte,
       ),
+    findFirst: async ({
+      where,
+    }: {
+      where: { date: Date; isActive: boolean };
+    }) =>
+      this.holidays.find(
+        (holiday) =>
+          holiday.isActive === where.isActive &&
+          this.dateKey(holiday.date) === this.dateKey(where.date),
+      ) ?? null,
   };
 
   attendancePolicy = {
@@ -1113,14 +1271,16 @@ export class FakePrismaService {
     }: {
       where: {
         employeeId: string;
-        status: { in: string[] };
+        status: { in: string[] } | string;
         startDate: { lte: Date };
         endDate: { gte: Date };
       };
     }) => {
+      const statusMatches = (status: string) =>
+        typeof where.status === 'string' ? status === where.status : where.status.in.includes(status);
       for (const request of this.leaveRequests.values()) {
         if (request.employeeId !== where.employeeId) continue;
-        if (!where.status.in.includes(request.status)) continue;
+        if (!statusMatches(request.status)) continue;
         if (!(request.startDate <= where.startDate.lte)) continue;
         if (!(request.endDate >= where.endDate.gte)) continue;
         return request;

@@ -66,6 +66,7 @@ model User {
   ticketComments               TicketComment[]
   createdPolls                 Poll[]
   nominatedEmployeesOfTheMonth EmployeeOfTheMonth[]
+  excusedDailyReports          DailyReport[]        @relation("DailyReportExcuser")
 
   @@map("users")
 }
@@ -195,6 +196,9 @@ enum AuditEventType {
   /// Added alongside the forgot-password flow (module: auth).
   PASSWORD_RESET_REQUESTED
   PASSWORD_RESET_COMPLETED
+  /// Added alongside Daily Work Reporting (P1) - the one action in that
+  /// feature with real audit-trail stakes (see DailyReportsService.excuse).
+  DAILY_REPORT_EXCUSED
   OTHER
 }
 
@@ -258,6 +262,11 @@ model Designation {
   id           String @id @default(cuid())
   title        String
   departmentId String
+
+  /// Default Daily Report template for anyone holding this designation -
+  /// null falls through to GENERAL. See Employee.dailyReportTemplateOverride
+  /// for the per-employee escape hatch above this.
+  dailyReportTemplate DailyReportTemplate?
 
   department Department @relation(fields: [departmentId], references: [id])
   employees  Employee[]
@@ -349,6 +358,15 @@ model Employee {
   maritalStatus MaritalStatus?
   bloodGroup    BloodGroup?
 
+  /// Wins over Designation.dailyReportTemplate when set - see that field's
+  /// comment for the full fallback order (Employee override -> Designation
+  /// -> GENERAL).
+  dailyReportTemplateOverride DailyReportTemplate?
+  /// HR-set escape hatch for a real employee who shouldn't be held to daily
+  /// reporting (e.g. a role the policy doesn't fit) - excluded from every
+  /// required/missing/reminder calculation the same way a holiday is.
+  dailyReportExempt           Boolean              @default(false)
+
   departmentId  String?
   designationId String?
   managerId     String?
@@ -381,6 +399,7 @@ model Employee {
   goals                    Goal[]
   performanceReviews       PerformanceReview[]
   recognitions             Recognition[]
+  dailyReports             DailyReport[]
   tasks                    Task[]
   tickets                  Ticket[]
   moodCheckIns             MoodCheckIn[]
@@ -1232,6 +1251,112 @@ model EmployeeOfTheMonth {
 }
 
 // =============================================================================
+// Daily Work Reporting — deliberately its own section, not folded into
+// Performance above: that's a half-yearly cycle/goals/rating system, this is
+// a per-working-day log. They share nothing but the Employee FK.
+// =============================================================================
+
+/// Which fields a Daily Report's form should show. Selected per Designation
+/// (HR-configured) with an optional per-Employee override — see Employee.
+/// Department is deliberately NOT the selector: real designations like "SEO
+/// Executive" and "Social Media Executive" sit in the same department
+/// ("Digital Marketing") but need different templates.
+enum DailyReportTemplate {
+  DEVELOPMENT
+  SEO
+  SOCIAL_MEDIA
+  SALES
+  HR
+  GENERAL
+}
+
+/// SUBMITTED/LATE/EXCUSED are the only values ever written to a row -
+/// MISSING/NOT_REQUIRED/PENDING are synthesized at read time for a date with
+/// no row, the same way AttendanceDayStatus's WEEKEND/HOLIDAY/ABSENT values
+/// are synthesized by AttendanceService without a materialized AttendanceDay
+/// row. Keeping all six in one enum (rather than a separate "computed status"
+/// type) means the frontend consumes exactly one status type either way.
+enum DailyReportStatus {
+  SUBMITTED
+  LATE
+  EXCUSED
+  MISSING
+  NOT_REQUIRED
+  PENDING
+}
+
+enum DailyReportTaskStatus {
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum BlockerCategory {
+  REQUIREMENT_UNCLEAR
+  TECHNICAL_COMPLEXITY
+  BUG
+  DEPENDENCY
+  WAITING_DESIGN
+  WAITING_APPROVAL
+  WAITING_CLIENT
+  ENVIRONMENT
+  REWORK
+  OTHER
+}
+
+/// One row per employee per working day - but only ever created by a real
+/// action (the employee submits, or HR/a manager excuses a gap). A day with
+/// no row is not "no data yet", it's classified live by
+/// DailyReportsService.getReportForEmployee — see DailyReportStatus's own
+/// comment for why that's safe to do in one enum.
+model DailyReport {
+  id           String            @id @default(cuid())
+  employeeId   String
+  date         DateTime          @db.Date
+  status       DailyReportStatus
+  summary      String?           @db.Text
+  blockers     String?           @db.Text
+  tomorrowPlan String?           @db.Text
+  submittedAt  DateTime?
+
+  /// Set together when HR/an authorised manager excuses a MISSING day -
+  /// enforced as a unit in DailyReportsService, not here, same reasoning as
+  /// AdminService.updateGeofenceSettings's three-fields-together rule.
+  excusedByUserId String?
+  excusedAt       DateTime?
+  excuseReason    String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee      Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  excusedByUser User?                  @relation("DailyReportExcuser", fields: [excusedByUserId], references: [id], onDelete: SetNull)
+  tasks         DailyReportTaskEntry[]
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@map("daily_reports")
+}
+
+model DailyReportTaskEntry {
+  id              String                @id @default(cuid())
+  dailyReportId   String
+  title           String
+  projectOrClient String?
+  status          DailyReportTaskStatus @default(IN_PROGRESS)
+  expectedMinutes Int?
+  actualMinutes   Int?
+  output          String?               @db.Text
+  blockerCategory BlockerCategory?
+  blockerNote     String?               @db.Text
+  sortOrder       Int                   @default(0)
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@map("daily_report_task_entries")
+}
+
+// =============================================================================
 // Tasks — explicitly required My Day content ("Today's tasks", with a done
 // checkbox in the built UI, so this is per-employee actionable state, not a
 // purely derived value). "Today's meetings" is deliberately NOT modeled here
@@ -1392,6 +1517,7 @@ enum NotificationType {
   ANNOUNCEMENT
   SYSTEM
   BIRTHDAY
+  DAILY_REPORT
 }
 
 model Notification {
@@ -1421,14 +1547,14 @@ model Notification {
 // =============================================================================
 
 model CompanySettings {
-  id                   String   @id @default("singleton")
+  id                   String  @id @default("singleton")
   legalName            String
   brandName            String
   website              String?
   supportEmail         String
   phone                String?
-  address              String?  @db.Text
-  timezone             String   @default("Asia/Kolkata")
+  address              String? @db.Text
+  timezone             String  @default("Asia/Kolkata")
   /// Attendance geofencing - all three null means geofencing is off (the
   /// default until an admin configures it). Set together via one dedicated
   /// endpoint, not the general company-profile PUT, so a routine profile
@@ -1436,8 +1562,21 @@ model CompanySettings {
   geofenceLatitude     Float?
   geofenceLongitude    Float?
   geofenceRadiusMeters Int?
-  updatedAt            DateTime @updatedAt
-  updatedByUserId      String?
+
+  /// Off by default, deliberately - flipping this on is a distinct HR action
+  /// (PUT /admin/company-settings/daily-report-policy) taken only once a
+  /// deadline is actually configured, so deploying this feature can never by
+  /// itself make an existing employee non-compliant. See
+  /// DailyReportsService.isReportRequiredToday.
+  dailyReportRequired     Boolean   @default(false)
+  /// A MySQL TIME column - always read with UTC getters regardless of host
+  /// timezone, same convention as AttendancePolicy.standardStartTime (see
+  /// that field's comment in AttendanceService).
+  dailyReportDeadline     DateTime? @db.Time
+  dailyReportGraceMinutes Int?
+
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
 
   @@map("company_settings")
 }
