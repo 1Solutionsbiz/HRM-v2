@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsString, MaxLength } from 'class-validator';
 
 export class UpsertBankDetailDto {
   @IsString()
@@ -13,9 +13,4 @@ export class UpsertBankDetailDto {
   @IsString()
   @MaxLength(20)
   ifscCode!: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  panNumber?: string;
 }

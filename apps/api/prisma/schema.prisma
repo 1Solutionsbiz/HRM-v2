@@ -360,6 +360,10 @@ model Employee {
 
   emergencyContacts EmployeeEmergencyContact[]
   bankDetail        EmployeeBankDetail?
+  identification    EmployeeIdentification?
+  familyDetail      EmployeeFamilyDetail?
+  familyMembers     EmployeeFamilyMember[]
+  previousEmployers EmployeePreviousEmployer[]
   education         EmployeeEducation[]
   assets            Asset[]
 
@@ -394,11 +398,14 @@ model Employee {
 /// One employee can have multiple contacts (legacy allows it and real
 /// employees use it - see PROJECT_STATUS.md) - not @unique on employeeId.
 model EmployeeEmergencyContact {
-  id           String @id @default(cuid())
+  id           String  @id @default(cuid())
   employeeId   String
   name         String
   relationship String
   phone        String
+  /// Country calling code for `phone` (e.g. "+91"). Split out rather than
+  /// prefixed into `phone` so the UI can render/edit them independently.
+  isdCode      String?
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -406,22 +413,104 @@ model EmployeeEmergencyContact {
   @@map("employee_emergency_contacts")
 }
 
-/// accountNumber/panNumber must be encrypted by the application layer before
-/// write (and decrypted only on authorized read) — never logged, never
-/// returned in list views. Only bankLast4-equivalent display data is safe to
-/// show broadly; that's derived from accountNumberEncrypted at read time, not
-/// stored separately.
+/// accountNumber must be encrypted by the application layer before write
+/// (and decrypted only on authorized read) — never logged, never returned in
+/// list views. Only bankLast4-equivalent display data is safe to show
+/// broadly; that's derived from accountNumberEncrypted at read time, not
+/// stored separately. PAN lives on EmployeeIdentification, not here — see
+/// that model's comment for why.
 model EmployeeBankDetail {
-  id                     String  @id @default(cuid())
-  employeeId             String  @unique
+  id                     String @id @default(cuid())
+  employeeId             String @unique
   bankName               String
   accountNumberEncrypted String
   ifscCode               String
-  panNumberEncrypted     String?
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("employee_bank_details")
+}
+
+/// Government-issued identity documents. PAN was previously stored on
+/// EmployeeBankDetail.panNumberEncrypted; it moved here because this tab is
+/// employee-self-editable while Bank details are HR-only, and a value can't
+/// live in two independently-writable places without risking drift. PAN and
+/// Aadhaar are encrypted (same statutory-ID sensitivity as the existing bank
+/// PAN); passport and driving-license numbers are encrypted too since they're
+/// also government identity documents, not just reference data.
+model EmployeeIdentification {
+  id                            String    @id @default(cuid())
+  employeeId                    String    @unique
+  panNumberEncrypted            String?
+  aadhaarNumberEncrypted        String?
+  passportNumberEncrypted       String?
+  passportExpiryDate            DateTime? @db.Date
+  drivingLicenseNumberEncrypted String?
+  drivingLicenseExpiryDate      DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_identifications")
+}
+
+/// Father/mother details, one row per employee. Marital status itself stays
+/// on Employee.maritalStatus (already self-editable via UpdateMyProfileDto) —
+/// this table only adds the fields that didn't already exist anywhere.
+model EmployeeFamilyDetail {
+  id                String    @id @default(cuid())
+  employeeId        String    @unique
+  fatherName        String?
+  fatherDateOfBirth DateTime? @db.Date
+  motherName        String?
+  motherDateOfBirth DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_family_details")
+}
+
+/// Children, other dependents, and nominees share the same shape (name +
+/// relationship + date of birth), so this is one discriminated table by
+/// `kind` rather than three near-identical ones. sharePercentage is only
+/// meaningful for NOMINEE rows; relationship is only meaningful for
+/// OTHER_DEPENDENT/NOMINEE (a CHILD's relationship to the employee is
+/// implied by the kind itself).
+model EmployeeFamilyMember {
+  id              String           @id @default(cuid())
+  employeeId      String
+  kind            FamilyMemberKind
+  name            String
+  relationship    String?
+  dateOfBirth     DateTime?        @db.Date
+  sharePercentage Int?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_family_members")
+}
+
+/// One row per prior employer. Fields aren't specified by any legacy screen
+/// (this is a net-new tab) — kept to the essentials a background-check or HR
+/// review would actually need.
+model EmployeePreviousEmployer {
+  id          String    @id @default(cuid())
+  employeeId  String
+  companyName String
+  designation String?
+  fromDate    DateTime? @db.Date
+  toDate      DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_previous_employers")
+}
+
+enum FamilyMemberKind {
+  CHILD
+  OTHER_DEPENDENT
+  NOMINEE
 }
 
 /// One row per qualification. Legacy had no education table of its own —

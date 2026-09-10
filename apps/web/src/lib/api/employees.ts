@@ -28,11 +28,47 @@ export interface EmployeeListItem {
   manager: EmployeeManagerRef | null;
 }
 
+export type FamilyMemberKind = "CHILD" | "OTHER_DEPENDENT" | "NOMINEE";
+
 export interface EmergencyContact {
   id: string;
   name: string;
   relationship: string;
+  isdCode: string | null;
   phone: string;
+}
+
+export interface EmployeeIdentification {
+  panNumber: string | null;
+  aadhaarNumber: string | null;
+  passportNumber: string | null;
+  passportExpiryDate: string | null;
+  drivingLicenseNumber: string | null;
+  drivingLicenseExpiryDate: string | null;
+}
+
+export interface EmployeeFamilyDetail {
+  fatherName: string | null;
+  fatherDateOfBirth: string | null;
+  motherName: string | null;
+  motherDateOfBirth: string | null;
+}
+
+export interface EmployeeFamilyMember {
+  id: string;
+  kind: FamilyMemberKind;
+  name: string;
+  relationship: string | null;
+  dateOfBirth: string | null;
+  sharePercentage: number | null;
+}
+
+export interface EmployeePreviousEmployer {
+  id: string;
+  companyName: string;
+  designation: string | null;
+  fromDate: string | null;
+  toDate: string | null;
 }
 
 export interface EmployeeEducationEntry {
@@ -77,8 +113,11 @@ export interface EmployeeDetail extends EmployeeListItem {
     bankName: string;
     accountNumber: string;
     ifscCode: string;
-    panNumber: string | null;
   } | null;
+  identification: EmployeeIdentification | null;
+  familyDetail: EmployeeFamilyDetail | null;
+  familyMembers: EmployeeFamilyMember[];
+  previousEmployers: EmployeePreviousEmployer[];
   education: EmployeeEducationEntry[];
   assets: EmployeeAssetEntry[];
   documents: EmployeeDocumentEntry[];
@@ -230,4 +269,123 @@ export function formatBloodGroup(value: string | null): string {
 export function maskAccountNumber(accountNumber: string): string {
   const last4 = accountNumber.slice(-4);
   return `•••• •••• ${last4}`;
+}
+
+// ---------------------------------------------------------------------
+// Self-service identification / family / previous-employer / emergency
+// contact details — the employee edits these about themselves.
+// ---------------------------------------------------------------------
+
+export interface UpsertIdentificationPayload {
+  panNumber: string;
+  aadhaarNumber: string;
+  passportNumber?: string;
+  passportExpiryDate?: string;
+  drivingLicenseNumber?: string;
+  drivingLicenseExpiryDate?: string;
+}
+
+export function upsertMyIdentification(payload: UpsertIdentificationPayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me/identification", { method: "PUT", body: payload });
+}
+
+export interface UpsertFamilyDetailPayload {
+  fatherName?: string;
+  fatherDateOfBirth?: string;
+  motherName?: string;
+  motherDateOfBirth?: string;
+}
+
+export function upsertMyFamilyDetail(payload: UpsertFamilyDetailPayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me/family-detail", { method: "PUT", body: payload });
+}
+
+export interface UpsertFamilyMemberPayload {
+  name: string;
+  relationship?: string;
+  dateOfBirth?: string;
+  sharePercentage?: number;
+}
+
+const FAMILY_MEMBER_PATHS: Record<FamilyMemberKind, string> = {
+  CHILD: "children",
+  OTHER_DEPENDENT: "dependents",
+  NOMINEE: "nominees",
+};
+
+export function addMyFamilyMember(
+  kind: FamilyMemberKind,
+  payload: UpsertFamilyMemberPayload,
+): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/${FAMILY_MEMBER_PATHS[kind]}`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function updateMyFamilyMember(
+  kind: FamilyMemberKind,
+  memberId: string,
+  payload: UpsertFamilyMemberPayload,
+): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/${FAMILY_MEMBER_PATHS[kind]}/${memberId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function removeMyFamilyMember(kind: FamilyMemberKind, memberId: string): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/${FAMILY_MEMBER_PATHS[kind]}/${memberId}`, {
+    method: "DELETE",
+  });
+}
+
+export interface UpsertPreviousEmployerPayload {
+  companyName: string;
+  designation?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+
+export function addMyPreviousEmployer(payload: UpsertPreviousEmployerPayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me/previous-employers", { method: "POST", body: payload });
+}
+
+export function updateMyPreviousEmployer(
+  employerId: string,
+  payload: UpsertPreviousEmployerPayload,
+): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/previous-employers/${employerId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function removeMyPreviousEmployer(employerId: string): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/previous-employers/${employerId}`, { method: "DELETE" });
+}
+
+export interface UpsertEmergencyContactPayload {
+  name: string;
+  relationship: string;
+  isdCode?: string;
+  phone: string;
+}
+
+export function addMyEmergencyContact(payload: UpsertEmergencyContactPayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me/emergency-contacts", { method: "POST", body: payload });
+}
+
+export function updateMyEmergencyContact(
+  contactId: string,
+  payload: UpsertEmergencyContactPayload,
+): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/emergency-contacts/${contactId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function removeMyEmergencyContact(contactId: string): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/me/emergency-contacts/${contactId}`, { method: "DELETE" });
 }

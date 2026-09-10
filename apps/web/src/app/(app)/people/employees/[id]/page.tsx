@@ -21,6 +21,13 @@ import {
   Laptop,
   PackageOpen,
   CalendarDays,
+  IdCard,
+  Users,
+  Briefcase,
+  Contact as ContactIcon,
+  Baby,
+  HeartHandshake,
+  BadgeCheck,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDate } from "@/lib/format";
@@ -32,6 +39,7 @@ import {
   titleCase,
   formatBloodGroup,
   maskAccountNumber,
+  type FamilyMemberKind,
 } from "@/lib/api/employees";
 import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from "@/lib/api/documents";
 import { getEmployeeLeaveBalances } from "@/lib/api/leave";
@@ -81,6 +89,12 @@ function Field({
     </div>
   );
 }
+
+const FAMILY_MEMBER_KIND_LABELS: Record<FamilyMemberKind, string> = {
+  CHILD: "Children",
+  OTHER_DEPENDENT: "Other dependents",
+  NOMINEE: "Nominees",
+};
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -237,8 +251,12 @@ export default function EmployeeDetailPage() {
               <TabsList>
                 <TabsTrigger value="personal">Personal</TabsTrigger>
                 <TabsTrigger value="employment">Employment</TabsTrigger>
+                <TabsTrigger value="identification">Identification</TabsTrigger>
+                <TabsTrigger value="family">Family</TabsTrigger>
+                <TabsTrigger value="previous-employer">Previous employer</TabsTrigger>
+                <TabsTrigger value="contact">Contact</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
-                <TabsTrigger value="bank">Bank &amp; emergency</TabsTrigger>
+                <TabsTrigger value="bank">Bank</TabsTrigger>
                 <TabsTrigger value="leave">Leave</TabsTrigger>
                 <TabsTrigger value="assets">Assets</TabsTrigger>
               </TabsList>
@@ -301,6 +319,166 @@ export default function EmployeeDetailPage() {
                     <InfoRow label="Date of joining" value={formatDateOrDash(employee.dateOfJoining)} />
                     <InfoRow label="Employment type" value={titleCase(employee.employmentType)} />
                     <InfoRow label="Work location" value={employee.workLocation} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="identification" className="mt-4">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center gap-2">
+                      <IdCard className="text-muted-foreground size-4" />
+                      <p className="text-sm font-semibold">Identification details</p>
+                    </div>
+                    {employee.identification ? (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <InfoRow label="PAN no." value={employee.identification.panNumber} />
+                        <InfoRow label="Aadhaar no." value={employee.identification.aadhaarNumber} />
+                        <InfoRow label="Passport no." value={employee.identification.passportNumber} />
+                        <InfoRow
+                          label="Passport expiry date"
+                          value={formatDateOrDash(employee.identification.passportExpiryDate)}
+                        />
+                        <InfoRow label="Driving license no." value={employee.identification.drivingLicenseNumber} />
+                        <InfoRow
+                          label="Driving license expiry date"
+                          value={formatDateOrDash(employee.identification.drivingLicenseExpiryDate)}
+                        />
+                      </div>
+                    ) : (
+                      <EmptyState size="sm" icon={IdCard} title="Not filled in by the employee yet" />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="family" className="mt-4 space-y-4">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center gap-2">
+                      <Users className="text-muted-foreground size-4" />
+                      <p className="text-sm font-semibold">Family details</p>
+                    </div>
+                    {employee.familyDetail ? (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <InfoRow label="Father's name" value={employee.familyDetail.fatherName} />
+                        <InfoRow
+                          label="Father's date of birth"
+                          value={formatDateOrDash(employee.familyDetail.fatherDateOfBirth)}
+                        />
+                        <InfoRow label="Mother's name" value={employee.familyDetail.motherName} />
+                        <InfoRow
+                          label="Mother's date of birth"
+                          value={formatDateOrDash(employee.familyDetail.motherDateOfBirth)}
+                        />
+                        <InfoRow
+                          label="Marital status"
+                          value={employee.maritalStatus ? titleCase(employee.maritalStatus) : null}
+                        />
+                      </div>
+                    ) : (
+                      <EmptyState size="sm" icon={Users} title="Not filled in by the employee yet" />
+                    )}
+                  </CardContent>
+                </Card>
+
+                {(["CHILD", "OTHER_DEPENDENT", "NOMINEE"] as const).map((kind) => {
+                  const members = employee.familyMembers.filter((m) => m.kind === kind);
+                  const Icon = kind === "CHILD" ? Baby : kind === "NOMINEE" ? BadgeCheck : HeartHandshake;
+                  return (
+                    <Card key={kind}>
+                      <CardContent className="space-y-4 pt-6">
+                        <div className="flex items-center gap-2">
+                          <Icon className="text-muted-foreground size-4" />
+                          <p className="text-sm font-semibold">{FAMILY_MEMBER_KIND_LABELS[kind]}</p>
+                        </div>
+                        {members.length > 0 ? (
+                          <ul className="divide-y">
+                            {members.map((m) => (
+                              <li key={m.id} className="grid gap-4 py-3 first:pt-0 last:pb-0 sm:grid-cols-2">
+                                <InfoRow label="Name" value={m.name} />
+                                <InfoRow label="Relationship" value={m.relationship} />
+                                <InfoRow label="Date of birth" value={formatDateOrDash(m.dateOfBirth)} />
+                                {kind === "NOMINEE" && (
+                                  <InfoRow
+                                    label="Share"
+                                    value={m.sharePercentage != null ? `${m.sharePercentage}%` : null}
+                                  />
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <EmptyState size="sm" icon={Icon} title="None on file" />
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </TabsContent>
+
+              <TabsContent value="previous-employer" className="mt-4">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="text-muted-foreground size-4" />
+                      <p className="text-sm font-semibold">Previous employer details</p>
+                    </div>
+                    {employee.previousEmployers.length > 0 ? (
+                      <ul className="divide-y">
+                        {employee.previousEmployers.map((p) => (
+                          <li key={p.id} className="py-3 first:pt-0 last:pb-0">
+                            <p className="text-sm font-medium">{p.companyName}</p>
+                            <p className="text-muted-foreground text-xs">
+                              {p.designation ?? "—"} · {formatDateOrDash(p.fromDate)} –{" "}
+                              {p.toDate ? formatDate(p.toDate) : "Present"}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <EmptyState size="sm" icon={Briefcase} title="No previous employers on file" />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="contact" className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center gap-2">
+                      <ContactIcon className="text-muted-foreground size-4" />
+                      <p className="text-sm font-semibold">Contact details</p>
+                    </div>
+                    <InfoRow label="Personal email" value={employee.personalEmail} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="text-muted-foreground size-4" />
+                      <p className="text-sm font-semibold">
+                        Emergency contact{employee.emergencyContacts.length > 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    {employee.emergencyContacts.length > 0 ? (
+                      <div className="space-y-4">
+                        {employee.emergencyContacts.map((contact, i) => (
+                          <div key={contact.id} className={i > 0 ? "border-t pt-4" : undefined}>
+                            <div className="grid gap-4">
+                              <InfoRow label="Name" value={contact.name} />
+                              <InfoRow label="Relation" value={contact.relationship} />
+                              <InfoRow
+                                label="Contact no."
+                                value={contact.phone ? `${contact.isdCode ?? ""} ${contact.phone}`.trim() : null}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyState size="sm" icon={ShieldAlert} title="No emergency contact on file" />
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -373,8 +551,8 @@ export default function EmployeeDetailPage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="bank" className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Card>
+              <TabsContent value="bank" className="mt-4">
+                <Card className="sm:max-w-md">
                   <CardContent className="space-y-4 pt-6">
                     <div className="flex items-center gap-2">
                       <Landmark className="text-muted-foreground size-4" />
@@ -385,35 +563,9 @@ export default function EmployeeDetailPage() {
                         <InfoRow label="Bank" value={employee.bankDetail.bankName} />
                         <InfoRow label="Account number" value={maskAccountNumber(employee.bankDetail.accountNumber)} />
                         <InfoRow label="IFSC code" value={employee.bankDetail.ifscCode} />
-                        <InfoRow label="PAN" value={employee.bankDetail.panNumber} />
                       </div>
                     ) : (
                       <EmptyState size="sm" icon={Landmark} title="No bank details on file" />
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="space-y-4 pt-6">
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert className="text-muted-foreground size-4" />
-                      <p className="text-sm font-semibold">
-                        Emergency contact{employee.emergencyContacts.length > 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    {employee.emergencyContacts.length > 0 ? (
-                      <div className="space-y-4">
-                        {employee.emergencyContacts.map((contact, i) => (
-                          <div key={contact.id} className={i > 0 ? "border-t pt-4" : undefined}>
-                            <div className="grid gap-4">
-                              <InfoRow label="Name" value={contact.name} />
-                              <InfoRow label="Relationship" value={contact.relationship} />
-                              <InfoRow label="Phone" value={contact.phone} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <EmptyState size="sm" icon={ShieldAlert} title="No emergency contact on file" />
                     )}
                   </CardContent>
                 </Card>

@@ -166,8 +166,8 @@ describe('EmployeesService', () => {
           bankName: 'Test Bank',
           accountNumberEncrypted: 'enc(123456)',
           ifscCode: 'TEST0001',
-          panNumberEncrypted: 'enc(ABCDE1234F)',
         },
+        identification: null,
       });
 
       const result = await service.findOne('emp-1');
@@ -176,7 +176,32 @@ describe('EmployeesService', () => {
         bankName: 'Test Bank',
         accountNumber: '123456',
         ifscCode: 'TEST0001',
+      });
+    });
+
+    it('decrypts identification fields', async () => {
+      prisma.employee.findUnique.mockResolvedValue({
+        id: 'emp-1',
+        bankDetail: null,
+        identification: {
+          panNumberEncrypted: 'enc(ABCDE1234F)',
+          aadhaarNumberEncrypted: 'enc(123456789012)',
+          passportNumberEncrypted: null,
+          passportExpiryDate: null,
+          drivingLicenseNumberEncrypted: null,
+          drivingLicenseExpiryDate: null,
+        },
+      });
+
+      const result = await service.findOne('emp-1');
+
+      expect(result.identification).toEqual({
         panNumber: 'ABCDE1234F',
+        aadhaarNumber: '123456789012',
+        passportNumber: null,
+        passportExpiryDate: null,
+        drivingLicenseNumber: null,
+        drivingLicenseExpiryDate: null,
       });
     });
   });
@@ -253,18 +278,15 @@ describe('EmployeesService', () => {
           bankName: 'Test Bank',
           accountNumber: '123456',
           ifscCode: 'TEST0001',
-          panNumber: 'ABCDE1234F',
         },
         actor,
       );
 
       expect(encryptionService.encrypt).toHaveBeenCalledWith('123456');
-      expect(encryptionService.encrypt).toHaveBeenCalledWith('ABCDE1234F');
       expect(prisma.employeeBankDetail.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({
             accountNumberEncrypted: 'enc(123456)',
-            panNumberEncrypted: 'enc(ABCDE1234F)',
           }),
         }),
       );

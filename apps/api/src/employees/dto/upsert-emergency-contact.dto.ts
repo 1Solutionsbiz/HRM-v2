@@ -1,4 +1,4 @@
-import { IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpsertEmergencyContactDto {
   @IsString()
@@ -8,6 +8,11 @@ export class UpsertEmergencyContactDto {
   @IsString()
   @MaxLength(50)
   relationship!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  isdCode?: string;
 
   @IsString()
   @MaxLength(30)

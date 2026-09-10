@@ -590,7 +590,6 @@ export class PayrollService {
           bankName: string;
           accountNumberEncrypted: string;
           ifscCode: string;
-          panNumberEncrypted: string | null;
         } | null;
         [key: string]: unknown;
       } | null;

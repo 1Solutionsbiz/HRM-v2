@@ -9,6 +9,10 @@ import { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 import { WishBirthdayDto } from './dto/wish-birthday.dto.js';
+import { UpsertIdentificationDto } from './dto/upsert-identification.dto.js';
+import { UpsertFamilyDetailDto } from './dto/upsert-family-detail.dto.js';
+import { UpsertFamilyMemberDto } from './dto/upsert-family-member.dto.js';
+import { UpsertPreviousEmployerDto } from './dto/upsert-previous-employer.dto.js';
 
 /**
  * Class-level employee:manage covers every route except the two /me ones
@@ -37,6 +41,151 @@ export class EmployeesController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.employeesService.updateMyProfile(actor.userId, dto, actor);
+  }
+
+  // Identification / family / previous-employer / emergency-contact details
+  // are employee-self-editable (unlike bank details, which stay HR-only via
+  // the :id routes below) — same @RequirePermissions() override pattern and
+  // same reason for being registered before the :id routes.
+
+  @Put('me/identification')
+  @RequirePermissions()
+  upsertMyIdentification(
+    @Body() dto: UpsertIdentificationDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.upsertMyIdentification(actor.userId, dto, actor);
+  }
+
+  @Put('me/family-detail')
+  @RequirePermissions()
+  upsertMyFamilyDetail(
+    @Body() dto: UpsertFamilyDetailDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.upsertMyFamilyDetail(actor.userId, dto, actor);
+  }
+
+  @Post('me/children')
+  @RequirePermissions()
+  addMyChild(@Body() dto: UpsertFamilyMemberDto, @CurrentUser() actor: AuthContext) {
+    return this.employeesService.addMyFamilyMember(actor.userId, 'CHILD', dto, actor);
+  }
+
+  @Patch('me/children/:memberId')
+  @RequirePermissions()
+  updateMyChild(
+    @Param('memberId') memberId: string,
+    @Body() dto: UpsertFamilyMemberDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateMyFamilyMember(actor.userId, memberId, dto, actor);
+  }
+
+  @Delete('me/children/:memberId')
+  @RequirePermissions()
+  removeMyChild(@Param('memberId') memberId: string, @CurrentUser() actor: AuthContext) {
+    return this.employeesService.removeMyFamilyMember(actor.userId, memberId, actor);
+  }
+
+  @Post('me/dependents')
+  @RequirePermissions()
+  addMyDependent(@Body() dto: UpsertFamilyMemberDto, @CurrentUser() actor: AuthContext) {
+    return this.employeesService.addMyFamilyMember(actor.userId, 'OTHER_DEPENDENT', dto, actor);
+  }
+
+  @Patch('me/dependents/:memberId')
+  @RequirePermissions()
+  updateMyDependent(
+    @Param('memberId') memberId: string,
+    @Body() dto: UpsertFamilyMemberDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateMyFamilyMember(actor.userId, memberId, dto, actor);
+  }
+
+  @Delete('me/dependents/:memberId')
+  @RequirePermissions()
+  removeMyDependent(@Param('memberId') memberId: string, @CurrentUser() actor: AuthContext) {
+    return this.employeesService.removeMyFamilyMember(actor.userId, memberId, actor);
+  }
+
+  @Post('me/nominees')
+  @RequirePermissions()
+  addMyNominee(@Body() dto: UpsertFamilyMemberDto, @CurrentUser() actor: AuthContext) {
+    return this.employeesService.addMyFamilyMember(actor.userId, 'NOMINEE', dto, actor);
+  }
+
+  @Patch('me/nominees/:memberId')
+  @RequirePermissions()
+  updateMyNominee(
+    @Param('memberId') memberId: string,
+    @Body() dto: UpsertFamilyMemberDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateMyFamilyMember(actor.userId, memberId, dto, actor);
+  }
+
+  @Delete('me/nominees/:memberId')
+  @RequirePermissions()
+  removeMyNominee(@Param('memberId') memberId: string, @CurrentUser() actor: AuthContext) {
+    return this.employeesService.removeMyFamilyMember(actor.userId, memberId, actor);
+  }
+
+  @Post('me/previous-employers')
+  @RequirePermissions()
+  addMyPreviousEmployer(
+    @Body() dto: UpsertPreviousEmployerDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.addMyPreviousEmployer(actor.userId, dto, actor);
+  }
+
+  @Patch('me/previous-employers/:employerId')
+  @RequirePermissions()
+  updateMyPreviousEmployer(
+    @Param('employerId') employerId: string,
+    @Body() dto: UpsertPreviousEmployerDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateMyPreviousEmployer(actor.userId, employerId, dto, actor);
+  }
+
+  @Delete('me/previous-employers/:employerId')
+  @RequirePermissions()
+  removeMyPreviousEmployer(
+    @Param('employerId') employerId: string,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.removeMyPreviousEmployer(actor.userId, employerId, actor);
+  }
+
+  @Post('me/emergency-contacts')
+  @RequirePermissions()
+  addMyEmergencyContact(
+    @Body() dto: UpsertEmergencyContactDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.addMyEmergencyContact(actor.userId, dto, actor);
+  }
+
+  @Patch('me/emergency-contacts/:contactId')
+  @RequirePermissions()
+  updateMyEmergencyContact(
+    @Param('contactId') contactId: string,
+    @Body() dto: UpsertEmergencyContactDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.updateMyEmergencyContact(actor.userId, contactId, dto, actor);
+  }
+
+  @Delete('me/emergency-contacts/:contactId')
+  @RequirePermissions()
+  removeMyEmergencyContact(
+    @Param('contactId') contactId: string,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.removeMyEmergencyContact(actor.userId, contactId, actor);
   }
 
   @Post()

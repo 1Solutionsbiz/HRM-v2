@@ -1,26 +1,44 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { ChevronLeft, IdCard, Users, Briefcase, ShieldAlert, Pencil, Plus, Trash2, Baby, HeartHandshake, BadgeCheck } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
   getMyProfile,
   updateMyProfile,
+  upsertMyIdentification,
+  upsertMyFamilyDetail,
+  addMyFamilyMember,
+  updateMyFamilyMember,
+  removeMyFamilyMember,
+  addMyPreviousEmployer,
+  updateMyPreviousEmployer,
+  removeMyPreviousEmployer,
+  addMyEmergencyContact,
+  updateMyEmergencyContact,
+  removeMyEmergencyContact,
   employeeFullName,
   employeeInitials,
   titleCase,
   formatBloodGroup,
   maskAccountNumber,
   type EmployeeDetail,
+  type EmployeeFamilyMember,
+  type EmployeePreviousEmployer,
+  type EmergencyContact,
+  type FamilyMemberKind,
   type Gender,
   type MaritalStatus,
 } from "@/lib/api/employees";
 import { formatDate, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
+import { EmptyState } from "@/components/hrm/empty-state";
 import { CardSkeleton } from "@/components/hrm/loading-state";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -252,12 +270,644 @@ function EditProfileDialog({
   );
 }
 
+interface IdentificationFormState {
+  panNumber: string;
+  aadhaarNumber: string;
+  passportNumber: string;
+  passportExpiryDate: Date | undefined;
+  drivingLicenseNumber: string;
+  drivingLicenseExpiryDate: Date | undefined;
+}
+
+function toIdentificationForm(employee: EmployeeDetail): IdentificationFormState {
+  const id = employee.identification;
+  return {
+    panNumber: id?.panNumber ?? "",
+    aadhaarNumber: id?.aadhaarNumber ?? "",
+    passportNumber: id?.passportNumber ?? "",
+    passportExpiryDate: id?.passportExpiryDate ? new Date(id.passportExpiryDate) : undefined,
+    drivingLicenseNumber: id?.drivingLicenseNumber ?? "",
+    drivingLicenseExpiryDate: id?.drivingLicenseExpiryDate ? new Date(id.drivingLicenseExpiryDate) : undefined,
+  };
+}
+
+function IdentificationDialog({
+  employee,
+  onClose,
+  onSaved,
+}: {
+  employee: EmployeeDetail;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<IdentificationFormState>(() => toIdentificationForm(employee));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await upsertMyIdentification({
+        panNumber: form.panNumber.trim().toUpperCase(),
+        aadhaarNumber: form.aadhaarNumber.trim(),
+        passportNumber: form.passportNumber.trim() || undefined,
+        passportExpiryDate: form.passportExpiryDate ? toDateOnlyString(form.passportExpiryDate) : undefined,
+        drivingLicenseNumber: form.drivingLicenseNumber.trim() || undefined,
+        drivingLicenseExpiryDate: form.drivingLicenseExpiryDate
+          ? toDateOnlyString(form.drivingLicenseExpiryDate)
+          : undefined,
+      });
+      toast.success("Identification details updated");
+      onClose();
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Identification details</DialogTitle>
+          <DialogDescription>PAN and Aadhaar are required.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="id-pan">PAN no. *</Label>
+              <Input
+                id="id-pan"
+                value={form.panNumber}
+                maxLength={10}
+                placeholder="AAAAA9999A"
+                onChange={(e) => setForm((f) => ({ ...f, panNumber: e.target.value.toUpperCase() }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="id-aadhaar">Aadhaar no. *</Label>
+              <Input
+                id="id-aadhaar"
+                value={form.aadhaarNumber}
+                maxLength={12}
+                placeholder="12-digit number"
+                onChange={(e) => setForm((f) => ({ ...f, aadhaarNumber: e.target.value.replace(/\D/g, "") }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="id-passport">Passport no.</Label>
+              <Input
+                id="id-passport"
+                value={form.passportNumber}
+                onChange={(e) => setForm((f) => ({ ...f, passportNumber: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Passport expiry date</Label>
+              <DatePicker
+                value={form.passportExpiryDate}
+                onChange={(d) => setForm((f) => ({ ...f, passportExpiryDate: d }))}
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="id-dl">Driving license no.</Label>
+              <Input
+                id="id-dl"
+                value={form.drivingLicenseNumber}
+                onChange={(e) => setForm((f) => ({ ...f, drivingLicenseNumber: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Driving license expiry date</Label>
+              <DatePicker
+                value={form.drivingLicenseExpiryDate}
+                onChange={(d) => setForm((f) => ({ ...f, drivingLicenseExpiryDate: d }))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={saving || !form.panNumber.trim() || !form.aadhaarNumber.trim()}
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface FamilyDetailFormState {
+  fatherName: string;
+  fatherDateOfBirth: Date | undefined;
+  motherName: string;
+  motherDateOfBirth: Date | undefined;
+}
+
+function toFamilyDetailForm(employee: EmployeeDetail): FamilyDetailFormState {
+  const fd = employee.familyDetail;
+  return {
+    fatherName: fd?.fatherName ?? "",
+    fatherDateOfBirth: fd?.fatherDateOfBirth ? new Date(fd.fatherDateOfBirth) : undefined,
+    motherName: fd?.motherName ?? "",
+    motherDateOfBirth: fd?.motherDateOfBirth ? new Date(fd.motherDateOfBirth) : undefined,
+  };
+}
+
+function FamilyDetailDialog({
+  employee,
+  onClose,
+  onSaved,
+}: {
+  employee: EmployeeDetail;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<FamilyDetailFormState>(() => toFamilyDetailForm(employee));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await upsertMyFamilyDetail({
+        fatherName: form.fatherName.trim() || undefined,
+        fatherDateOfBirth: form.fatherDateOfBirth ? toDateOnlyString(form.fatherDateOfBirth) : undefined,
+        motherName: form.motherName.trim() || undefined,
+        motherDateOfBirth: form.motherDateOfBirth ? toDateOnlyString(form.motherDateOfBirth) : undefined,
+      });
+      toast.success("Family details updated");
+      onClose();
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Family details</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="fd-father-name">Father&apos;s name</Label>
+              <Input
+                id="fd-father-name"
+                value={form.fatherName}
+                onChange={(e) => setForm((f) => ({ ...f, fatherName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Father&apos;s date of birth</Label>
+              <DatePicker
+                value={form.fatherDateOfBirth}
+                onChange={(d) => setForm((f) => ({ ...f, fatherDateOfBirth: d }))}
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fd-mother-name">Mother&apos;s name</Label>
+              <Input
+                id="fd-mother-name"
+                value={form.motherName}
+                onChange={(e) => setForm((f) => ({ ...f, motherName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Mother&apos;s date of birth</Label>
+              <DatePicker
+                value={form.motherDateOfBirth}
+                onChange={(d) => setForm((f) => ({ ...f, motherDateOfBirth: d }))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const FAMILY_MEMBER_KIND_LABELS: Record<FamilyMemberKind, string> = {
+  CHILD: "Child",
+  OTHER_DEPENDENT: "Dependent",
+  NOMINEE: "Nominee",
+};
+
+interface FamilyMemberFormState {
+  name: string;
+  relationship: string;
+  dateOfBirth: Date | undefined;
+  sharePercentage: string;
+}
+
+function toFamilyMemberForm(member: EmployeeFamilyMember | null): FamilyMemberFormState {
+  return {
+    name: member?.name ?? "",
+    relationship: member?.relationship ?? "",
+    dateOfBirth: member?.dateOfBirth ? new Date(member.dateOfBirth) : undefined,
+    sharePercentage: member?.sharePercentage != null ? String(member.sharePercentage) : "",
+  };
+}
+
+function FamilyMemberDialog({
+  kind,
+  member,
+  onClose,
+  onSaved,
+}: {
+  kind: FamilyMemberKind;
+  member: EmployeeFamilyMember | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<FamilyMemberFormState>(() => toFamilyMemberForm(member));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        relationship: form.relationship.trim() || undefined,
+        dateOfBirth: form.dateOfBirth ? toDateOnlyString(form.dateOfBirth) : undefined,
+        sharePercentage:
+          kind === "NOMINEE" && form.sharePercentage.trim() ? Number(form.sharePercentage) : undefined,
+      };
+      if (member) {
+        await updateMyFamilyMember(kind, member.id, payload);
+      } else {
+        await addMyFamilyMember(kind, payload);
+      }
+      toast.success(`${FAMILY_MEMBER_KIND_LABELS[kind]} ${member ? "updated" : "added"}`);
+      onClose();
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {member ? "Edit" : "Add"} {FAMILY_MEMBER_KIND_LABELS[kind].toLowerCase()}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="fm-name">Name *</Label>
+            <Input
+              id="fm-name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+          {kind !== "CHILD" && (
+            <div className="space-y-2">
+              <Label htmlFor="fm-relationship">Relationship</Label>
+              <Input
+                id="fm-relationship"
+                value={form.relationship}
+                onChange={(e) => setForm((f) => ({ ...f, relationship: e.target.value }))}
+              />
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>Date of birth</Label>
+            <DatePicker
+              value={form.dateOfBirth}
+              onChange={(d) => setForm((f) => ({ ...f, dateOfBirth: d }))}
+              className="w-full"
+            />
+          </div>
+          {kind === "NOMINEE" && (
+            <div className="space-y-2">
+              <Label htmlFor="fm-share">Share (%)</Label>
+              <Input
+                id="fm-share"
+                type="number"
+                min={0}
+                max={100}
+                value={form.sharePercentage}
+                onChange={(e) => setForm((f) => ({ ...f, sharePercentage: e.target.value }))}
+              />
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !form.name.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface PreviousEmployerFormState {
+  companyName: string;
+  designation: string;
+  fromDate: Date | undefined;
+  toDate: Date | undefined;
+}
+
+function toPreviousEmployerForm(entry: EmployeePreviousEmployer | null): PreviousEmployerFormState {
+  return {
+    companyName: entry?.companyName ?? "",
+    designation: entry?.designation ?? "",
+    fromDate: entry?.fromDate ? new Date(entry.fromDate) : undefined,
+    toDate: entry?.toDate ? new Date(entry.toDate) : undefined,
+  };
+}
+
+function PreviousEmployerDialog({
+  entry,
+  onClose,
+  onSaved,
+}: {
+  entry: EmployeePreviousEmployer | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<PreviousEmployerFormState>(() => toPreviousEmployerForm(entry));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const payload = {
+        companyName: form.companyName.trim(),
+        designation: form.designation.trim() || undefined,
+        fromDate: form.fromDate ? toDateOnlyString(form.fromDate) : undefined,
+        toDate: form.toDate ? toDateOnlyString(form.toDate) : undefined,
+      };
+      if (entry) {
+        await updateMyPreviousEmployer(entry.id, payload);
+      } else {
+        await addMyPreviousEmployer(payload);
+      }
+      toast.success(`Previous employer ${entry ? "updated" : "added"}`);
+      onClose();
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{entry ? "Edit" : "Add"} previous employer</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="pe-company">Company name *</Label>
+            <Input
+              id="pe-company"
+              value={form.companyName}
+              onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pe-designation">Designation</Label>
+            <Input
+              id="pe-designation"
+              value={form.designation}
+              onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>From</Label>
+              <DatePicker
+                value={form.fromDate}
+                onChange={(d) => setForm((f) => ({ ...f, fromDate: d }))}
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>To</Label>
+              <DatePicker
+                value={form.toDate}
+                onChange={(d) => setForm((f) => ({ ...f, toDate: d }))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !form.companyName.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface EmergencyContactFormState {
+  name: string;
+  relationship: string;
+  isdCode: string;
+  phone: string;
+}
+
+function toEmergencyContactForm(contact: EmergencyContact | null): EmergencyContactFormState {
+  return {
+    name: contact?.name ?? "",
+    relationship: contact?.relationship ?? "",
+    isdCode: contact?.isdCode ?? "+91",
+    phone: contact?.phone ?? "",
+  };
+}
+
+function EmergencyContactDialog({
+  contact,
+  onClose,
+  onSaved,
+}: {
+  contact: EmergencyContact | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<EmergencyContactFormState>(() => toEmergencyContactForm(contact));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        relationship: form.relationship.trim(),
+        isdCode: form.isdCode.trim() || undefined,
+        phone: form.phone.trim(),
+      };
+      if (contact) {
+        await updateMyEmergencyContact(contact.id, payload);
+      } else {
+        await addMyEmergencyContact(payload);
+      }
+      toast.success(`Emergency contact ${contact ? "updated" : "added"}`);
+      onClose();
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{contact ? "Edit" : "Add"} emergency contact</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="ec-name">Name *</Label>
+            <Input
+              id="ec-name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-relation">Relation *</Label>
+            <Input
+              id="ec-relation"
+              value={form.relationship}
+              onChange={(e) => setForm((f) => ({ ...f, relationship: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ec-isd">ISD code</Label>
+              <Input
+                id="ec-isd"
+                value={form.isdCode}
+                onChange={(e) => setForm((f) => ({ ...f, isdCode: e.target.value }))}
+              />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="ec-phone">Contact no. *</Label>
+              <Input
+                id="ec-phone"
+                value={form.phone}
+                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !form.name.trim() || !form.relationship.trim() || !form.phone.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ProfilePage() {
   const { data: employee, loading, error, refetch } = useAsync(getMyProfile);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [idOpen, setIdOpen] = React.useState(false);
+  const [familyDetailOpen, setFamilyDetailOpen] = React.useState(false);
+  const [familyMemberDialog, setFamilyMemberDialog] = React.useState<{
+    kind: FamilyMemberKind;
+    member: EmployeeFamilyMember | null;
+  } | null>(null);
+  const [familyMemberToDelete, setFamilyMemberToDelete] = React.useState<EmployeeFamilyMember | null>(null);
+  const [employerDialog, setEmployerDialog] = React.useState<{ entry: EmployeePreviousEmployer | null } | null>(
+    null,
+  );
+  const [employerToDelete, setEmployerToDelete] = React.useState<EmployeePreviousEmployer | null>(null);
+  const [contactDialog, setContactDialog] = React.useState<{ contact: EmergencyContact | null } | null>(null);
+  const [contactToDelete, setContactToDelete] = React.useState<EmergencyContact | null>(null);
 
   return (
     <div className="space-y-6">
+      <div>
+        <Button variant="ghost" size="sm" asChild className="text-muted-foreground -ml-2.5 mb-2">
+          <Link href="/dashboard">
+            <ChevronLeft />
+            Back
+          </Link>
+        </Button>
+      </div>
+
       <PageHeader title="Profile" description="Your personal and employment information." />
 
       <AsyncSection loading={loading} error={error} onRetry={refetch} loadingFallback={<CardSkeleton lines={4} />}>
@@ -287,7 +937,11 @@ export default function ProfilePage() {
               <TabsList>
                 <TabsTrigger value="personal">Personal</TabsTrigger>
                 <TabsTrigger value="employment">Employment</TabsTrigger>
-                <TabsTrigger value="bank">Bank & emergency</TabsTrigger>
+                <TabsTrigger value="identification">Identification</TabsTrigger>
+                <TabsTrigger value="family">Family</TabsTrigger>
+                <TabsTrigger value="previous-employer">Previous employer</TabsTrigger>
+                <TabsTrigger value="contact">Contact</TabsTrigger>
+                <TabsTrigger value="bank">Bank</TabsTrigger>
               </TabsList>
 
               <TabsContent value="personal" className="mt-4">
@@ -331,8 +985,253 @@ export default function ProfilePage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="bank" className="mt-4">
+              <TabsContent value="identification" className="mt-4">
                 <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <IdCard className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">Identification details</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setIdOpen(true)}>
+                        <Pencil />
+                        Edit
+                      </Button>
+                    </div>
+                    {employee.identification ? (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="PAN no." value={employee.identification.panNumber} />
+                        <Field label="Aadhaar no." value={employee.identification.aadhaarNumber} />
+                        <Field label="Passport no." value={employee.identification.passportNumber} />
+                        <Field
+                          label="Passport expiry date"
+                          value={
+                            employee.identification.passportExpiryDate
+                              ? formatDate(employee.identification.passportExpiryDate)
+                              : null
+                          }
+                        />
+                        <Field label="Driving license no." value={employee.identification.drivingLicenseNumber} />
+                        <Field
+                          label="Driving license expiry date"
+                          value={
+                            employee.identification.drivingLicenseExpiryDate
+                              ? formatDate(employee.identification.drivingLicenseExpiryDate)
+                              : null
+                          }
+                        />
+                      </div>
+                    ) : (
+                      <EmptyState
+                        size="sm"
+                        icon={IdCard}
+                        title="Add your PAN and Aadhaar"
+                        description="Required for payroll and compliance."
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="family" className="mt-4 space-y-4">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">Family details</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setFamilyDetailOpen(true)}>
+                        <Pencil />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Father's name" value={employee.familyDetail?.fatherName} />
+                      <Field
+                        label="Father's date of birth"
+                        value={
+                          employee.familyDetail?.fatherDateOfBirth
+                            ? formatDate(employee.familyDetail.fatherDateOfBirth)
+                            : null
+                        }
+                      />
+                      <Field label="Mother's name" value={employee.familyDetail?.motherName} />
+                      <Field
+                        label="Mother's date of birth"
+                        value={
+                          employee.familyDetail?.motherDateOfBirth
+                            ? formatDate(employee.familyDetail.motherDateOfBirth)
+                            : null
+                        }
+                      />
+                      <Field
+                        label="Marital status"
+                        value={employee.maritalStatus ? titleCase(employee.maritalStatus) : null}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {(["CHILD", "OTHER_DEPENDENT", "NOMINEE"] as const).map((kind) => {
+                  const members = employee.familyMembers.filter((m) => m.kind === kind);
+                  const Icon = kind === "CHILD" ? Baby : kind === "NOMINEE" ? BadgeCheck : HeartHandshake;
+                  const sectionTitle =
+                    kind === "CHILD" ? "Children" : kind === "NOMINEE" ? "Nominee details" : "Other dependents";
+                  return (
+                    <Card key={kind}>
+                      <CardContent className="space-y-4 pt-6">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Icon className="text-muted-foreground size-4" />
+                            <p className="text-sm font-semibold">{sectionTitle}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFamilyMemberDialog({ kind, member: null })}
+                          >
+                            <Plus />
+                            Add {FAMILY_MEMBER_KIND_LABELS[kind].toLowerCase()}
+                          </Button>
+                        </div>
+                        {members.length > 0 ? (
+                          <ul className="divide-y">
+                            {members.map((m) => (
+                              <li key={m.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                                <div className="grid flex-1 gap-1 sm:grid-cols-3">
+                                  <Field label="Name" value={m.name} />
+                                  {kind !== "CHILD" && <Field label="Relationship" value={m.relationship} />}
+                                  <Field label="Date of birth" value={m.dateOfBirth ? formatDate(m.dateOfBirth) : null} />
+                                  {kind === "NOMINEE" && (
+                                    <Field label="Share" value={m.sharePercentage != null ? `${m.sharePercentage}%` : null} />
+                                  )}
+                                </div>
+                                <div className="flex shrink-0 gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setFamilyMemberDialog({ kind, member: m })}
+                                  >
+                                    <Pencil />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => setFamilyMemberToDelete(m)}>
+                                    <Trash2 />
+                                  </Button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <EmptyState size="sm" icon={Icon} title="None added yet" />
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </TabsContent>
+
+              <TabsContent value="previous-employer" className="mt-4">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">Previous employer details</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setEmployerDialog({ entry: null })}>
+                        <Plus />
+                        Add employer
+                      </Button>
+                    </div>
+                    {employee.previousEmployers.length > 0 ? (
+                      <ul className="divide-y">
+                        {employee.previousEmployers.map((p) => (
+                          <li key={p.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                            <div>
+                              <p className="text-sm font-medium">{p.companyName}</p>
+                              <p className="text-muted-foreground text-xs">
+                                {p.designation ?? "—"} · {p.fromDate ? formatDate(p.fromDate) : "—"} –{" "}
+                                {p.toDate ? formatDate(p.toDate) : "Present"}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => setEmployerDialog({ entry: p })}>
+                                <Pencil />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => setEmployerToDelete(p)}>
+                                <Trash2 />
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <EmptyState size="sm" icon={Briefcase} title="No previous employers added yet" />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="contact" className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="text-muted-foreground size-4" />
+                      <p className="text-sm font-semibold">Contact details</p>
+                    </div>
+                    <Field label="Personal email" value={employee.personalEmail} />
+                    <p className="text-muted-foreground text-xs">
+                      Update your personal email from the Personal tab&apos;s edit button.
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">
+                          Emergency contact{employee.emergencyContacts.length > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setContactDialog({ contact: null })}>
+                        <Plus />
+                        Add
+                      </Button>
+                    </div>
+                    {employee.emergencyContacts.length > 0 ? (
+                      <div className="space-y-4">
+                        {employee.emergencyContacts.map((contact, i) => (
+                          <div
+                            key={contact.id}
+                            className={`flex items-start justify-between gap-3 ${i > 0 ? "border-t pt-4" : ""}`}
+                          >
+                            <div className="grid flex-1 gap-1">
+                              <Field label="Name" value={contact.name} />
+                              <Field label="Relation" value={contact.relationship} />
+                              <Field label="Contact no." value={`${contact.isdCode ?? ""} ${contact.phone}`.trim()} />
+                            </div>
+                            <div className="flex shrink-0 gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => setContactDialog({ contact })}>
+                                <Pencil />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => setContactToDelete(contact)}>
+                                <Trash2 />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyState size="sm" icon={ShieldAlert} title="No emergency contact on file" />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="bank" className="mt-4">
+                <Card className="sm:max-w-md">
                   <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
                     {employee.bankDetail ? (
                       <>
@@ -342,19 +1241,6 @@ export default function ProfilePage() {
                       </>
                     ) : (
                       <p className="text-muted-foreground text-sm sm:col-span-2">No bank details on file.</p>
-                    )}
-                    {employee.emergencyContacts.length > 0 ? (
-                      employee.emergencyContacts.map((contact, i) => (
-                        <React.Fragment key={contact.id}>
-                          <Field
-                            label={employee.emergencyContacts.length > 1 ? `Emergency contact ${i + 1}` : "Emergency contact"}
-                            value={contact.name}
-                          />
-                          <Field label="Relationship / phone" value={`${contact.relationship} · ${contact.phone}`} />
-                        </React.Fragment>
-                      ))
-                    ) : (
-                      <p className="text-muted-foreground text-sm sm:col-span-2">No emergency contact on file.</p>
                     )}
                   </CardContent>
                 </Card>
@@ -368,6 +1254,73 @@ export default function ProfilePage() {
                 onSaved={refetch}
               />
             )}
+            {idOpen && (
+              <IdentificationDialog employee={employee} onClose={() => setIdOpen(false)} onSaved={refetch} />
+            )}
+            {familyDetailOpen && (
+              <FamilyDetailDialog employee={employee} onClose={() => setFamilyDetailOpen(false)} onSaved={refetch} />
+            )}
+            {familyMemberDialog && (
+              <FamilyMemberDialog
+                kind={familyMemberDialog.kind}
+                member={familyMemberDialog.member}
+                onClose={() => setFamilyMemberDialog(null)}
+                onSaved={refetch}
+              />
+            )}
+            <ConfirmDialog
+              open={!!familyMemberToDelete}
+              onOpenChange={(open) => !open && setFamilyMemberToDelete(null)}
+              title={`Remove ${familyMemberToDelete?.name ?? ""}?`}
+              variant="destructive"
+              confirmLabel="Remove"
+              onConfirm={async () => {
+                if (!familyMemberToDelete) return;
+                await removeMyFamilyMember(familyMemberToDelete.kind, familyMemberToDelete.id);
+                toast.success("Removed");
+                refetch();
+              }}
+            />
+            {employerDialog && (
+              <PreviousEmployerDialog
+                entry={employerDialog.entry}
+                onClose={() => setEmployerDialog(null)}
+                onSaved={refetch}
+              />
+            )}
+            <ConfirmDialog
+              open={!!employerToDelete}
+              onOpenChange={(open) => !open && setEmployerToDelete(null)}
+              title={`Remove ${employerToDelete?.companyName ?? ""}?`}
+              variant="destructive"
+              confirmLabel="Remove"
+              onConfirm={async () => {
+                if (!employerToDelete) return;
+                await removeMyPreviousEmployer(employerToDelete.id);
+                toast.success("Removed");
+                refetch();
+              }}
+            />
+            {contactDialog && (
+              <EmergencyContactDialog
+                contact={contactDialog.contact}
+                onClose={() => setContactDialog(null)}
+                onSaved={refetch}
+              />
+            )}
+            <ConfirmDialog
+              open={!!contactToDelete}
+              onOpenChange={(open) => !open && setContactToDelete(null)}
+              title={`Remove ${contactToDelete?.name ?? ""}?`}
+              variant="destructive"
+              confirmLabel="Remove"
+              onConfirm={async () => {
+                if (!contactToDelete) return;
+                await removeMyEmergencyContact(contactToDelete.id);
+                toast.success("Removed");
+                refetch();
+              }}
+            />
           </>
         )}
       </AsyncSection>

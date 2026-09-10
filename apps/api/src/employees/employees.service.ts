@@ -16,6 +16,11 @@ import type { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import type { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 import type { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 import type { WishBirthdayDto } from './dto/wish-birthday.dto.js';
+import type { UpsertIdentificationDto } from './dto/upsert-identification.dto.js';
+import type { UpsertFamilyDetailDto } from './dto/upsert-family-detail.dto.js';
+import type { UpsertFamilyMemberDto } from './dto/upsert-family-member.dto.js';
+import type { UpsertPreviousEmployerDto } from './dto/upsert-previous-employer.dto.js';
+import type { FamilyMemberKind } from '../generated/prisma/enums.js';
 
 const EMPLOYEE_INCLUDE = {
   user: { select: { email: true, isActive: true } },
@@ -24,6 +29,10 @@ const EMPLOYEE_INCLUDE = {
   manager: { select: { id: true, firstName: true, lastName: true } },
   emergencyContacts: true,
   bankDetail: true,
+  identification: true,
+  familyDetail: true,
+  familyMembers: true,
+  previousEmployers: { orderBy: { fromDate: 'desc' } },
   education: { orderBy: { startDate: 'desc' } },
   assets: { orderBy: { issuedDate: 'desc' } },
   documents: { include: { documentType: true } },
@@ -321,9 +330,6 @@ export class EmployeesService {
     const accountNumberEncrypted = this.encryptionService.encrypt(
       dto.accountNumber,
     );
-    const panNumberEncrypted = dto.panNumber
-      ? this.encryptionService.encrypt(dto.panNumber)
-      : null;
 
     await this.prisma.employeeBankDetail.upsert({
       where: { employeeId: id },
@@ -332,13 +338,11 @@ export class EmployeesService {
         bankName: dto.bankName,
         accountNumberEncrypted,
         ifscCode: dto.ifscCode,
-        panNumberEncrypted,
       },
       update: {
         bankName: dto.bankName,
         accountNumberEncrypted,
         ifscCode: dto.ifscCode,
-        panNumberEncrypted,
       },
     });
 
@@ -430,6 +434,341 @@ export class EmployeesService {
     if (!contact || contact.employeeId !== employeeId) {
       throw new NotFoundException('Emergency contact not found for this employee');
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Identification, family, and previous-employer details.
+  //
+  // Unlike bank details/emergency contacts (HR-only edit via /employees/:id),
+  // this data is employee-self-editable by explicit product decision — an
+  // employee knows their own PAN/Aadhaar/family/work-history best. Every
+  // method below takes the resolved employeeId directly; the `my*` wrappers
+  // further down resolve it from the caller's own userId so a self-service
+  // request can never touch another employee's row.
+  // ---------------------------------------------------------------------
+
+  async upsertIdentification(
+    id: string,
+    dto: UpsertIdentificationDto,
+    actor: AuthContext,
+  ) {
+    await this.assertExists(id);
+
+    const data = {
+      panNumberEncrypted: this.encryptionService.encrypt(dto.panNumber),
+      aadhaarNumberEncrypted: this.encryptionService.encrypt(dto.aadhaarNumber),
+      passportNumberEncrypted: dto.passportNumber
+        ? this.encryptionService.encrypt(dto.passportNumber)
+        : null,
+      passportExpiryDate: dto.passportExpiryDate
+        ? new Date(dto.passportExpiryDate)
+        : null,
+      drivingLicenseNumberEncrypted: dto.drivingLicenseNumber
+        ? this.encryptionService.encrypt(dto.drivingLicenseNumber)
+        : null,
+      drivingLicenseExpiryDate: dto.drivingLicenseExpiryDate
+        ? new Date(dto.drivingLicenseExpiryDate)
+        : null,
+    };
+
+    await this.prisma.employeeIdentification.upsert({
+      where: { employeeId: id },
+      create: { employeeId: id, ...data },
+      update: data,
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Identification details updated',
+    });
+
+    return this.findOne(id);
+  }
+
+  async upsertFamilyDetail(id: string, dto: UpsertFamilyDetailDto, actor: AuthContext) {
+    await this.assertExists(id);
+
+    const data = {
+      fatherName: dto.fatherName,
+      fatherDateOfBirth: dto.fatherDateOfBirth ? new Date(dto.fatherDateOfBirth) : null,
+      motherName: dto.motherName,
+      motherDateOfBirth: dto.motherDateOfBirth ? new Date(dto.motherDateOfBirth) : null,
+    };
+
+    await this.prisma.employeeFamilyDetail.upsert({
+      where: { employeeId: id },
+      create: { employeeId: id, ...data },
+      update: data,
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Family details updated',
+    });
+
+    return this.findOne(id);
+  }
+
+  async addFamilyMember(
+    id: string,
+    kind: FamilyMemberKind,
+    dto: UpsertFamilyMemberDto,
+    actor: AuthContext,
+  ) {
+    await this.assertExists(id);
+
+    await this.prisma.employeeFamilyMember.create({
+      data: {
+        employeeId: id,
+        kind,
+        name: dto.name,
+        relationship: dto.relationship,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+        sharePercentage: dto.sharePercentage,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: `${kind === 'CHILD' ? 'Child' : kind === 'NOMINEE' ? 'Nominee' : 'Dependent'} added`,
+    });
+
+    return this.findOne(id);
+  }
+
+  async updateFamilyMember(
+    id: string,
+    memberId: string,
+    dto: UpsertFamilyMemberDto,
+    actor: AuthContext,
+  ) {
+    await this.assertFamilyMemberBelongsToEmployee(id, memberId);
+
+    await this.prisma.employeeFamilyMember.update({
+      where: { id: memberId },
+      data: {
+        name: dto.name,
+        relationship: dto.relationship,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+        sharePercentage: dto.sharePercentage,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Family member updated',
+    });
+
+    return this.findOne(id);
+  }
+
+  async removeFamilyMember(id: string, memberId: string, actor: AuthContext) {
+    await this.assertFamilyMemberBelongsToEmployee(id, memberId);
+
+    await this.prisma.employeeFamilyMember.delete({ where: { id: memberId } });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Family member removed',
+    });
+
+    return this.findOne(id);
+  }
+
+  private async assertFamilyMemberBelongsToEmployee(employeeId: string, memberId: string) {
+    const member = await this.prisma.employeeFamilyMember.findUnique({
+      where: { id: memberId },
+      select: { employeeId: true },
+    });
+    if (!member || member.employeeId !== employeeId) {
+      throw new NotFoundException('Family member not found for this employee');
+    }
+  }
+
+  async addPreviousEmployer(
+    id: string,
+    dto: UpsertPreviousEmployerDto,
+    actor: AuthContext,
+  ) {
+    await this.assertExists(id);
+
+    await this.prisma.employeePreviousEmployer.create({
+      data: {
+        employeeId: id,
+        companyName: dto.companyName,
+        designation: dto.designation,
+        fromDate: dto.fromDate ? new Date(dto.fromDate) : null,
+        toDate: dto.toDate ? new Date(dto.toDate) : null,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Previous employer added',
+    });
+
+    return this.findOne(id);
+  }
+
+  async updatePreviousEmployer(
+    id: string,
+    employerId: string,
+    dto: UpsertPreviousEmployerDto,
+    actor: AuthContext,
+  ) {
+    await this.assertPreviousEmployerBelongsToEmployee(id, employerId);
+
+    await this.prisma.employeePreviousEmployer.update({
+      where: { id: employerId },
+      data: {
+        companyName: dto.companyName,
+        designation: dto.designation,
+        fromDate: dto.fromDate ? new Date(dto.fromDate) : null,
+        toDate: dto.toDate ? new Date(dto.toDate) : null,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Previous employer updated',
+    });
+
+    return this.findOne(id);
+  }
+
+  async removePreviousEmployer(id: string, employerId: string, actor: AuthContext) {
+    await this.assertPreviousEmployerBelongsToEmployee(id, employerId);
+
+    await this.prisma.employeePreviousEmployer.delete({ where: { id: employerId } });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: id,
+      description: 'Previous employer removed',
+    });
+
+    return this.findOne(id);
+  }
+
+  private async assertPreviousEmployerBelongsToEmployee(employeeId: string, employerId: string) {
+    const employer = await this.prisma.employeePreviousEmployer.findUnique({
+      where: { id: employerId },
+      select: { employeeId: true },
+    });
+    if (!employer || employer.employeeId !== employeeId) {
+      throw new NotFoundException('Previous employer not found for this employee');
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Self-service (/employees/me/...) wrappers — resolve employeeId from the
+  // caller's own userId so these can never act on another employee's data.
+  // ---------------------------------------------------------------------
+
+  async addMyEmergencyContact(userId: string, dto: UpsertEmergencyContactDto, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.addEmergencyContact(employeeId, dto, actor);
+  }
+
+  async updateMyEmergencyContact(
+    userId: string,
+    contactId: string,
+    dto: UpsertEmergencyContactDto,
+    actor: AuthContext,
+  ) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.updateEmergencyContact(employeeId, contactId, dto, actor);
+  }
+
+  async removeMyEmergencyContact(userId: string, contactId: string, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.removeEmergencyContact(employeeId, contactId, actor);
+  }
+
+  async upsertMyIdentification(userId: string, dto: UpsertIdentificationDto, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.upsertIdentification(employeeId, dto, actor);
+  }
+
+  async upsertMyFamilyDetail(userId: string, dto: UpsertFamilyDetailDto, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.upsertFamilyDetail(employeeId, dto, actor);
+  }
+
+  async addMyFamilyMember(
+    userId: string,
+    kind: FamilyMemberKind,
+    dto: UpsertFamilyMemberDto,
+    actor: AuthContext,
+  ) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.addFamilyMember(employeeId, kind, dto, actor);
+  }
+
+  async updateMyFamilyMember(
+    userId: string,
+    memberId: string,
+    dto: UpsertFamilyMemberDto,
+    actor: AuthContext,
+  ) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.updateFamilyMember(employeeId, memberId, dto, actor);
+  }
+
+  async removeMyFamilyMember(userId: string, memberId: string, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.removeFamilyMember(employeeId, memberId, actor);
+  }
+
+  async addMyPreviousEmployer(userId: string, dto: UpsertPreviousEmployerDto, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.addPreviousEmployer(employeeId, dto, actor);
+  }
+
+  async updateMyPreviousEmployer(
+    userId: string,
+    employerId: string,
+    dto: UpsertPreviousEmployerDto,
+    actor: AuthContext,
+  ) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.updatePreviousEmployer(employeeId, employerId, dto, actor);
+  }
+
+  async removeMyPreviousEmployer(userId: string, employerId: string, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    return this.removePreviousEmployer(employeeId, employerId, actor);
   }
 
   /**
@@ -625,11 +964,21 @@ export class EmployeesService {
       bankName: string;
       accountNumberEncrypted: string;
       ifscCode: string;
+    } | null;
+    identification: {
       panNumberEncrypted: string | null;
+      aadhaarNumberEncrypted: string | null;
+      passportNumberEncrypted: string | null;
+      passportExpiryDate: Date | null;
+      drivingLicenseNumberEncrypted: string | null;
+      drivingLicenseExpiryDate: Date | null;
     } | null;
     [key: string]: unknown;
   }) {
-    const { bankDetail, ...rest } = employee;
+    const { bankDetail, identification, ...rest } = employee;
+    const decryptOrNull = (value: string | null) =>
+      value ? this.encryptionService.decrypt(value) : null;
+
     return {
       ...rest,
       bankDetail: bankDetail
@@ -639,9 +988,16 @@ export class EmployeesService {
               bankDetail.accountNumberEncrypted,
             ),
             ifscCode: bankDetail.ifscCode,
-            panNumber: bankDetail.panNumberEncrypted
-              ? this.encryptionService.decrypt(bankDetail.panNumberEncrypted)
-              : null,
+          }
+        : null,
+      identification: identification
+        ? {
+            panNumber: decryptOrNull(identification.panNumberEncrypted),
+            aadhaarNumber: decryptOrNull(identification.aadhaarNumberEncrypted),
+            passportNumber: decryptOrNull(identification.passportNumberEncrypted),
+            passportExpiryDate: identification.passportExpiryDate,
+            drivingLicenseNumber: decryptOrNull(identification.drivingLicenseNumberEncrypted),
+            drivingLicenseExpiryDate: identification.drivingLicenseExpiryDate,
           }
         : null,
     };
