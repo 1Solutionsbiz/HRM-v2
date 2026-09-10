@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiUpload } from "@/lib/api-client";
 
 export type DocumentStatus = "VERIFIED" | "PENDING_REVIEW" | "MISSING" | "REJECTED";
 export type DocumentCategory = "IDENTITY" | "EDUCATION" | "BANKING" | "EMPLOYMENT";
@@ -17,6 +17,10 @@ export interface DocumentChecklistItem {
 
 export function getMyDocuments(): Promise<DocumentChecklistItem[]> {
   return apiFetch<DocumentChecklistItem[]>("/documents/mine");
+}
+
+export function uploadDocumentFile(file: File): Promise<{ url: string }> {
+  return apiUpload("/documents/upload", file);
 }
 
 export function submitDocument(documentTypeId: string, fileUrl: string) {

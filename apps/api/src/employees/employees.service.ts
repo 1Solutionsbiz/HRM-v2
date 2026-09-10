@@ -3,7 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { unlink } from 'node:fs/promises';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { avatarFilePath } from './avatar-upload.config.js';
 import { EncryptionService } from '../security/encryption.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -928,6 +930,44 @@ export class EmployeesService {
       targetType: 'Employee',
       targetId: employeeId,
       description: 'Updated own profile',
+    });
+
+    return this.findOne(employeeId);
+  }
+
+  /**
+   * The file itself is already saved (multer, before this runs) - this
+   * just points the employee's avatarUrl at it and best-effort deletes
+   * whatever the previous photo was, so replacing a photo repeatedly
+   * doesn't leak files on disk. Cleanup never fails the request: a stale
+   * orphaned file is a much smaller problem than losing the new upload.
+   */
+  async uploadMyAvatar(userId: string, avatarUrl: string, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const existing = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { avatarUrl: true },
+    });
+
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: { avatarUrl },
+    });
+
+    if (existing?.avatarUrl) {
+      const oldFilename = existing.avatarUrl.split('/').pop();
+      if (oldFilename) {
+        await unlink(avatarFilePath(oldFilename)).catch(() => undefined);
+      }
+    }
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: employeeId,
+      description: 'Updated profile photo',
     });
 
     return this.findOne(employeeId);

@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiUpload } from "@/lib/api-client";
 
 export type EmployeeStatus = "ACTIVE" | "INACTIVE";
 export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN";
@@ -231,6 +231,10 @@ export interface UpdateMyProfilePayload {
 
 export function updateMyProfile(payload: UpdateMyProfilePayload): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>("/employees/me", { method: "PATCH", body: payload });
+}
+
+export function uploadMyAvatar(file: File): Promise<EmployeeDetail> {
+  return apiUpload<EmployeeDetail>("/employees/me/avatar", file);
 }
 
 export function employeeFullName(e: { firstName: string; lastName: string }): string {

@@ -3,12 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronLeft, IdCard, Users, Briefcase, ShieldAlert, Pencil, Plus, Trash2, Baby, HeartHandshake, BadgeCheck } from "lucide-react";
+import { ChevronLeft, IdCard, Users, Briefcase, ShieldAlert, Pencil, Plus, Trash2, Baby, HeartHandshake, BadgeCheck, Camera, Loader2 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
   getMyProfile,
   updateMyProfile,
+  uploadMyAvatar,
   upsertMyIdentification,
   upsertMyFamilyDetail,
   addMyFamilyMember,
@@ -895,6 +896,7 @@ function EmergencyContactDialog({
 export default function ProfilePage() {
   const { data: employee, loading, error, refetch } = useAsync(getMyProfile);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = React.useState(false);
   const [idOpen, setIdOpen] = React.useState(false);
   const [familyDetailOpen, setFamilyDetailOpen] = React.useState(false);
   const [familyMemberDialog, setFamilyMemberDialog] = React.useState<{
@@ -908,6 +910,33 @@ export default function ProfilePage() {
   const [employerToDelete, setEmployerToDelete] = React.useState<EmployeePreviousEmployer | null>(null);
   const [contactDialog, setContactDialog] = React.useState<{ contact: EmergencyContact | null } | null>(null);
   const [contactToDelete, setContactToDelete] = React.useState<EmergencyContact | null>(null);
+
+  const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+      toast.error("Profile photos must be a JPEG, PNG, or WEBP file.");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      toast.error("Photo must be smaller than 5 MB.");
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      await uploadMyAvatar(file);
+      toast.success("Profile photo updated");
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't upload this photo. Please try again.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -927,10 +956,31 @@ export default function ProfilePage() {
           <>
             <Card>
               <CardContent className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:text-left">
-                <Avatar className="size-16">
-                  {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
-                  <AvatarFallback className="text-lg">{employeeInitials(employee)}</AvatarFallback>
-                </Avatar>
+                <div className="relative shrink-0">
+                  <Avatar className="size-16">
+                    {employee.avatarUrl && <AvatarImage src={employee.avatarUrl} alt="" />}
+                    <AvatarFallback className="text-lg">{employeeInitials(employee)}</AvatarFallback>
+                  </Avatar>
+                  <label
+                    htmlFor="avatar-file"
+                    aria-label="Change profile photo"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 absolute -right-1 -bottom-1 flex size-6 cursor-pointer items-center justify-center rounded-full border-2 border-background"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Camera className="size-3" />
+                    )}
+                  </label>
+                  <input
+                    id="avatar-file"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={uploadingAvatar}
+                    onChange={handleAvatarChange}
+                  />
+                </div>
                 <div className="flex-1">
                   <p className="text-lg font-semibold">{employeeFullName(employee)}</p>
                   <p className="text-muted-foreground text-sm">

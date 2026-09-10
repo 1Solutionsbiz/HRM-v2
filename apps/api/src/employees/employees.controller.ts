@@ -1,6 +1,25 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Req,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { readFile } from 'node:fs/promises';
+import type { Request, Response } from 'express';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { EmployeesService } from './employees.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
@@ -13,6 +32,17 @@ import { UpsertIdentificationDto } from './dto/upsert-identification.dto.js';
 import { UpsertFamilyDetailDto } from './dto/upsert-family-detail.dto.js';
 import { UpsertFamilyMemberDto } from './dto/upsert-family-member.dto.js';
 import { UpsertPreviousEmployerDto } from './dto/upsert-previous-employer.dto.js';
+import { avatarFilePath, avatarMulterOptions } from './avatar-upload.config.js';
+
+// Matches exactly what avatar-upload.config.ts's filename() generates -
+// also doubles as the path-traversal guard for the GET route below.
+const AVATAR_FILENAME_PATTERN = /^[a-f0-9]{32}\.(?:png|jpe?g|webp)$/;
+const AVATAR_CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
 
 /**
  * Class-level employee:manage covers every route except the two /me ones
@@ -186,6 +216,48 @@ export class EmployeesController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.employeesService.removeMyEmergencyContact(actor.userId, contactId, actor);
+  }
+
+  @Post('me/avatar')
+  @RequirePermissions()
+  @UseInterceptors(FileInterceptor('file', avatarMulterOptions))
+  uploadMyAvatar(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() request: Request,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    if (!file) throw new BadRequestException('No file was uploaded.');
+    // Absolute, not relative: the web app calls this API from a different
+    // origin (hrm.1solutions.biz vs hrm-api.1solutions.biz), so a relative
+    // path would resolve against the wrong host if stored as-is.
+    const url = `${request.protocol}://${request.get('host')}/employees/avatars/${file.filename}`;
+    return this.employeesService.uploadMyAvatar(actor.userId, url, actor);
+  }
+
+  @Get('avatars/:filename')
+  @Public()
+  @RequirePermissions()
+  async getAvatar(@Param('filename') filename: string, @Res() response: Response): Promise<void> {
+    // @Public() bypasses JwtAuthGuard; the bare @RequirePermissions() here
+    // overrides the class-level employee:manage requirement back to "no
+    // permission needed" the same way the /me routes above do - otherwise
+    // PermissionsGuard would still demand employee:manage since it falls
+    // back to class metadata when a handler has none of its own. An
+    // <img src> pointing here never carries the app's Bearer token anyway
+    // (localStorage, not a cookie), so this must be reachable unauthenticated;
+    // security relies on the unguessable 32-hex-char filename instead.
+    if (!AVATAR_FILENAME_PATTERN.test(filename)) {
+      throw new NotFoundException('Avatar not found.');
+    }
+    const ext = filename.split('.').pop()!;
+    let buffer: Buffer;
+    try {
+      buffer = await readFile(avatarFilePath(filename));
+    } catch {
+      throw new NotFoundException('Avatar not found.');
+    }
+    response.setHeader('Content-Type', AVATAR_CONTENT_TYPES[ext] ?? 'application/octet-stream');
+    response.send(buffer);
   }
 
   @Post()

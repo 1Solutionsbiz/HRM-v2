@@ -2,9 +2,14 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { FileText, FolderOpen, Upload } from "lucide-react";
+import { FileText, FolderOpen, Loader2, Paperclip, Upload, X } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getMyDocuments, submitDocument, type DocumentChecklistItem } from "@/lib/api/documents";
+import {
+  getMyDocuments,
+  submitDocument,
+  uploadDocumentFile,
+  type DocumentChecklistItem,
+} from "@/lib/api/documents";
 import { titleCase } from "@/lib/api/employees";
 import { formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
@@ -14,8 +19,6 @@ import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { TableSkeleton } from "@/components/hrm/loading-state";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,25 +30,64 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+const ALLOWED_DOCUMENT_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
 export default function DocumentsPage() {
   const { data, loading, error, refetch } = useAsync(getMyDocuments);
   const [target, setTarget] = React.useState<DocumentChecklistItem | null>(null);
-  const [draftUrl, setDraftUrl] = React.useState("");
+  const [fileUrl, setFileUrl] = React.useState<string | null>(null);
+  const [fileName, setFileName] = React.useState<string | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [fileError, setFileError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
   function openSubmit(doc: DocumentChecklistItem) {
     setTarget(doc);
-    setDraftUrl(doc.fileUrl ?? "");
+    setFileUrl(null);
+    setFileName(null);
+    setFileError(null);
     setSaveError(null);
   }
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file after removing it
+    if (!file) return;
+    setFileError(null);
+    if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
+      setFileError("Documents must be a JPEG, PNG, WEBP, or PDF file.");
+      return;
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      setFileError("Document must be smaller than 10 MB.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await uploadDocumentFile(file);
+      setFileUrl(result.url);
+      setFileName(file.name);
+    } catch (err) {
+      setFileError(err instanceof ApiError ? err.message : "Couldn't upload this file. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeFile() {
+    setFileUrl(null);
+    setFileName(null);
+    setFileError(null);
+  }
+
   async function handleSubmit() {
-    if (!target) return;
+    if (!target || !fileUrl) return;
     setSaving(true);
     setSaveError(null);
     try {
-      await submitDocument(target.documentTypeId, draftUrl.trim());
+      await submitDocument(target.documentTypeId, fileUrl);
       toast.success(`${target.name} submitted`, {
         description: "It's now pending review.",
       });
@@ -128,10 +170,7 @@ export default function DocumentsPage() {
             <>
               <DialogHeader>
                 <DialogTitle>Submit {target.name}</DialogTitle>
-                <DialogDescription>
-                  There&apos;s no file storage yet, so paste a link to your already-uploaded document (Google
-                  Drive, Dropbox, etc.) instead of attaching a file.
-                </DialogDescription>
+                <DialogDescription>Attach a photo or scan of this document.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 {saveError && (
@@ -140,21 +179,58 @@ export default function DocumentsPage() {
                   </Alert>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="doc-url">Document URL</Label>
-                  <Input
-                    id="doc-url"
-                    type="url"
-                    placeholder="https://…"
-                    value={draftUrl}
-                    onChange={(e) => setDraftUrl(e.target.value)}
-                  />
+                  {fileName ? (
+                    <div className="border-input flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                      <FileText className="text-muted-foreground size-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{fileName}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove file"
+                        onClick={removeFile}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="document-file"
+                      className="border-input hover:bg-accent flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm"
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Uploading…
+                        </>
+                      ) : (
+                        <>
+                          <Paperclip className="text-muted-foreground size-4" />
+                          Attach a file
+                        </>
+                      )}
+                      <input
+                        id="document-file"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={handleFileChange}
+                      />
+                    </label>
+                  )}
+                  {fileError ? (
+                    <p className="text-destructive text-xs">{fileError}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">JPEG, PNG, WEBP, or PDF, up to 10 MB.</p>
+                  )}
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setTarget(null)} disabled={saving}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmit} disabled={saving || !draftUrl.trim()}>
+                <Button onClick={handleSubmit} disabled={saving || uploading || !fileUrl}>
                   {saving ? "Submitting…" : "Submit"}
                 </Button>
               </DialogFooter>
