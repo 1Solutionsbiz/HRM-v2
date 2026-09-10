@@ -46,7 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePicker, DateOfBirthPicker } from "@/components/ui/date-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -181,7 +181,7 @@ function EditProfileDialog({
             </div>
             <div className="space-y-2">
               <Label>Date of birth</Label>
-              <DatePicker
+              <DateOfBirthPicker
                 value={form.dateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, dateOfBirth: d }))}
                 className="w-full"
@@ -498,7 +498,7 @@ function FamilyDetailDialog({
             </div>
             <div className="space-y-2">
               <Label>Father&apos;s date of birth</Label>
-              <DatePicker
+              <DateOfBirthPicker
                 value={form.fatherDateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, fatherDateOfBirth: d }))}
                 className="w-full"
@@ -514,7 +514,7 @@ function FamilyDetailDialog({
             </div>
             <div className="space-y-2">
               <Label>Mother&apos;s date of birth</Label>
-              <DatePicker
+              <DateOfBirthPicker
                 value={form.motherDateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, motherDateOfBirth: d }))}
                 className="w-full"
@@ -632,7 +632,7 @@ function FamilyMemberDialog({
           )}
           <div className="space-y-2">
             <Label>Date of birth</Label>
-            <DatePicker
+            <DateOfBirthPicker
               value={form.dateOfBirth}
               onChange={(d) => setForm((f) => ({ ...f, dateOfBirth: d }))}
               className="w-full"
