@@ -1,4 +1,4 @@
-import { IsIn, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import { AnnouncementCategory } from '../../generated/prisma/enums.js';
 
 export class PublishAnnouncementDto {
@@ -12,4 +12,8 @@ export class PublishAnnouncementDto {
 
   @IsIn(Object.values(AnnouncementCategory))
   category!: AnnouncementCategory;
+
+  @IsOptional()
+  @IsUrl()
+  imageUrl?: string;
 }

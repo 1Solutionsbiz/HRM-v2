@@ -51,6 +51,7 @@ export class AnnouncementsService {
       data: {
         title: dto.title,
         body: dto.body,
+        imageUrl: dto.imageUrl,
         category: dto.category,
         publishedByUserId: actor.userId,
       },

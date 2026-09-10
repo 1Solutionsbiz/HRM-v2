@@ -1171,6 +1171,7 @@ model Announcement {
   id                String               @id @default(cuid())
   title             String
   body              String               @db.Text
+  imageUrl          String?
   category          AnnouncementCategory
   publishedByUserId String
   publishedAt       DateTime             @default(now())

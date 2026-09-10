@@ -219,7 +219,15 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
                 <ul className="space-y-3">
                   {recentAnnouncements.map((a) => (
                     <li key={a.id} className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                      {a.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.imageUrl}
+                          alt=""
+                          className="size-9 shrink-0 rounded-md border object-cover"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium">{a.title}</p>
                         <p className="text-muted-foreground truncate text-[11px]">{titleCase(a.category)}</p>
                       </div>

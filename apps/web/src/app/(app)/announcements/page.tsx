@@ -4,7 +4,7 @@ import * as React from "react";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Megaphone, Plus } from "lucide-react";
+import { ImagePlus, Loader2, Megaphone, Plus, X } from "lucide-react";
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
@@ -12,6 +12,7 @@ import {
   getAnnouncements,
   markAnnouncementRead,
   publishAnnouncement,
+  uploadAnnouncementImage,
   type Announcement,
   type AnnouncementCategory,
 } from "@/lib/api/announcements";
@@ -52,6 +53,8 @@ const categoryTone: Record<AnnouncementCategory, "default" | "secondary" | "outl
 };
 
 const EMPTY_COMPOSE_FORM = { title: "", body: "", category: "GENERAL" as AnnouncementCategory };
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function AnnouncementsPageInner() {
   const user = useAuthenticatedUser();
@@ -67,8 +70,40 @@ function AnnouncementsPageInner() {
     () => canPublish && searchParams.get("compose") === "1",
   );
   const [composeForm, setComposeForm] = React.useState(EMPTY_COMPOSE_FORM);
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = React.useState(false);
+  const [imageError, setImageError] = React.useState<string | null>(null);
   const [publishing, setPublishing] = React.useState(false);
   const [publishError, setPublishError] = React.useState<string | null>(null);
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file after removing it
+    if (!file) return;
+    setImageError(null);
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setImageError("Images must be a JPEG, PNG, or WEBP file.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError("Image must be smaller than 5 MB.");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const result = await uploadAnnouncementImage(file);
+      setImageUrl(result.url);
+    } catch (err) {
+      setImageError(err instanceof ApiError ? err.message : "Couldn't upload this image. Please try again.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  function removeImage() {
+    setImageUrl(null);
+    setImageError(null);
+  }
 
   React.useEffect(() => {
     if (searchParams.get("compose") === "1") {
@@ -91,6 +126,8 @@ function AnnouncementsPageInner() {
 
   function openCompose() {
     setComposeForm(EMPTY_COMPOSE_FORM);
+    setImageUrl(null);
+    setImageError(null);
     setPublishError(null);
     setComposeOpen(true);
   }
@@ -103,6 +140,7 @@ function AnnouncementsPageInner() {
         title: composeForm.title.trim(),
         body: composeForm.body.trim(),
         category: composeForm.category,
+        imageUrl: imageUrl ?? undefined,
       });
       toast.success("Announcement published");
       setComposeOpen(false);
@@ -157,7 +195,7 @@ function AnnouncementsPageInner() {
                     className="w-full text-left"
                   >
                     <CardContent className="flex items-start justify-between gap-3 pt-6">
-                      <div className="min-w-0 space-y-1">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2">
                           {!isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
                           <p className="text-sm font-medium">{a.title}</p>
@@ -165,6 +203,14 @@ function AnnouncementsPageInner() {
                         <p className="text-muted-foreground line-clamp-2 text-xs">{a.body}</p>
                         <p className="text-muted-foreground text-[11px]">{formatDate(a.publishedAt)}</p>
                       </div>
+                      {a.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.imageUrl}
+                          alt=""
+                          className="size-14 shrink-0 rounded-md border object-cover"
+                        />
+                      )}
                       <Badge variant={categoryTone[a.category]} className="shrink-0">
                         {titleCase(a.category)}
                       </Badge>
@@ -187,6 +233,14 @@ function AnnouncementsPageInner() {
                   <span className="text-muted-foreground text-xs">{formatDate(selected.publishedAt)}</span>
                 </div>
                 <DialogTitle>{selected.title}</DialogTitle>
+                {selected.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selected.imageUrl}
+                    alt=""
+                    className="max-h-64 w-full rounded-md border object-contain"
+                  />
+                )}
                 <DialogDescription className="text-foreground pt-2 text-sm">
                   {selected.body}
                 </DialogDescription>
@@ -245,6 +299,61 @@ function AnnouncementsPageInner() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="announcement-image">Image (optional)</Label>
+                {imageError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{imageError}</AlertDescription>
+                  </Alert>
+                )}
+                {imageUrl ? (
+                  <div className="relative w-fit">
+                    {/* Uploaded content, not a static asset - next/image's
+                        domain allowlisting isn't worth configuring for a
+                        one-off admin preview of the image about to be
+                        published. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageUrl}
+                      alt="Announcement preview"
+                      className="max-h-40 rounded-md border object-contain"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon-sm"
+                      className="absolute top-1 right-1"
+                      aria-label="Remove image"
+                      onClick={removeImage}
+                    >
+                      <X />
+                    </Button>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="announcement-image"
+                    className="border-input hover:bg-accent flex h-24 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed text-sm"
+                  >
+                    {uploadingImage ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <>
+                        <ImagePlus className="text-muted-foreground size-4" />
+                        Attach an image
+                      </>
+                    )}
+                    <input
+                      id="announcement-image"
+                      type="file"
+                      accept={ALLOWED_IMAGE_TYPES.join(",")}
+                      className="hidden"
+                      disabled={uploadingImage}
+                      onChange={handleImageChange}
+                    />
+                  </label>
+                )}
+                <p className="text-muted-foreground text-xs">JPEG, PNG, or WEBP, up to 5 MB.</p>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setComposeOpen(false)} disabled={publishing}>
@@ -252,7 +361,9 @@ function AnnouncementsPageInner() {
               </Button>
               <Button
                 onClick={handlePublish}
-                disabled={publishing || !composeForm.title.trim() || !composeForm.body.trim()}
+                disabled={
+                  publishing || uploadingImage || !composeForm.title.trim() || !composeForm.body.trim()
+                }
               >
                 {publishing ? "Publishing…" : "Publish"}
               </Button>

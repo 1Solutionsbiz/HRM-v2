@@ -441,16 +441,26 @@ export function HRDashboard({ firstName }: { firstName: string }) {
                     <li key={a.id}>
                       <button
                         type="button"
-                        className="w-full text-left"
+                        className="flex w-full items-start gap-2 text-left"
                         onClick={() => handleOpenAnnouncement(a.id, a.read)}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-xs font-medium">{a.title}</p>
-                          <span className="text-muted-foreground shrink-0 text-[10px]">
-                            {formatRelativeTime(a.publishedAt)}
-                          </span>
+                        {a.imageUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={a.imageUrl}
+                            alt=""
+                            className="size-9 shrink-0 rounded-md border object-cover"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium">{a.title}</p>
+                            <span className="text-muted-foreground shrink-0 text-[10px]">
+                              {formatRelativeTime(a.publishedAt)}
+                            </span>
+                          </div>
+                          <p className="text-muted-foreground truncate text-[11px]">{a.body}</p>
                         </div>
-                        <p className="text-muted-foreground truncate text-[11px]">{a.body}</p>
                       </button>
                     </li>
                   ))}
