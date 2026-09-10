@@ -14,13 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HRM V2 | 1Solutions",
+  title: "1Solutions HRM",
   description: "1Solutions HR Management System",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "HRM V2",
+    title: "1Solutions HRM",
   },
 };
 
