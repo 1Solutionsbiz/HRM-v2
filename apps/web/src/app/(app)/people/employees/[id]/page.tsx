@@ -269,6 +269,7 @@ export default function EmployeeDetailPage() {
                     <InfoRow label="Phone" value={employee.phone} />
                     <InfoRow label="Date of birth" value={formatDateOrDash(employee.dateOfBirth)} />
                     <InfoRow label="Current address" value={employee.currentAddress} />
+                    <InfoRow label="Permanent address" value={employee.permanentAddress} />
                     <InfoRow label="Gender" value={employee.gender ? titleCase(employee.gender) : null} />
                     <InfoRow label="Nationality" value={employee.nationality} />
                     <InfoRow label="Religion" value={employee.religion} />

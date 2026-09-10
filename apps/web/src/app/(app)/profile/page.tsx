@@ -78,6 +78,7 @@ interface FormState {
   phone: string;
   dateOfBirth: Date | undefined;
   currentAddress: string;
+  permanentAddress: string;
   gender: string;
   nationality: string;
   religion: string;
@@ -91,6 +92,7 @@ function toForm(employee: EmployeeDetail): FormState {
     phone: employee.phone ?? "",
     dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth) : undefined,
     currentAddress: employee.currentAddress ?? "",
+    permanentAddress: employee.permanentAddress ?? "",
     gender: employee.gender ?? "",
     nationality: employee.nationality ?? "",
     religion: employee.religion ?? "",
@@ -126,6 +128,7 @@ function EditProfileDialog({
         phone: form.phone.trim() || undefined,
         dateOfBirth: form.dateOfBirth ? toDateOnlyString(form.dateOfBirth) : undefined,
         currentAddress: form.currentAddress.trim() || undefined,
+        permanentAddress: form.permanentAddress.trim() || undefined,
         gender: (form.gender || undefined) as Gender | undefined,
         nationality: form.nationality.trim() || undefined,
         religion: form.religion.trim() || undefined,
@@ -254,6 +257,15 @@ function EditProfileDialog({
               rows={2}
               value={form.currentAddress}
               onChange={(e) => setForm((f) => ({ ...f, currentAddress: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-permanent-address">Permanent address</Label>
+            <Textarea
+              id="edit-permanent-address"
+              rows={2}
+              value={form.permanentAddress}
+              onChange={(e) => setForm((f) => ({ ...f, permanentAddress: e.target.value }))}
             />
           </div>
         </div>
@@ -934,7 +946,7 @@ export default function ProfilePage() {
             </Card>
 
             <Tabs defaultValue="personal" className="mt-6">
-              <TabsList>
+              <TabsList className="bg-primary [&_[data-slot=tabs-trigger]]:text-primary-foreground/70 [&_[data-slot=tabs-trigger]]:hover:text-primary-foreground">
                 <TabsTrigger value="personal">Personal</TabsTrigger>
                 <TabsTrigger value="employment">Employment</TabsTrigger>
                 <TabsTrigger value="identification">Identification</TabsTrigger>
@@ -964,6 +976,7 @@ export default function ProfilePage() {
                     <Field label="Nationality" value={employee.nationality} />
                     <Field label="Religion" value={employee.religion} />
                     <Field label="Current address" value={employee.currentAddress} />
+                    <Field label="Permanent address" value={employee.permanentAddress} />
                   </CardContent>
                 </Card>
               </TabsContent>

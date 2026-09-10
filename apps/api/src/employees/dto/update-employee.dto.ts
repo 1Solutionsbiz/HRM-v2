@@ -54,6 +54,10 @@ export class UpdateEmployeeDto {
 
   @IsOptional()
   @IsString()
+  permanentAddress?: string;
+
+  @IsOptional()
+  @IsString()
   avatarUrl?: string;
 
   @IsOptional()

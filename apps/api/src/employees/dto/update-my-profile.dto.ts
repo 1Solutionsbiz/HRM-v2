@@ -29,6 +29,10 @@ export class UpdateMyProfileDto {
   currentAddress?: string;
 
   @IsOptional()
+  @IsString()
+  permanentAddress?: string;
+
+  @IsOptional()
   @IsIn(Object.values(Gender))
   gender?: Gender;
 

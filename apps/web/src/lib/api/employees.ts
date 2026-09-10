@@ -101,6 +101,7 @@ export interface EmployeeDetail extends EmployeeListItem {
   personalEmail: string | null;
   dateOfBirth: string | null;
   currentAddress: string | null;
+  permanentAddress: string | null;
   employmentType: EmploymentType;
   workLocation: string | null;
   gender: Gender | null;
@@ -220,6 +221,7 @@ export interface UpdateMyProfilePayload {
   phone?: string;
   dateOfBirth?: string;
   currentAddress?: string;
+  permanentAddress?: string;
   gender?: Gender;
   nationality?: string;
   religion?: string;
