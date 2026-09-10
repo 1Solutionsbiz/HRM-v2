@@ -82,13 +82,13 @@ export function PayslipDocument({ payslip }: { payslip: Payslip }) {
         </div>
       )}
 
-      <table className="w-full border-collapse text-xs">
+      <table className="w-full table-fixed border-collapse text-xs">
         <thead>
           <tr className="bg-muted">
-            <th className="border p-1.5 text-left font-medium">Earning</th>
-            <th className="border p-1.5 text-right font-medium">Amount</th>
-            <th className="border p-1.5 text-left font-medium">Deduction</th>
-            <th className="border p-1.5 text-right font-medium">Amount</th>
+            <th className="w-[32%] border p-1.5 text-left font-medium">Earning</th>
+            <th className="w-[18%] border p-1.5 text-right font-medium">Amount</th>
+            <th className="w-[32%] border p-1.5 text-left font-medium">Deduction</th>
+            <th className="w-[18%] border p-1.5 text-right font-medium">Amount</th>
           </tr>
         </thead>
         <tbody>
