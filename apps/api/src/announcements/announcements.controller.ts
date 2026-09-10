@@ -19,6 +19,7 @@ import { readFile } from 'node:fs/promises';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { AnnouncementsService } from './announcements.service.js';
 import { PublishAnnouncementDto } from './dto/publish-announcement.dto.js';
@@ -69,7 +70,13 @@ export class AnnouncementsController {
   }
 
   @Get('images/:filename')
+  @Public()
   async getImage(@Param('filename') filename: string, @Res() response: Response): Promise<void> {
+    // @Public(): an <img src> pointing here never carries the app's Bearer
+    // token (localStorage, not a cookie), so this 401'd for every real
+    // browser render until this was added - security relies on the
+    // unguessable 32-hex-char filename (128 bits of entropy), same
+    // tradeoff as an S3 presigned URL, not on session auth.
     if (!IMAGE_FILENAME_PATTERN.test(filename)) {
       throw new NotFoundException('Image not found.');
     }

@@ -17,6 +17,7 @@ import { readFile } from 'node:fs/promises';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { ExpensesService } from './expenses.service.js';
 import { SubmitExpenseClaimDto } from './dto/submit-expense-claim.dto.js';
@@ -59,7 +60,15 @@ export class ExpensesController {
   }
 
   @Get('receipts/:filename')
+  @Public()
   async getReceipt(@Param('filename') filename: string, @Res() response: Response): Promise<void> {
+    // @Public(): a <a href>/<img> pointing at this URL never carries the
+    // app's Bearer token (it's stored in localStorage, not a cookie), so
+    // this route 401'd for every real browser request until this was
+    // added - security relies on the unguessable 32-hex-char filename
+    // (128 bits of entropy from receipt-upload.config.ts's randomBytes),
+    // the same tradeoff as an S3 presigned URL, not on session auth.
+    //
     // Reads the whole file into memory rather than streaming it via
     // app.useStaticAssets(); fine at the 5MB cap uploads are already
     // limited to. (Earlier 500/503s while building this were traced to
