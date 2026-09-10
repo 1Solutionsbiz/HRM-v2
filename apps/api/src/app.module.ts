@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
@@ -31,6 +32,7 @@ import { MoodCheckInsModule } from './mood-checkins/mood-checkins.module.js';
 import { PollsModule } from './polls/polls.module.js';
 import { EmployeeOfTheMonthModule } from './employee-of-the-month/employee-of-the-month.module.js';
 import { HandbookModule } from './handbook/handbook.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -46,6 +48,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     // rows (real external IPs since that fix deployed, vs 127.0.0.1
     // before it).
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
+    ScheduleModule.forRoot(),
     PrismaModule,
     SecurityModule,
     MailModule,
@@ -72,6 +75,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     PollsModule,
     EmployeeOfTheMonthModule,
     HandbookModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [

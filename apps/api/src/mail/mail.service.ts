@@ -2,11 +2,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createTransport, type Transporter } from 'nodemailer';
 
+interface MailAttachment {
+  filename: string;
+  contentType: string;
+  /** Base64-encoded file content. */
+  contentBase64: string;
+}
+
 interface SendMailInput {
   to: string;
   subject: string;
   html: string;
   text: string;
+  attachments?: MailAttachment[];
 }
 
 interface GraphConfig {
@@ -99,6 +107,12 @@ export class MailService {
         subject: input.subject,
         html: input.html,
         text: input.text,
+        attachments: input.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.contentBase64,
+          encoding: 'base64',
+          contentType: a.contentType,
+        })),
       });
     } catch (error) {
       // Never throw out of a mail send: the caller already committed the
@@ -125,6 +139,12 @@ export class MailService {
             subject: input.subject,
             body: { contentType: 'HTML', content: input.html },
             toRecipients: [{ emailAddress: { address: input.to } }],
+            attachments: input.attachments?.map((a) => ({
+              '@odata.type': '#microsoft.graph.fileAttachment',
+              name: a.filename,
+              contentType: a.contentType,
+              contentBytes: a.contentBase64,
+            })),
           },
           // Sent through a shared service mailbox on the caller's behalf,
           // not a real interactive account — a growing Sent Items folder
@@ -206,4 +226,101 @@ export class MailService {
       `,
     });
   }
+
+  async sendWeeklyAttendanceReport(
+    to: string,
+    input: {
+      employeeName: string;
+      weekLabel: string;
+      rows: WeeklyAttendanceDayRow[];
+      totals: WeeklyAttendanceTotals;
+    },
+  ): Promise<void> {
+    const rowsHtml = input.rows
+      .map(
+        (r) => `
+          <tr>
+            <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${r.dayLabel}, ${r.date}</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${r.status}</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${r.checkIn ?? '—'}</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${r.checkOut ?? '—'}</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${r.hours ?? '—'}</td>
+          </tr>`,
+      )
+      .join('');
+
+    await this.send({
+      to,
+      subject: `Your weekly attendance summary (${input.weekLabel})`,
+      text: `Your attendance for ${input.weekLabel}: ${input.totals.present} present, ${input.totals.late} late, ${input.totals.absent} absent, ${input.totals.onLeave} on leave. Total hours worked: ${input.totals.totalHours}.`,
+      html: `
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937;">
+          <h2 style="margin:0 0 4px;font-size:20px;">Weekly attendance summary</h2>
+          <p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${input.employeeName} · ${input.weekLabel}</p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="text-align:left;color:#6b7280;">
+                <th style="padding:6px 10px;border-bottom:2px solid #e5e7eb;">Day</th>
+                <th style="padding:6px 10px;border-bottom:2px solid #e5e7eb;">Status</th>
+                <th style="padding:6px 10px;border-bottom:2px solid #e5e7eb;">Check-in</th>
+                <th style="padding:6px 10px;border-bottom:2px solid #e5e7eb;">Check-out</th>
+                <th style="padding:6px 10px;border-bottom:2px solid #e5e7eb;">Hours</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          <p style="margin:16px 0 0;font-size:13px;line-height:1.6;">
+            Present: <strong>${input.totals.present}</strong> · Late: <strong>${input.totals.late}</strong> ·
+            Absent: <strong>${input.totals.absent}</strong> · On leave: <strong>${input.totals.onLeave}</strong><br/>
+            Total hours worked: <strong>${input.totals.totalHours}</strong>
+          </p>
+        </div>
+      `,
+    });
+  }
+
+  async sendAdminWeeklyAttendanceReport(
+    to: string,
+    input: {
+      weekLabel: string;
+      employeeCount: number;
+      csvBase64: string;
+      csvFilename: string;
+    },
+  ): Promise<void> {
+    await this.send({
+      to,
+      subject: `Weekly attendance — all employees (${input.weekLabel})`,
+      text: `Attached: attendance for all ${input.employeeCount} active employees for ${input.weekLabel}, one row per employee.`,
+      html: `
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1f2937;">
+          <h2 style="margin:0 0 16px;font-size:20px;">Weekly attendance — all employees</h2>
+          <p style="margin:0 0 16px;line-height:1.5;">
+            Attendance for ${input.weekLabel}, all ${input.employeeCount} active employees, one row each —
+            see the attached sheet.
+          </p>
+        </div>
+      `,
+      attachments: [
+        { filename: input.csvFilename, contentType: 'text/csv', contentBase64: input.csvBase64 },
+      ],
+    });
+  }
+}
+
+export interface WeeklyAttendanceDayRow {
+  dayLabel: string;
+  date: string;
+  status: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  hours: string | null;
+}
+
+export interface WeeklyAttendanceTotals {
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+  totalHours: string;
 }
