@@ -42,8 +42,8 @@ describe('WeeklyAttendanceReportService', () => {
   let service: WeeklyAttendanceReportService;
 
   beforeEach(() => {
-    // A Saturday, so lastCompletedWeekRange resolves to Mon 2026-09-07 - Fri
-    // 2026-09-11 - matches sampleHistory above.
+    // A Saturday, so mostRecentCompletedWeek resolves to Mon 2026-09-07 -
+    // Fri 2026-09-11 - matches sampleHistory above.
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T02:30:00Z'));
 
@@ -116,5 +116,54 @@ describe('WeeklyAttendanceReportService', () => {
     const [, payload] = mailService.sendAdminWeeklyAttendanceReport.mock.calls[0];
     const csv = Buffer.from(payload.csvBase64, 'base64').toString('utf-8');
     expect(csv).toContain('"Cee, Jr. Deo"');
+  });
+
+  it('treats an in-progress Friday as not yet a completed week', async () => {
+    vi.setSystemTime(new Date('2026-09-11T02:30:00Z')); // Friday 2026-09-11
+
+    await service.sendWeeklyReports();
+
+    // Steps back a full week rather than returning today (Friday) as "to".
+    expect(attendanceService.getHistoryForEmployeeId).toHaveBeenCalledWith('emp-1', {
+      from: '2026-08-31',
+      to: '2026-09-04',
+    });
+  });
+
+  it('resolves the same completed week regardless of which weekday it runs on', async () => {
+    vi.setSystemTime(new Date('2026-09-16T02:30:00Z')); // Wednesday 2026-09-16
+
+    await service.sendWeeklyReports();
+
+    expect(attendanceService.getHistoryForEmployeeId).toHaveBeenCalledWith('emp-1', {
+      from: '2026-09-07',
+      to: '2026-09-11',
+    });
+  });
+
+  describe('sendTestReports', () => {
+    it('sends the individual copy using the caller\'s own row when they are an employee', async () => {
+      await service.sendTestReports('bala@1solutions.biz', 'atul@1solutions.biz');
+
+      expect(mailService.sendWeeklyAttendanceReport).toHaveBeenCalledTimes(1);
+      const [to, payload] = mailService.sendWeeklyAttendanceReport.mock.calls[0];
+      expect(to).toBe('atul@1solutions.biz');
+      expect(payload.employeeName).toBe('Bala Iyer');
+    });
+
+    it('falls back to the first employee when the caller has no employee record', async () => {
+      await service.sendTestReports('atul@1solutions.biz', 'atul@1solutions.biz');
+
+      const [, payload] = mailService.sendWeeklyAttendanceReport.mock.calls[0];
+      expect(payload.employeeName).toBe('Asha Rao');
+    });
+
+    it('redirects the admin CSV to the test recipient instead of hr@1solutions.biz', async () => {
+      await service.sendTestReports('atul@1solutions.biz', 'atul@1solutions.biz');
+
+      expect(mailService.sendAdminWeeklyAttendanceReport).toHaveBeenCalledTimes(1);
+      const [to] = mailService.sendAdminWeeklyAttendanceReport.mock.calls[0];
+      expect(to).toBe('atul@1solutions.biz');
+    });
   });
 });

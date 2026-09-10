@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AttendanceService } from '../attendance/attendance.service.js';
@@ -50,15 +50,9 @@ interface EmployeeWeekRow {
  * in a single CSV attachment. Both come from the same underlying per-employee
  * query (AttendanceService.getHistoryForEmployeeId), run once per employee,
  * not fetched twice.
- *
- * The date math below (`lastCompletedWeekRange`) is coupled to this running
- * on a Saturday - "yesterday" is Friday, "yesterday minus 4" is Monday. If
- * this schedule ever moves off Saturday, that method needs to change with it.
  */
 @Injectable()
 export class WeeklyAttendanceReportService {
-  private readonly logger = new Logger(WeeklyAttendanceReportService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly attendanceService: AttendanceService,
@@ -67,7 +61,46 @@ export class WeeklyAttendanceReportService {
 
   @Cron('0 8 * * 6', { timeZone: 'Asia/Kolkata' })
   async sendWeeklyReports(): Promise<void> {
-    const { from, to, label } = this.lastCompletedWeekRange();
+    const { label, weekRows } = await this.computeWeekRows();
+
+    for (const row of weekRows) {
+      await this.mailService.sendWeeklyAttendanceReport(row.email, {
+        employeeName: row.name,
+        weekLabel: label,
+        rows: row.days,
+        totals: row.totals,
+      });
+    }
+
+    await this.sendAdminReport(weekRows, label);
+  }
+
+  /**
+   * Manually triggered from an admin action (see ReportsController) - sends
+   * exactly the same content the real Saturday run would, just to `to`
+   * instead of every employee and HR, so it's safe to fire on demand. The
+   * "individual" copy uses the caller's own row when they have one (an
+   * admin is usually also an employee), so what lands in their inbox is
+   * real data about them, not an arbitrary stand-in.
+   */
+  async sendTestReports(callerEmail: string, to: string): Promise<void> {
+    const { label, weekRows } = await this.computeWeekRows();
+
+    const sample = weekRows.find((r) => r.email === callerEmail) ?? weekRows[0];
+    if (sample) {
+      await this.mailService.sendWeeklyAttendanceReport(to, {
+        employeeName: sample.name,
+        weekLabel: label,
+        rows: sample.days,
+        totals: sample.totals,
+      });
+    }
+
+    await this.sendAdminReport(weekRows, label, to);
+  }
+
+  private async computeWeekRows(): Promise<{ label: string; weekRows: EmployeeWeekRow[] }> {
+    const { from, to, label } = this.mostRecentCompletedWeek();
 
     const employees = await this.prisma.employee.findMany({
       where: { status: 'ACTIVE' },
@@ -109,21 +142,23 @@ export class WeeklyAttendanceReportService {
         totalHours: (history.reduce((sum, d) => sum + (d.workedMinutes ?? 0), 0) / 60).toFixed(1),
       };
 
-      const employeeName = `${employee.firstName} ${employee.lastName}`;
-      weekRows.push({ employeeCode: employee.employeeCode, name: employeeName, email: employee.user.email, days, totals });
-
-      await this.mailService.sendWeeklyAttendanceReport(employee.user.email, {
-        employeeName,
-        weekLabel: label,
-        rows: days,
+      weekRows.push({
+        employeeCode: employee.employeeCode,
+        name: `${employee.firstName} ${employee.lastName}`,
+        email: employee.user.email,
+        days,
         totals,
       });
     }
 
-    await this.sendAdminReport(weekRows, label);
+    return { label, weekRows };
   }
 
-  private async sendAdminReport(rows: EmployeeWeekRow[], weekLabel: string): Promise<void> {
+  private async sendAdminReport(
+    rows: EmployeeWeekRow[],
+    weekLabel: string,
+    recipient: string = ADMIN_REPORT_RECIPIENT,
+  ): Promise<void> {
     const header = [
       'Employee code',
       'Name',
@@ -151,7 +186,7 @@ export class WeeklyAttendanceReportService {
     }
     const csvBase64 = Buffer.from(csvLines.join(''), 'utf-8').toString('base64');
 
-    await this.mailService.sendAdminWeeklyAttendanceReport(ADMIN_REPORT_RECIPIENT, {
+    await this.mailService.sendAdminWeeklyAttendanceReport(recipient, {
       weekLabel,
       employeeCount: rows.length,
       csvBase64,
@@ -159,9 +194,18 @@ export class WeeklyAttendanceReportService {
     });
   }
 
-  private lastCompletedWeekRange(): { from: Date; to: Date; label: string } {
+  /**
+   * The most recent Mon-Fri that has fully finished as of right now - not
+   * hardcoded to "the cron always runs on Saturday," since sendTestReports
+   * can be triggered manually on any day of the week. If today is itself a
+   * Friday, that week isn't finished yet, so this steps back a further 7
+   * days rather than returning a Friday that hasn't happened yet.
+   */
+  private mostRecentCompletedWeek(): { from: Date; to: Date; label: string } {
     const today = toDateOnly(new Date());
-    const to = addDays(today, -1);
+    const isoWeekday = today.getUTCDay() === 0 ? 7 : today.getUTCDay();
+    const daysSinceLastFriday = ((isoWeekday - 5 + 7) % 7) || 7;
+    const to = addDays(today, -daysSinceLastFriday);
     const from = addDays(to, -4);
     return { from, to, label: `${this.formatDisplayDate(from)} – ${this.formatDisplayDate(to)}` };
   }
