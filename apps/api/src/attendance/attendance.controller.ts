@@ -6,6 +6,7 @@ import type { AuthContext } from '../common/auth-context.js';
 import { AttendanceService } from './attendance.service.js';
 import { GetHistoryQueryDto } from './dto/get-history-query.dto.js';
 import { RecordCorrectionDto } from './dto/record-correction.dto.js';
+import { PunchLocationDto } from './dto/punch-location.dto.js';
 
 function requestMeta(request: Request): {
   ipAddress?: string;
@@ -19,13 +20,21 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('check-in')
-  checkIn(@CurrentUser() actor: AuthContext, @Req() request: Request) {
-    return this.attendanceService.checkIn(actor, requestMeta(request));
+  checkIn(
+    @CurrentUser() actor: AuthContext,
+    @Req() request: Request,
+    @Body() location: PunchLocationDto,
+  ) {
+    return this.attendanceService.checkIn(actor, requestMeta(request), location);
   }
 
   @Post('check-out')
-  checkOut(@CurrentUser() actor: AuthContext, @Req() request: Request) {
-    return this.attendanceService.checkOut(actor, requestMeta(request));
+  checkOut(
+    @CurrentUser() actor: AuthContext,
+    @Req() request: Request,
+    @Body() location: PunchLocationDto,
+  ) {
+    return this.attendanceService.checkOut(actor, requestMeta(request), location);
   }
 
   @Get('today')

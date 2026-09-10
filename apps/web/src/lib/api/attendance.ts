@@ -24,12 +24,18 @@ export function getTodayAttendance(): Promise<TodayAttendance> {
   return apiFetch<TodayAttendance>("/attendance/today");
 }
 
-export function checkIn(): Promise<TodayAttendance> {
-  return apiFetch<TodayAttendance>("/attendance/check-in", { method: "POST" });
+export interface PunchLocation {
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
 }
 
-export function checkOut(): Promise<TodayAttendance> {
-  return apiFetch<TodayAttendance>("/attendance/check-out", { method: "POST" });
+export function checkIn(location?: PunchLocation): Promise<TodayAttendance> {
+  return apiFetch<TodayAttendance>("/attendance/check-in", { method: "POST", body: location ?? {} });
+}
+
+export function checkOut(location?: PunchLocation): Promise<TodayAttendance> {
+  return apiFetch<TodayAttendance>("/attendance/check-out", { method: "POST", body: location ?? {} });
 }
 
 export interface AttendanceHistoryDay {

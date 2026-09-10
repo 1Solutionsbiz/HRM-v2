@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -8,6 +9,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { UsersService } from '../users/users.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { UpdateCompanySettingsDto } from './dto/update-company-settings.dto.js';
+import type { UpdateGeofenceSettingsDto } from './dto/update-geofence-settings.dto.js';
 
 const SETTINGS_ID = 'singleton';
 
@@ -64,6 +66,47 @@ export class AdminService {
       targetType: 'CompanySettings',
       targetId: SETTINGS_ID,
       description: 'Updated company settings',
+    });
+
+    return updated;
+  }
+
+  /**
+   * Separate from updateCompanySettings() on purpose - that method is a
+   * full-replace keyed to the company-profile form's fields, and coupling
+   * the geofence fields into it would mean either form could silently wipe
+   * the other's settings if submitted alone.
+   */
+  async updateGeofenceSettings(dto: UpdateGeofenceSettingsDto, actor: AuthContext) {
+    const anyProvided =
+      dto.latitude != null || dto.longitude != null || dto.radiusMeters != null;
+    const allProvided =
+      dto.latitude != null && dto.longitude != null && dto.radiusMeters != null;
+    if (anyProvided && !allProvided) {
+      throw new BadRequestException(
+        'Provide latitude, longitude, and radius together, or omit all three to turn geofencing off.',
+      );
+    }
+
+    const updated = await this.prisma.companySettings.update({
+      where: { id: SETTINGS_ID },
+      data: {
+        geofenceLatitude: dto.latitude ?? null,
+        geofenceLongitude: dto.longitude ?? null,
+        geofenceRadiusMeters: dto.radiusMeters ?? null,
+        updatedByUserId: actor.userId,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'SETTINGS_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'CompanySettings',
+      targetId: SETTINGS_ID,
+      description: allProvided
+        ? `Enabled attendance geofencing (${dto.radiusMeters}m radius)`
+        : 'Disabled attendance geofencing',
     });
 
     return updated;

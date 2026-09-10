@@ -10,6 +10,9 @@ export interface CompanySettings {
   phone: string | null;
   address: string | null;
   timezone: string;
+  geofenceLatitude: number | null;
+  geofenceLongitude: number | null;
+  geofenceRadiusMeters: number | null;
   updatedAt: string;
   updatedByUserId: string | null;
 }
@@ -29,6 +32,16 @@ export interface UpdateCompanySettingsPayload {
 
 export function updateCompanySettings(payload: UpdateCompanySettingsPayload): Promise<CompanySettings> {
   return apiFetch<CompanySettings>("/admin/company-settings", { method: "PUT", body: payload });
+}
+
+export interface UpdateGeofenceSettingsPayload {
+  latitude?: number;
+  longitude?: number;
+  radiusMeters?: number;
+}
+
+export function updateGeofenceSettings(payload: UpdateGeofenceSettingsPayload): Promise<CompanySettings> {
+  return apiFetch<CompanySettings>("/admin/company-settings/geofence", { method: "PUT", body: payload });
 }
 
 export type RolePermissions = Record<Role, string[]>;

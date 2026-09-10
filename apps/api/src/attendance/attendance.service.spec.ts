@@ -25,6 +25,7 @@ function buildPrismaMock() {
     },
     holiday: { findMany: vi.fn().mockResolvedValue([]) },
     attendancePolicy: { findUnique: vi.fn() },
+    companySettings: { findUnique: vi.fn() },
   };
 }
 
@@ -59,6 +60,12 @@ describe('AttendanceService', () => {
     prisma = buildPrismaMock();
     prisma.employee.findUnique.mockResolvedValue({ id: 'emp-1' });
     prisma.attendancePolicy.findUnique.mockResolvedValue(DEFAULT_POLICY);
+    // Geofencing off by default (all three null) - individual tests opt in.
+    prisma.companySettings.findUnique.mockResolvedValue({
+      geofenceLatitude: null,
+      geofenceLongitude: null,
+      geofenceRadiusMeters: null,
+    });
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     service = new AttendanceService(prisma as any, auditService as any);
@@ -71,7 +78,7 @@ describe('AttendanceService', () => {
   describe('checkIn', () => {
     it('throws when the calling user has no linked employee profile', async () => {
       prisma.employee.findUnique.mockResolvedValue(null);
-      await expect(service.checkIn(actor, {})).rejects.toThrow(
+      await expect(service.checkIn(actor, {}, {})).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -100,7 +107,7 @@ describe('AttendanceService', () => {
         Promise.resolve({ id: 'day-1', date: new Date('2026-08-04'), ...data }),
       );
 
-      const result = await service.checkIn(actor, { ipAddress: '127.0.0.1' });
+      const result = await service.checkIn(actor, { ipAddress: '127.0.0.1' }, {});
 
       expect(prisma.attendanceDay.create).toHaveBeenCalledWith({
         data: { employeeId: 'emp-1', date: expect.any(Date) },
@@ -123,17 +130,84 @@ describe('AttendanceService', () => {
         type: 'CHECK_IN',
       });
 
-      await expect(service.checkIn(actor, {})).rejects.toThrow(
+      await expect(service.checkIn(actor, {}, {})).rejects.toThrow(
         ConflictException,
       );
       expect(prisma.attendanceEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a check-in with no location when geofencing is configured', async () => {
+      prisma.companySettings.findUnique.mockResolvedValue({
+        geofenceLatitude: 28.6139,
+        geofenceLongitude: 77.209,
+        geofenceRadiusMeters: 200,
+      });
+
+      await expect(service.checkIn(actor, {}, {})).rejects.toThrow(
+        'Location access is required',
+      );
+      expect(prisma.attendanceEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a check-in from outside the configured geofence', async () => {
+      prisma.companySettings.findUnique.mockResolvedValue({
+        geofenceLatitude: 28.6139,
+        geofenceLongitude: 77.209,
+        geofenceRadiusMeters: 200,
+      });
+
+      // ~1.1km away - well outside a 200m radius.
+      await expect(
+        service.checkIn(actor, {}, { latitude: 28.6239, longitude: 77.209 }),
+      ).rejects.toThrow('You must be within 200m of the office');
+      expect(prisma.attendanceEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('allows a check-in from inside the configured geofence', async () => {
+      prisma.companySettings.findUnique.mockResolvedValue({
+        geofenceLatitude: 28.6139,
+        geofenceLongitude: 77.209,
+        geofenceRadiusMeters: 200,
+      });
+      prisma.attendanceDay.findUnique.mockResolvedValue(null);
+      prisma.attendanceDay.create.mockResolvedValue({
+        id: 'day-1',
+        status: 'PRESENT',
+        leaveRequestId: null,
+      });
+      prisma.attendanceDay.findUniqueOrThrow.mockResolvedValue({
+        id: 'day-1',
+        status: 'PRESENT',
+        leaveRequestId: null,
+        date: new Date('2026-08-04'),
+      });
+      prisma.attendanceEvent.findMany.mockResolvedValue([
+        { id: 'e1', type: 'CHECK_IN', occurredAt: new Date('2026-08-04T04:00:00.000Z') },
+      ]);
+      prisma.attendanceDay.update.mockImplementation(({ data }) =>
+        Promise.resolve({ id: 'day-1', date: new Date('2026-08-04'), ...data }),
+      );
+
+      // A few meters away - well inside a 200m radius.
+      const result = await service.checkIn(
+        actor,
+        {},
+        { latitude: 28.614, longitude: 77.2091 },
+      );
+
+      expect(prisma.attendanceEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ latitude: 28.614, longitude: 77.2091 }),
+        }),
+      );
+      expect(result.punchState).toBe('CHECKED_IN');
     });
   });
 
   describe('checkOut', () => {
     it('rejects checking out with no attendance day for today', async () => {
       prisma.attendanceDay.findUnique.mockResolvedValue(null);
-      await expect(service.checkOut(actor, {})).rejects.toThrow(
+      await expect(service.checkOut(actor, {}, {})).rejects.toThrow(
         ConflictException,
       );
     });
@@ -141,7 +215,7 @@ describe('AttendanceService', () => {
     it('rejects checking out before checking in', async () => {
       prisma.attendanceDay.findUnique.mockResolvedValue({ id: 'day-1' });
       prisma.attendanceEvent.findMany.mockResolvedValue([]);
-      await expect(service.checkOut(actor, {})).rejects.toThrow(
+      await expect(service.checkOut(actor, {}, {})).rejects.toThrow(
         ConflictException,
       );
     });
@@ -152,7 +226,7 @@ describe('AttendanceService', () => {
         { type: 'CHECK_IN' },
         { type: 'CHECK_OUT' },
       ]);
-      await expect(service.checkOut(actor, {})).rejects.toThrow(
+      await expect(service.checkOut(actor, {}, {})).rejects.toThrow(
         ConflictException,
       );
     });
@@ -215,7 +289,7 @@ describe('AttendanceService', () => {
         { id: 'e2', type: 'CHECK_OUT', occurredAt: fullDayCheckOut },
       ]);
 
-      const result = await service.checkOut(actor, {});
+      const result = await service.checkOut(actor, {}, {});
       expect(result.status).toBe('PRESENT');
       expect(result.lateMinutes).toBe(0);
     });
@@ -227,7 +301,7 @@ describe('AttendanceService', () => {
       prisma.attendanceDay.findUnique.mockResolvedValue({ id: 'day-1' });
       setupDay([{ id: 'e1', type: 'CHECK_IN', occurredAt: lateCheckIn }]);
 
-      const result = await service.checkIn(actor, {});
+      const result = await service.checkIn(actor, {}, {});
 
       expect(result.status).toBe('LATE');
       expect(result.lateMinutes).toBeGreaterThan(0);
@@ -248,7 +322,7 @@ describe('AttendanceService', () => {
         { id: 'e2', type: 'CHECK_OUT', occurredAt: shortCheckOut },
       ]);
 
-      const result = await service.checkOut(actor, {});
+      const result = await service.checkOut(actor, {}, {});
       expect(result.status).toBe('HALF_DAY');
     });
 

@@ -624,6 +624,11 @@ model AttendanceEvent {
   recordedByUserId String?
   deviceId         String?
   ipAddress        String?
+  /// Captured from the browser's geolocation API at punch time - audit
+  /// trail for every punch, not just the ones a configured geofence
+  /// rejected (see AttendanceService.assertWithinGeofence).
+  latitude         Float?
+  longitude        Float?
   note             String?               @db.Text
 
   attendanceDay  AttendanceDay @relation(fields: [attendanceDayId], references: [id], onDelete: Cascade)
@@ -1414,16 +1419,23 @@ model Notification {
 // =============================================================================
 
 model CompanySettings {
-  id              String   @id @default("singleton")
-  legalName       String
-  brandName       String
-  website         String?
-  supportEmail    String
-  phone           String?
-  address         String?  @db.Text
-  timezone        String   @default("Asia/Kolkata")
-  updatedAt       DateTime @updatedAt
-  updatedByUserId String?
+  id                   String   @id @default("singleton")
+  legalName            String
+  brandName            String
+  website              String?
+  supportEmail         String
+  phone                String?
+  address              String?  @db.Text
+  timezone             String   @default("Asia/Kolkata")
+  /// Attendance geofencing - all three null means geofencing is off (the
+  /// default until an admin configures it). Set together via one dedicated
+  /// endpoint, not the general company-profile PUT, so a routine profile
+  /// edit can never accidentally clear or drift from the geofence config.
+  geofenceLatitude     Float?
+  geofenceLongitude    Float?
+  geofenceRadiusMeters Int?
+  updatedAt            DateTime @updatedAt
+  updatedByUserId      String?
 
   @@map("company_settings")
 }

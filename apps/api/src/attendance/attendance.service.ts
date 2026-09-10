@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -20,6 +21,8 @@ import {
 } from '../generated/prisma/enums.js';
 import type { RecordCorrectionDto } from './dto/record-correction.dto.js';
 import type { GetHistoryQueryDto } from './dto/get-history-query.dto.js';
+import type { PunchLocationDto } from './dto/punch-location.dto.js';
+import { haversineMeters } from './geo.js';
 
 const DEFAULT_HISTORY_DAYS = 45;
 // 92, not 90 - a calendar quarter (Team attendance's per-employee lookup
@@ -60,8 +63,9 @@ export class AttendanceService {
     private readonly auditService: AuditService,
   ) {}
 
-  async checkIn(actor: AuthContext, meta: RequestMeta) {
+  async checkIn(actor: AuthContext, meta: RequestMeta, location: PunchLocationDto) {
     const employeeId = await this.requireEmployeeId(actor.userId);
+    await this.assertWithinGeofence(location);
     const today = companyToday();
 
     let day = await this.prisma.attendanceDay.findUnique({
@@ -88,6 +92,8 @@ export class AttendanceService {
         source: 'WEB',
         recordedByUserId: actor.userId,
         ipAddress: meta.ipAddress,
+        latitude: location.latitude,
+        longitude: location.longitude,
       },
     });
 
@@ -105,8 +111,9 @@ export class AttendanceService {
     return this.serializeToday(await this.recomputeDay(day.id));
   }
 
-  async checkOut(actor: AuthContext, meta: RequestMeta) {
+  async checkOut(actor: AuthContext, meta: RequestMeta, location: PunchLocationDto) {
     const employeeId = await this.requireEmployeeId(actor.userId);
+    await this.assertWithinGeofence(location);
     const today = companyToday();
 
     const day = await this.prisma.attendanceDay.findUnique({
@@ -138,6 +145,8 @@ export class AttendanceService {
         source: 'WEB',
         recordedByUserId: actor.userId,
         ipAddress: meta.ipAddress,
+        latitude: location.latitude,
+        longitude: location.longitude,
       },
     });
 
@@ -395,6 +404,51 @@ export class AttendanceService {
       );
     }
     return policy;
+  }
+
+  /**
+   * A no-op until an admin sets all three CompanySettings.geofence* fields
+   * (see UpdateGeofenceSettingsDto - they're set together or not at all).
+   * Once configured, a punch without a location is rejected outright (the
+   * client failed to get one, e.g. permission denied) rather than silently
+   * allowed through.
+   */
+  private async assertWithinGeofence(location: PunchLocationDto): Promise<void> {
+    const settings = await this.prisma.companySettings.findUnique({
+      where: { id: 'singleton' },
+      select: {
+        geofenceLatitude: true,
+        geofenceLongitude: true,
+        geofenceRadiusMeters: true,
+      },
+    });
+    const { geofenceLatitude, geofenceLongitude, geofenceRadiusMeters } =
+      settings ?? {};
+    if (
+      geofenceLatitude == null ||
+      geofenceLongitude == null ||
+      geofenceRadiusMeters == null
+    ) {
+      return;
+    }
+
+    if (location.latitude == null || location.longitude == null) {
+      throw new ForbiddenException(
+        'Location access is required to mark attendance. Please enable location and try again.',
+      );
+    }
+
+    const distanceMeters = haversineMeters(
+      geofenceLatitude,
+      geofenceLongitude,
+      location.latitude,
+      location.longitude,
+    );
+    if (distanceMeters > geofenceRadiusMeters) {
+      throw new ForbiddenException(
+        `You must be within ${geofenceRadiusMeters}m of the office to mark attendance.`,
+      );
+    }
   }
 
   private async requireEmployeeId(userId: string): Promise<string> {

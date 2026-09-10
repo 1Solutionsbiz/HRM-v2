@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { formatTime } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
+import { getCurrentLocation } from "@/lib/geolocation";
 import {
   checkIn as apiCheckIn,
   checkOut as apiCheckOut,
@@ -43,7 +44,8 @@ export function useAttendancePunch() {
   async function checkIn() {
     setPending(true);
     try {
-      const result = await apiCheckIn();
+      const location = await getCurrentLocation();
+      const result = await apiCheckIn(location);
       setAttendance(result);
       toast.success(`Checked in at ${formatTime(result.firstCheckInAt!)}`);
     } catch (err) {
@@ -56,7 +58,8 @@ export function useAttendancePunch() {
   async function checkOut() {
     setPending(true);
     try {
-      const result = await apiCheckOut();
+      const location = await getCurrentLocation();
+      const result = await apiCheckOut(location);
       setAttendance(result);
       toast.success(`Checked out at ${formatTime(result.lastCheckOutAt!)}`);
     } catch (err) {
