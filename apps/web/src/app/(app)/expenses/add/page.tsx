@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DropdownDatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -157,9 +157,14 @@ export default function AddExpensePage() {
                 />
                 {errors.amount && <p className="text-destructive text-xs">{errors.amount}</p>}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 col-span-2">
                 <Label>Date</Label>
-                <DatePicker value={date} onChange={setDate} className="w-full" />
+                <DropdownDatePicker
+                  value={date}
+                  onChange={setDate}
+                  fromYear={new Date().getFullYear() - 5}
+                  className="max-w-xs"
+                />
               </div>
             </div>
 

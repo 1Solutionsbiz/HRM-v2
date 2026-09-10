@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/hrm/page-header";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker, DateRangePicker } from "@/components/ui/date-picker";
+import { DateRangePicker, DropdownDatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -173,7 +173,13 @@ export default function ApplyLeavePage() {
               {dayType === "FULL_DAY" ? (
                 <DateRangePicker value={range} onChange={setRange} />
               ) : (
-                <DatePicker value={singleDate} onChange={setSingleDate} />
+                <DropdownDatePicker
+                  value={singleDate}
+                  onChange={setSingleDate}
+                  fromYear={new Date().getFullYear() - 1}
+                  toYear={new Date().getFullYear() + 2}
+                  className="max-w-xs"
+                />
               )}
               {errors.date && <p className="text-destructive text-xs">{errors.date}</p>}
             </div>

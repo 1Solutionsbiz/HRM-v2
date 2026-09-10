@@ -26,7 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DropdownDatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -271,7 +271,13 @@ export default function HolidaysPage() {
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
-              <DatePicker value={form.date} onChange={(date) => setForm((f) => ({ ...f, date }))} className="w-full" />
+              <DropdownDatePicker
+                value={form.date}
+                onChange={(date) => setForm((f) => ({ ...f, date }))}
+                fromYear={new Date().getFullYear() - 1}
+                toYear={new Date().getFullYear() + 2}
+                className="max-w-xs"
+              />
             </div>
             <div className="space-y-2">
               <Label>Type</Label>

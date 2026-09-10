@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePicker, DropdownDatePicker } from "@/components/ui/date-picker";
 import {
   Card,
   CardContent,
@@ -118,6 +118,7 @@ const requestColumns: ColumnDef<SampleRequest>[] = [
 
 export default function StyleGuidePage() {
   const [date, setDate] = React.useState<Date | undefined>();
+  const [dropdownDate, setDropdownDate] = React.useState<Date | undefined>();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [showSkeleton, setShowSkeleton] = React.useState(false);
 
@@ -180,8 +181,12 @@ export default function StyleGuidePage() {
         </Select>
       </Section>
 
-      <Section title="Date pickers" description="Calendar-backed date selection.">
+      <Section title="Date pickers" description="Calendar-backed date selection — near-term dates (this week's expense, an upcoming leave request).">
         <DatePicker value={date} onChange={setDate} placeholder="Select a date" />
+      </Section>
+
+      <Section title="Dropdown date picker" description="Day/month/year dropdowns — dates decades away in either direction (birth dates, document expiry, employment history).">
+        <DropdownDatePicker value={dropdownDate} onChange={setDropdownDate} className="max-w-xs" />
       </Section>
 
       <Section title="Cards" description="Basic content cards and the StatCard composite.">

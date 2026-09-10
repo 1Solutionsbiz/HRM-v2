@@ -47,7 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DatePicker, DateOfBirthPicker } from "@/components/ui/date-picker";
+import { DropdownDatePicker } from "@/components/ui/date-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -182,7 +182,7 @@ function EditProfileDialog({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Date of birth</Label>
-              <DateOfBirthPicker
+              <DropdownDatePicker
                 value={form.dateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, dateOfBirth: d }))}
                 className="max-w-xs"
@@ -384,12 +384,14 @@ function IdentificationDialog({
                 onChange={(e) => setForm((f) => ({ ...f, passportNumber: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Passport expiry date</Label>
-              <DatePicker
+              <DropdownDatePicker
                 value={form.passportExpiryDate}
                 onChange={(d) => setForm((f) => ({ ...f, passportExpiryDate: d }))}
-                className="w-full"
+                fromYear={new Date().getFullYear() - 10}
+                toYear={new Date().getFullYear() + 20}
+                className="max-w-xs"
               />
             </div>
             <div className="space-y-2">
@@ -400,12 +402,14 @@ function IdentificationDialog({
                 onChange={(e) => setForm((f) => ({ ...f, drivingLicenseNumber: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Driving license expiry date</Label>
-              <DatePicker
+              <DropdownDatePicker
                 value={form.drivingLicenseExpiryDate}
                 onChange={(d) => setForm((f) => ({ ...f, drivingLicenseExpiryDate: d }))}
-                className="w-full"
+                fromYear={new Date().getFullYear() - 10}
+                toYear={new Date().getFullYear() + 20}
+                className="max-w-xs"
               />
             </div>
           </div>
@@ -499,7 +503,7 @@ function FamilyDetailDialog({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Father&apos;s date of birth</Label>
-              <DateOfBirthPicker
+              <DropdownDatePicker
                 value={form.fatherDateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, fatherDateOfBirth: d }))}
                 className="max-w-xs"
@@ -515,7 +519,7 @@ function FamilyDetailDialog({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Mother&apos;s date of birth</Label>
-              <DateOfBirthPicker
+              <DropdownDatePicker
                 value={form.motherDateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, motherDateOfBirth: d }))}
                 className="max-w-xs"
@@ -633,7 +637,7 @@ function FamilyMemberDialog({
           )}
           <div className="space-y-2">
             <Label>Date of birth</Label>
-            <DateOfBirthPicker
+            <DropdownDatePicker
               value={form.dateOfBirth}
               onChange={(d) => setForm((f) => ({ ...f, dateOfBirth: d }))}
               className="w-full"
@@ -748,21 +752,23 @@ function PreviousEmployerDialog({
               onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))}
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label>From</Label>
-              <DatePicker
+              <DropdownDatePicker
                 value={form.fromDate}
                 onChange={(d) => setForm((f) => ({ ...f, fromDate: d }))}
-                className="w-full"
+                fromYear={new Date().getFullYear() - 60}
+                className="max-w-xs"
               />
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <DatePicker
+              <DropdownDatePicker
                 value={form.toDate}
                 onChange={(d) => setForm((f) => ({ ...f, toDate: d }))}
-                className="w-full"
+                fromYear={new Date().getFullYear() - 60}
+                className="max-w-xs"
               />
             </div>
           </div>

@@ -133,7 +133,7 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
-interface DateOfBirthPickerProps {
+interface DropdownDatePickerProps {
   value?: Date;
   onChange?: (date: Date | undefined) => void;
   disabled?: boolean;
@@ -146,27 +146,32 @@ interface DateOfBirthPickerProps {
 
 /**
  * Three plain dropdowns (day/month/year) instead of a calendar popup -
- * for a birth date, "navigate a calendar back N decades" is far more
- * tedious than picking three known numbers directly. Used for date-of-birth
- * style fields specifically (self, father, mother, family members); other
- * date fields (expiry dates, employment ranges) stay on the calendar-based
- * DatePicker above, where recent/nearby dates are the common case.
+ * for a date that's decades away in either direction (birth dates,
+ * document expiry, employment history), "navigate a calendar back/forward
+ * N years" is far more tedious than picking three known numbers directly.
+ * Used for that kind of field; a near-term date (this week's expense, an
+ * upcoming leave request) stays on the calendar-based DatePicker above,
+ * where "click today, or a day close to it" is the common case and a
+ * calendar's spatial layout is actually the faster interaction.
  *
  * Keeps its own day/month/year state rather than deriving purely from
  * `value`, so a partial selection (e.g. day + month, no year yet) stays
- * visible instead of reverting to placeholders on every keystroke - safe
- * because every call site mounts this fresh each time its dialog opens
- * (see e.g. EditProfileDialog's own comment on the same pattern), so there's
- * no case where `value` changes out from under an already-mounted instance.
+ * visible instead of reverting to placeholders on every keystroke - only
+ * safe because every call site mounts this fresh each time its dialog
+ * opens (see e.g. EditProfileDialog's own comment on the same pattern), so
+ * there's no case where `value` changes out from under an already-mounted
+ * instance. Don't reuse this in a context that stays mounted across a
+ * `value` change from outside (e.g. a filter bound to URL state) without
+ * adding that sync back.
  */
-export function DateOfBirthPicker({
+export function DropdownDatePicker({
   value,
   onChange,
   disabled,
   className,
   fromYear,
   toYear,
-}: DateOfBirthPickerProps) {
+}: DropdownDatePickerProps) {
   const currentYear = new Date().getFullYear();
   const minYear = fromYear ?? currentYear - 100;
   const maxYear = toYear ?? currentYear;
