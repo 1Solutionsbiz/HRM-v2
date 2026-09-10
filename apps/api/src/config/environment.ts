@@ -103,6 +103,36 @@ class EnvironmentVariables {
   MAIL_FROM: string = '1Solutions HRM <hr@1solutions.biz>';
 
   /**
+   * Microsoft Graph API config for outbound mail via OAuth2 client-credentials
+   * (an app registration with the Mail.Send application permission, admin
+   * consent granted) — preferred over SMTP_* above because Microsoft 365
+   * tenants increasingly disable Basic-Auth SMTP regardless of these being
+   * set, and Graph works the same whether or not the mailbox has MFA. When
+   * all three are set, MailService sends via Graph; otherwise it falls back
+   * to SMTP_HOST if that's configured, and to a logged no-op if neither is.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  MS_TENANT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  MS_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  MS_CLIENT_SECRET?: string;
+
+  /** The mailbox Graph sends as — must be one the app registration's Mail.Send permission covers (it's tenant-wide, so any mailbox in the tenant works). */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  MS_SENDER_EMAIL: string = 'hr@1solutions.biz';
+
+  /**
    * Absolute path to a directory that survives redeploys, for uploaded
    * files (expense receipts today). Deliberately NOT inside the app's own
    * working directory: this Hostinger deploy target rebuilds into a fresh
