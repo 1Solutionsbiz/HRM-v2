@@ -946,7 +946,7 @@ export default function ProfilePage() {
             </Card>
 
             <Tabs defaultValue="personal" className="mt-6">
-              <TabsList className="bg-primary [&_[data-slot=tabs-trigger]:not([data-active])]:text-primary-foreground/70 [&_[data-slot=tabs-trigger]:not([data-active]):hover]:text-primary-foreground">
+              <TabsList>
                 <TabsTrigger value="personal">Personal</TabsTrigger>
                 <TabsTrigger value="employment">Employment</TabsTrigger>
                 <TabsTrigger value="identification">Identification</TabsTrigger>
