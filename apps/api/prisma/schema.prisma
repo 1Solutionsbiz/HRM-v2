@@ -421,11 +421,13 @@ model EmployeeEmergencyContact {
 /// stored separately. PAN lives on EmployeeIdentification, not here — see
 /// that model's comment for why.
 model EmployeeBankDetail {
-  id                     String @id @default(cuid())
-  employeeId             String @unique
+  id                     String  @id @default(cuid())
+  employeeId             String  @unique
   bankName               String
   accountNumberEncrypted String
   ifscCode               String
+  branch                 String?
+  city                   String?
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 

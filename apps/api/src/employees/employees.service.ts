@@ -15,6 +15,7 @@ import type { AuthContext } from '../common/auth-context.js';
 import type { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import type { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import type { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
+import type { UpsertMyBankDetailDto } from './dto/upsert-my-bank-detail.dto.js';
 import type { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 import type { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 import type { WishBirthdayDto } from './dto/wish-birthday.dto.js';
@@ -340,11 +341,15 @@ export class EmployeesService {
         bankName: dto.bankName,
         accountNumberEncrypted,
         ifscCode: dto.ifscCode,
+        branch: dto.branch ?? null,
+        city: dto.city ?? null,
       },
       update: {
         bankName: dto.bankName,
         accountNumberEncrypted,
         ifscCode: dto.ifscCode,
+        branch: dto.branch ?? null,
+        city: dto.city ?? null,
       },
     });
 
@@ -358,6 +363,60 @@ export class EmployeesService {
     });
 
     return this.findOne(id);
+  }
+
+  /**
+   * Self-service bank-detail edit. accountNumber left blank means "keep the
+   * existing encrypted value" (the frontend never re-displays the real
+   * number, so it has nothing to resubmit) rather than "clear it" — the
+   * HR-facing upsertBankDetail above has no such case since that form always
+   * starts from a real value the caller can see and re-type.
+   */
+  async upsertMyBankDetail(userId: string, dto: UpsertMyBankDetailDto, actor: AuthContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+
+    const accountNumberEncrypted = dto.accountNumber
+      ? this.encryptionService.encrypt(dto.accountNumber)
+      : (
+          await this.prisma.employeeBankDetail.findUnique({
+            where: { employeeId },
+            select: { accountNumberEncrypted: true },
+          })
+        )?.accountNumberEncrypted;
+
+    if (!accountNumberEncrypted) {
+      throw new BadRequestException('Account number is required');
+    }
+
+    await this.prisma.employeeBankDetail.upsert({
+      where: { employeeId },
+      create: {
+        employeeId,
+        bankName: dto.bankName,
+        accountNumberEncrypted,
+        ifscCode: dto.ifscCode,
+        branch: dto.branch ?? null,
+        city: dto.city ?? null,
+      },
+      update: {
+        bankName: dto.bankName,
+        accountNumberEncrypted,
+        ifscCode: dto.ifscCode,
+        branch: dto.branch ?? null,
+        city: dto.city ?? null,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'EMPLOYEE_UPDATED',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: employeeId,
+      description: 'Updated own bank details',
+    });
+
+    return this.findOne(employeeId);
   }
 
   /** An employee can have more than one contact (legacy allows it and real
@@ -1004,6 +1063,8 @@ export class EmployeesService {
       bankName: string;
       accountNumberEncrypted: string;
       ifscCode: string;
+      branch: string | null;
+      city: string | null;
     } | null;
     identification: {
       panNumberEncrypted: string | null;
@@ -1028,6 +1089,8 @@ export class EmployeesService {
               bankDetail.accountNumberEncrypted,
             ),
             ifscCode: bankDetail.ifscCode,
+            branch: bankDetail.branch,
+            city: bankDetail.city,
           }
         : null,
       identification: identification

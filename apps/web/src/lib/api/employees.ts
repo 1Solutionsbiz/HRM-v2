@@ -114,6 +114,8 @@ export interface EmployeeDetail extends EmployeeListItem {
     bankName: string;
     accountNumber: string;
     ifscCode: string;
+    branch: string | null;
+    city: string | null;
   } | null;
   identification: EmployeeIdentification | null;
   familyDetail: EmployeeFamilyDetail | null;
@@ -344,6 +346,19 @@ export function removeMyFamilyMember(kind: FamilyMemberKind, memberId: string): 
   return apiFetch<EmployeeDetail>(`/employees/me/${FAMILY_MEMBER_PATHS[kind]}/${memberId}`, {
     method: "DELETE",
   });
+}
+
+export interface UpsertMyBankDetailPayload {
+  bankName: string;
+  /** Blank/omitted keeps the account number already on file. */
+  accountNumber?: string;
+  ifscCode: string;
+  branch?: string;
+  city?: string;
+}
+
+export function upsertMyBankDetail(payload: UpsertMyBankDetailPayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>("/employees/me/bank-detail", { method: "PUT", body: payload });
 }
 
 export interface UpsertPreviousEmployerPayload {

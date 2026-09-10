@@ -564,6 +564,8 @@ export default function EmployeeDetailPage() {
                         <InfoRow label="Bank" value={employee.bankDetail.bankName} />
                         <InfoRow label="Account number" value={maskAccountNumber(employee.bankDetail.accountNumber)} />
                         <InfoRow label="IFSC code" value={employee.bankDetail.ifscCode} />
+                        <InfoRow label="Branch" value={employee.bankDetail.branch} />
+                        <InfoRow label="City" value={employee.bankDetail.city} />
                       </div>
                     ) : (
                       <EmptyState size="sm" icon={Landmark} title="No bank details on file" />

@@ -25,6 +25,7 @@ import { EmployeesService } from './employees.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
+import { UpsertMyBankDetailDto } from './dto/upsert-my-bank-detail.dto.js';
 import { UpsertEmergencyContactDto } from './dto/upsert-emergency-contact.dto.js';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 import { WishBirthdayDto } from './dto/wish-birthday.dto.js';
@@ -73,10 +74,19 @@ export class EmployeesController {
     return this.employeesService.updateMyProfile(actor.userId, dto, actor);
   }
 
-  // Identification / family / previous-employer / emergency-contact details
-  // are employee-self-editable (unlike bank details, which stay HR-only via
-  // the :id routes below) — same @RequirePermissions() override pattern and
-  // same reason for being registered before the :id routes.
+  // Identification / family / previous-employer / emergency-contact / bank
+  // details are all employee-self-editable — same @RequirePermissions()
+  // override pattern and same reason for being registered before the :id
+  // routes.
+
+  @Put('me/bank-detail')
+  @RequirePermissions()
+  upsertMyBankDetail(
+    @Body() dto: UpsertMyBankDetailDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.employeesService.upsertMyBankDetail(actor.userId, dto, actor);
+  }
 
   @Put('me/identification')
   @RequirePermissions()

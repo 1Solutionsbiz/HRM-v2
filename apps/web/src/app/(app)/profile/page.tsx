@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronLeft, IdCard, Users, Briefcase, ShieldAlert, Pencil, Plus, Trash2, Baby, HeartHandshake, BadgeCheck, Camera, Loader2 } from "lucide-react";
+import { ChevronLeft, IdCard, Users, Briefcase, ShieldAlert, Pencil, Plus, Trash2, Baby, HeartHandshake, BadgeCheck, Camera, Loader2, User, Landmark } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -21,6 +21,7 @@ import {
   addMyEmergencyContact,
   updateMyEmergencyContact,
   removeMyEmergencyContact,
+  upsertMyBankDetail,
   employeeFullName,
   employeeInitials,
   titleCase,
@@ -893,6 +894,147 @@ function EmergencyContactDialog({
   );
 }
 
+interface BankDetailFormState {
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  branch: string;
+  city: string;
+}
+
+function toBankDetailForm(employee: EmployeeDetail): BankDetailFormState {
+  const bd = employee.bankDetail;
+  return {
+    bankName: bd?.bankName ?? "",
+    // Never prefilled — the API only ever returns the full number when asked,
+    // and re-showing it in a plain text input would turn a masked display
+    // into a plaintext one. Blank here means "keep what's on file" on save.
+    accountNumber: "",
+    ifscCode: bd?.ifscCode ?? "",
+    branch: bd?.branch ?? "",
+    city: bd?.city ?? "",
+  };
+}
+
+function BankDetailDialog({
+  employee,
+  onClose,
+  onSaved,
+}: {
+  employee: EmployeeDetail;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<BankDetailFormState>(() => toBankDetailForm(employee));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const hasExisting = !!employee.bankDetail;
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await upsertMyBankDetail({
+        bankName: form.bankName.trim(),
+        accountNumber: form.accountNumber.trim() || undefined,
+        ifscCode: form.ifscCode.trim().toUpperCase(),
+        branch: form.branch.trim() || undefined,
+        city: form.city.trim() || undefined,
+      });
+      toast.success("Bank details updated");
+      onClose();
+      onSaved();
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Bank details</DialogTitle>
+          <DialogDescription>Used for salary payments.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="bd-bank-name">Bank name *</Label>
+            <Input
+              id="bd-bank-name"
+              value={form.bankName}
+              onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bd-account">Account number {hasExisting ? "" : "*"}</Label>
+            <Input
+              id="bd-account"
+              value={form.accountNumber}
+              placeholder={
+                hasExisting && employee.bankDetail
+                  ? `On file: ${maskAccountNumber(employee.bankDetail.accountNumber)} — leave blank to keep`
+                  : "Enter account number"
+              }
+              onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value.replace(/\D/g, "") }))}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="bd-ifsc">IFSC *</Label>
+              <Input
+                id="bd-ifsc"
+                value={form.ifscCode}
+                maxLength={20}
+                placeholder="e.g. HDFC0001234"
+                onChange={(e) => setForm((f) => ({ ...f, ifscCode: e.target.value.toUpperCase() }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bd-branch">Branch</Label>
+              <Input
+                id="bd-branch"
+                value={form.branch}
+                onChange={(e) => setForm((f) => ({ ...f, branch: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bd-city">City</Label>
+            <Input
+              id="bd-city"
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={
+              saving ||
+              !form.bankName.trim() ||
+              !form.ifscCode.trim() ||
+              (!hasExisting && !form.accountNumber.trim())
+            }
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ProfilePage() {
   const { data: employee, loading, error, refetch } = useAsync(getMyProfile);
   const [editOpen, setEditOpen] = React.useState(false);
@@ -910,6 +1052,7 @@ export default function ProfilePage() {
   const [employerToDelete, setEmployerToDelete] = React.useState<EmployeePreviousEmployer | null>(null);
   const [contactDialog, setContactDialog] = React.useState<{ contact: EmergencyContact | null } | null>(null);
   const [contactToDelete, setContactToDelete] = React.useState<EmergencyContact | null>(null);
+  const [bankOpen, setBankOpen] = React.useState(false);
 
   const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
   const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
@@ -988,10 +1131,6 @@ export default function ProfilePage() {
                   </p>
                   <p className="text-muted-foreground text-xs">{employee.employeeCode}</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                  <Pencil />
-                  Edit personal details
-                </Button>
               </CardContent>
             </Card>
 
@@ -1008,25 +1147,37 @@ export default function ProfilePage() {
 
               <TabsContent value="personal" className="mt-4">
                 <Card>
-                  <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
-                    <Field label="Full name" value={employeeFullName(employee)} />
-                    <Field label="Work email" value={employee.user.email} />
-                    <Field label="Personal email" value={employee.personalEmail} />
-                    <Field label="Phone" value={employee.phone} />
-                    <Field
-                      label="Date of birth"
-                      value={employee.dateOfBirth ? formatDate(employee.dateOfBirth) : null}
-                    />
-                    <Field label="Gender" value={employee.gender ? titleCase(employee.gender) : null} />
-                    <Field
-                      label="Marital status"
-                      value={employee.maritalStatus ? titleCase(employee.maritalStatus) : null}
-                    />
-                    <Field label="Blood group" value={employee.bloodGroup ? formatBloodGroup(employee.bloodGroup) : null} />
-                    <Field label="Nationality" value={employee.nationality} />
-                    <Field label="Religion" value={employee.religion} />
-                    <Field label="Current address" value={employee.currentAddress} />
-                    <Field label="Permanent address" value={employee.permanentAddress} />
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <User className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">Personal details</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                        <Pencil />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Full name" value={employeeFullName(employee)} />
+                      <Field label="Work email" value={employee.user.email} />
+                      <Field label="Personal email" value={employee.personalEmail} />
+                      <Field label="Phone" value={employee.phone} />
+                      <Field
+                        label="Date of birth"
+                        value={employee.dateOfBirth ? formatDate(employee.dateOfBirth) : null}
+                      />
+                      <Field label="Gender" value={employee.gender ? titleCase(employee.gender) : null} />
+                      <Field
+                        label="Marital status"
+                        value={employee.maritalStatus ? titleCase(employee.maritalStatus) : null}
+                      />
+                      <Field label="Blood group" value={employee.bloodGroup ? formatBloodGroup(employee.bloodGroup) : null} />
+                      <Field label="Nationality" value={employee.nationality} />
+                      <Field label="Religion" value={employee.religion} />
+                      <Field label="Current address" value={employee.currentAddress} />
+                      <Field label="Permanent address" value={employee.permanentAddress} />
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -1295,15 +1446,32 @@ export default function ProfilePage() {
 
               <TabsContent value="bank" className="mt-4">
                 <Card className="sm:max-w-md">
-                  <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Landmark className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">Bank details</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setBankOpen(true)}>
+                        <Pencil />
+                        Edit
+                      </Button>
+                    </div>
                     {employee.bankDetail ? (
-                      <>
+                      <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Bank" value={employee.bankDetail.bankName} />
                         <Field label="Account number" value={maskAccountNumber(employee.bankDetail.accountNumber)} />
                         <Field label="IFSC" value={employee.bankDetail.ifscCode} />
-                      </>
+                        <Field label="Branch" value={employee.bankDetail.branch} />
+                        <Field label="City" value={employee.bankDetail.city} />
+                      </div>
                     ) : (
-                      <p className="text-muted-foreground text-sm sm:col-span-2">No bank details on file.</p>
+                      <EmptyState
+                        size="sm"
+                        icon={Landmark}
+                        title="Add your bank details"
+                        description="Required for salary payments."
+                      />
                     )}
                   </CardContent>
                 </Card>
@@ -1319,6 +1487,9 @@ export default function ProfilePage() {
             )}
             {idOpen && (
               <IdentificationDialog employee={employee} onClose={() => setIdOpen(false)} onSaved={refetch} />
+            )}
+            {bankOpen && (
+              <BankDetailDialog employee={employee} onClose={() => setBankOpen(false)} onSaved={refetch} />
             )}
             {familyDetailOpen && (
               <FamilyDetailDialog employee={employee} onClose={() => setFamilyDetailOpen(false)} onSaved={refetch} />
