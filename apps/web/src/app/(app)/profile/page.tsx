@@ -179,12 +179,12 @@ function EditProfileDialog({
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Date of birth</Label>
               <DateOfBirthPicker
                 value={form.dateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, dateOfBirth: d }))}
-                className="w-full"
+                className="max-w-xs"
               />
             </div>
             <div className="space-y-2">
@@ -496,12 +496,12 @@ function FamilyDetailDialog({
                 onChange={(e) => setForm((f) => ({ ...f, fatherName: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Father&apos;s date of birth</Label>
               <DateOfBirthPicker
                 value={form.fatherDateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, fatherDateOfBirth: d }))}
-                className="w-full"
+                className="max-w-xs"
               />
             </div>
             <div className="space-y-2">
@@ -512,12 +512,12 @@ function FamilyDetailDialog({
                 onChange={(e) => setForm((f) => ({ ...f, motherName: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Mother&apos;s date of birth</Label>
               <DateOfBirthPicker
                 value={form.motherDateOfBirth}
                 onChange={(d) => setForm((f) => ({ ...f, motherDateOfBirth: d }))}
-                className="w-full"
+                className="max-w-xs"
               />
             </div>
           </div>
