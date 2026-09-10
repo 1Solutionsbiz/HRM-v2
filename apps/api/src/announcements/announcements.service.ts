@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { PublishAnnouncementDto } from './dto/publish-announcement.dto.js';
+import type { UpdateAnnouncementDto } from './dto/update-announcement.dto.js';
 
 @Injectable()
 export class AnnouncementsService {
@@ -79,6 +80,36 @@ export class AnnouncementsService {
         linkUrl: '/announcements',
       },
     );
+
+    return announcement;
+  }
+
+  /**
+   * A correction to what's already published, not a new broadcast - unlike
+   * publish(), this does not re-notify every employee.
+   */
+  async update(id: string, dto: UpdateAnnouncementDto, actor: AuthContext) {
+    const existing = await this.prisma.announcement.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Announcement not found');
+
+    const announcement = await this.prisma.announcement.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        body: dto.body,
+        category: dto.category,
+        imageUrl: dto.imageUrl ?? null,
+      },
+    });
+
+    await this.auditService.log({
+      eventType: 'OTHER',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Announcement',
+      targetId: announcement.id,
+      description: `Updated announcement: ${dto.title}`,
+    });
 
     return announcement;
   }

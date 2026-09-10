@@ -35,3 +35,14 @@ export interface PublishAnnouncementPayload {
 export function publishAnnouncement(payload: PublishAnnouncementPayload): Promise<Announcement> {
   return apiFetch<Announcement>("/announcements", { method: "POST", body: payload });
 }
+
+export interface UpdateAnnouncementPayload {
+  title: string;
+  body: string;
+  category: AnnouncementCategory;
+  imageUrl: string | null;
+}
+
+export function updateAnnouncement(id: string, payload: UpdateAnnouncementPayload): Promise<Announcement> {
+  return apiFetch<Announcement>(`/announcements/${id}`, { method: "PATCH", body: payload });
+}

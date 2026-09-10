@@ -22,6 +22,7 @@ import { RequirePermissions } from '../common/decorators/require-permissions.dec
 import type { AuthContext } from '../common/auth-context.js';
 import { AnnouncementsService } from './announcements.service.js';
 import { PublishAnnouncementDto } from './dto/publish-announcement.dto.js';
+import { UpdateAnnouncementDto } from './dto/update-announcement.dto.js';
 import {
   announcementImageFilePath,
   announcementImageMulterOptions,
@@ -90,5 +91,15 @@ export class AnnouncementsController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.announcementsService.publish(dto, actor);
+  }
+
+  @Patch(':id')
+  @RequirePermissions('announcement:publish')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAnnouncementDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.announcementsService.update(id, dto, actor);
   }
 }

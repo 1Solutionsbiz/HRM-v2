@@ -4,7 +4,7 @@ import * as React from "react";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, Megaphone, Plus, X } from "lucide-react";
+import { ImagePlus, Loader2, Megaphone, Pencil, Plus, X } from "lucide-react";
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
@@ -12,6 +12,7 @@ import {
   getAnnouncements,
   markAnnouncementRead,
   publishAnnouncement,
+  updateAnnouncement,
   uploadAnnouncementImage,
   type Announcement,
   type AnnouncementCategory,
@@ -75,6 +76,9 @@ function AnnouncementsPageInner() {
   const [imageError, setImageError] = React.useState<string | null>(null);
   const [publishing, setPublishing] = React.useState(false);
   const [publishError, setPublishError] = React.useState<string | null>(null);
+  // Non-null while the compose dialog is editing an existing announcement
+  // rather than creating a new one - same dialog and form, different submit.
+  const [editingId, setEditingId] = React.useState<string | null>(null);
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -125,6 +129,7 @@ function AnnouncementsPageInner() {
   }
 
   function openCompose() {
+    setEditingId(null);
     setComposeForm(EMPTY_COMPOSE_FORM);
     setImageUrl(null);
     setImageError(null);
@@ -132,21 +137,44 @@ function AnnouncementsPageInner() {
     setComposeOpen(true);
   }
 
-  async function handlePublish() {
+  function openEdit(a: Announcement) {
+    setEditingId(a.id);
+    setComposeForm({ title: a.title, body: a.body, category: a.category });
+    setImageUrl(a.imageUrl);
+    setImageError(null);
+    setPublishError(null);
+    setComposeOpen(true);
+  }
+
+  async function handleSubmit() {
     setPublishing(true);
     setPublishError(null);
     try {
-      await publishAnnouncement({
-        title: composeForm.title.trim(),
-        body: composeForm.body.trim(),
-        category: composeForm.category,
-        imageUrl: imageUrl ?? undefined,
-      });
-      toast.success("Announcement published");
+      if (editingId) {
+        await updateAnnouncement(editingId, {
+          title: composeForm.title.trim(),
+          body: composeForm.body.trim(),
+          category: composeForm.category,
+          imageUrl: imageUrl ?? null,
+        });
+        toast.success("Announcement updated");
+      } else {
+        await publishAnnouncement({
+          title: composeForm.title.trim(),
+          body: composeForm.body.trim(),
+          category: composeForm.category,
+          imageUrl: imageUrl ?? undefined,
+        });
+        toast.success("Announcement published");
+      }
       setComposeOpen(false);
       refetch();
     } catch (err) {
-      setPublishError(err instanceof ApiError ? err.message : "Couldn't publish this announcement. Please try again.");
+      setPublishError(
+        err instanceof ApiError
+          ? err.message
+          : `Couldn't ${editingId ? "save" : "publish"} this announcement. Please try again.`,
+      );
     } finally {
       setPublishing(false);
     }
@@ -189,33 +217,43 @@ function AnnouncementsPageInner() {
                   key={a.id}
                   className={isRead ? undefined : "border-primary/30"}
                 >
-                  <button
-                    type="button"
-                    onClick={() => open(a)}
-                    className="w-full text-left"
-                  >
-                    <CardContent className="flex items-start justify-between gap-3 pt-6">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          {!isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
-                          <p className="text-sm font-medium">{a.title}</p>
-                        </div>
-                        <p className="text-muted-foreground line-clamp-2 text-xs">{a.body}</p>
-                        <p className="text-muted-foreground text-[11px]">{formatDate(a.publishedAt)}</p>
+                  <CardContent className="flex items-start justify-between gap-3 pt-6">
+                    <button
+                      type="button"
+                      onClick={() => open(a)}
+                      className="min-w-0 flex-1 space-y-1 text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        {!isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
+                        <p className="text-sm font-medium">{a.title}</p>
                       </div>
-                      {a.imageUrl && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={a.imageUrl}
-                          alt=""
-                          className="size-14 shrink-0 rounded-md border object-cover"
-                        />
-                      )}
-                      <Badge variant={categoryTone[a.category]} className="shrink-0">
-                        {titleCase(a.category)}
-                      </Badge>
-                    </CardContent>
-                  </button>
+                      <p className="text-muted-foreground line-clamp-2 text-xs">{a.body}</p>
+                      <p className="text-muted-foreground text-[11px]">{formatDate(a.publishedAt)}</p>
+                    </button>
+                    {a.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={a.imageUrl}
+                        alt=""
+                        className="size-14 shrink-0 rounded-md border object-cover"
+                      />
+                    )}
+                    <Badge variant={categoryTone[a.category]} className="shrink-0">
+                      {titleCase(a.category)}
+                    </Badge>
+                    {canPublish && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0"
+                        aria-label="Edit announcement"
+                        onClick={() => openEdit(a)}
+                      >
+                        <Pencil />
+                      </Button>
+                    )}
+                  </CardContent>
                 </Card>
               );
             })}
@@ -254,8 +292,12 @@ function AnnouncementsPageInner() {
         <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New announcement</DialogTitle>
-              <DialogDescription>Published immediately, visible to every employee.</DialogDescription>
+              <DialogTitle>{editingId ? "Edit announcement" : "New announcement"}</DialogTitle>
+              <DialogDescription>
+                {editingId
+                  ? "Changes are visible to every employee immediately."
+                  : "Published immediately, visible to every employee."}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               {publishError && (
@@ -360,12 +402,12 @@ function AnnouncementsPageInner() {
                 Cancel
               </Button>
               <Button
-                onClick={handlePublish}
+                onClick={handleSubmit}
                 disabled={
                   publishing || uploadingImage || !composeForm.title.trim() || !composeForm.body.trim()
                 }
               >
-                {publishing ? "Publishing…" : "Publish"}
+                {publishing ? "Saving…" : editingId ? "Save changes" : "Publish"}
               </Button>
             </DialogFooter>
           </DialogContent>
