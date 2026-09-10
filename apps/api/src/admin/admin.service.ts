@@ -135,6 +135,7 @@ export class AdminService {
 
   async getEmployeeRoles() {
     const employees = await this.prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
       include: {
         department: { select: { name: true } },
         user: { include: { userRoles: { include: { role: true } } } },
