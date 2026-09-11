@@ -23,12 +23,35 @@ const ALLOWED_LOCAL_FONT_PATHS = new Set(
 
 pdfMake.setFonts(STANDARD_FONTS);
 // No remote resources or arbitrary local files are ever referenced by a
-// letter's content (plain-text only, no images in P1 - see the class
-// comment on logoUrl in schema.prisma) - deny both by default rather than
-// leaving them unconfigured, and allow-list only the exact standard-font
-// names pdfkit needs.
+// letter's content (plain-text only, no images - CompanySettings.logoUrl
+// is unused by this generator: embedding it would mean reopening this
+// policy to read an uploaded file, and no logo has ever been uploaded in
+// production, so there's nothing to test against yet - see PROJECT_STATUS.md)
+// - deny both by default rather than leaving them unconfigured, and
+// allow-list only the exact standard-font names pdfkit needs.
 pdfMake.setUrlAccessPolicy(() => false);
 pdfMake.setLocalAccessPolicy((path) => ALLOWED_LOCAL_FONT_PATHS.has(path));
+
+/** A paragraph whose first line looks like "12. Section Title" gets a bold, spaced-out heading treatment for that line; the rest of the paragraph (if any) renders as normal body text right after it. */
+const SECTION_HEADING_PATTERN = /^(\d+\.\s+.+)$/;
+
+/**
+ * The standard-14 fonts (Helvetica etc.) only cover WinAnsi/cp1252 -
+ * confirmed empirically by rendering a real Appointment Letter with a
+ * ₹ compensation figure: the glyph came out as a garbled superscript mark,
+ * not a rupee sign, since U+20B9 isn't in that repertoire (unlike € or £,
+ * which are). HR is free to type ₹ into a custom compensation field, so
+ * it's normalized here rather than trusted to render - the durable fix
+ * would be embedding a real Unicode font, which is out of scope for a
+ * template/content change (see the class comment on why this module
+ * deliberately ships no font files). Extend this map if another
+ * unsupported character turns up in a real generated letter.
+ */
+const UNSUPPORTED_GLYPH_REPLACEMENTS: [RegExp, string][] = [[/₹/g, 'Rs. ']];
+
+function sanitizeForPdf(text: string): string {
+  return UNSUPPORTED_GLYPH_REPLACEMENTS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), text);
+}
 
 export interface LetterPdfOptions {
   companyName: string;
@@ -41,13 +64,56 @@ export interface LetterPdfOptions {
   signatoryTitle: string;
 }
 
+function buildParagraphNode(rawParagraph: string) {
+  const paragraph = sanitizeForPdf(rawParagraph);
+  const firstLineBreak = paragraph.indexOf('\n');
+  const firstLine = firstLineBreak === -1 ? paragraph : paragraph.slice(0, firstLineBreak);
+  const headingMatch = SECTION_HEADING_PATTERN.exec(firstLine.trim());
+
+  if (headingMatch) {
+    const rest = firstLineBreak === -1 ? '' : paragraph.slice(firstLineBreak + 1).trim();
+    return {
+      // A `stack`, not a single `text` node with multiple runs - pdfmake's
+      // `unbreakable` only reliably keeps a `stack`'s children together
+      // across a page boundary; on a plain multi-run `text` node it had no
+      // effect (confirmed empirically: the heading still landed alone at
+      // the bottom of a page with its body starting the next one).
+      stack: [
+        { text: headingMatch[1], style: 'sectionHeading' },
+        ...(rest ? [{ text: rest, style: 'body' }] : []),
+      ],
+      margin: [0, 12, 0, 6] as [number, number, number, number],
+      unbreakable: true,
+    };
+  }
+
+  if (paragraph.startsWith('Subject:')) {
+    return { text: paragraph, style: 'subject', margin: [0, 8, 0, 10] as [number, number, number, number] };
+  }
+
+  return { text: paragraph, style: 'body', margin: [0, 0, 0, 10] as [number, number, number, number] };
+}
+
 export function buildLetterDocDefinition(options: LetterPdfOptions) {
   return {
     pageSize: 'A4' as const,
-    pageMargins: [56, 56, 56, 64] as [number, number, number, number],
+    pageMargins: [56, 56, 56, 48] as [number, number, number, number],
     defaultStyle: { font: 'Helvetica', fontSize: 11, lineHeight: 1.35 },
+    // A light running footer, not a repeating full header - the page-1
+    // letterhead block below (companyName/letterTitle/doc-number/date)
+    // would otherwise duplicate on every page if it were a pdfmake
+    // `header` instead; a real corporate letter doesn't repeat its
+    // letterhead per page either. Satisfies "page numbering" from the
+    // presentation requirements without that duplication.
+    footer: (currentPage: number, pageCount: number) => ({
+      margin: [56, 0, 56, 20] as [number, number, number, number],
+      columns: [
+        { text: options.documentNumber, style: 'footer' },
+        { text: `Page ${currentPage} of ${pageCount}`, style: 'footer', alignment: 'right' as const },
+      ],
+    }),
     content: [
-      { text: options.companyName, style: 'companyName' },
+      { text: sanitizeForPdf(options.companyName), style: 'companyName' },
       { text: options.letterTitle, style: 'letterTitle' },
       {
         columns: [
@@ -56,22 +122,24 @@ export function buildLetterDocDefinition(options: LetterPdfOptions) {
         ],
         margin: [0, 4, 0, 20] as [number, number, number, number],
       },
-      ...options.paragraphs.map((paragraph) => ({
-        text: paragraph,
-        style: 'body',
-        margin: [0, 0, 0, 10] as [number, number, number, number],
-      })),
+      ...options.paragraphs.map(buildParagraphNode),
       { text: '\n' },
-      { text: options.signatoryName, style: 'signatoryName' },
-      { text: options.signatoryTitle, style: 'signatoryTitle' },
+      { text: `For ${sanitizeForPdf(options.companyName)}`, style: 'forCompany' },
+      { text: '\n' },
+      { text: sanitizeForPdf(options.signatoryName), style: 'signatoryName' },
+      { text: sanitizeForPdf(options.signatoryTitle), style: 'signatoryTitle' },
     ],
     styles: {
       companyName: { fontSize: 15, bold: true },
       letterTitle: { fontSize: 13, bold: true, margin: [0, 16, 0, 0] as [number, number, number, number] },
       meta: { fontSize: 9, color: '#555555' },
+      subject: { fontSize: 11, bold: true },
+      sectionHeading: { fontSize: 11.5, bold: true },
       body: { fontSize: 11 },
+      forCompany: { fontSize: 11 },
       signatoryName: { fontSize: 11, bold: true },
       signatoryTitle: { fontSize: 10, color: '#555555' },
+      footer: { fontSize: 8, color: '#888888' },
     },
   };
 }

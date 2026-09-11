@@ -15,8 +15,8 @@ export interface LetterTypeSummary {
   name: string;
   numberPrefix: string;
   isActive: boolean;
-  /** Which `custom.*` fields this type's template needs - drives which inputs the generate form renders. */
-  customVariableKeys: string[];
+  /** Which `custom.*` fields this type's template uses - drives which inputs the generate form renders, and which are marked required vs optional. */
+  customVariables: { required: string[]; optional: string[] };
 }
 
 export interface LetterCategory {

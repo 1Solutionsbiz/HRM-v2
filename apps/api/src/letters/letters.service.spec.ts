@@ -148,7 +148,7 @@ describe('LettersService.listCategories', () => {
 
     const result = await service.listCategories();
 
-    expect(result[0].types[0].customVariableKeys).toEqual(['lastWorkingDay']);
+    expect(result[0].types[0].customVariables).toEqual({ required: ['lastWorkingDay'], optional: [] });
   });
 });
 

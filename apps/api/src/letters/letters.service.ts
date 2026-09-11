@@ -144,10 +144,10 @@ export class LettersService {
     });
     return categories.map((category) => ({
       ...category,
-      types: category.types.map((type) => ({
-        ...type,
-        customVariableKeys: LETTER_TYPE_CUSTOM_VARIABLES[type.key] ?? [],
-      })),
+      types: category.types.map((type) => {
+        const spec = LETTER_TYPE_CUSTOM_VARIABLES[type.key] ?? { required: [], optional: [] };
+        return { ...type, customVariables: spec };
+      }),
     }));
   }
 
@@ -196,6 +196,7 @@ export class LettersService {
           department: true,
           designation: true,
           user: { select: { email: true } },
+          manager: { select: { firstName: true, lastName: true } },
         },
       }),
       this.prisma.letterType.findUnique({ where: { id: params.letterTypeId } }),
@@ -227,6 +228,10 @@ export class LettersService {
         dateOfJoining: employee.dateOfJoining,
         employmentType: employee.employmentType,
         workLocation: employee.workLocation,
+        address: employee.currentAddress ?? employee.permanentAddress ?? null,
+        reportingManager: employee.manager
+          ? `${employee.manager.firstName} ${employee.manager.lastName}`
+          : null,
       },
       company: {
         legalName: companySettings.legalName,
@@ -234,6 +239,7 @@ export class LettersService {
         address: companySettings.address,
         website: companySettings.website,
         supportEmail: companySettings.supportEmail,
+        phone: companySettings.phone,
       },
       documentNumber: params.documentNumber,
       generatedAt: params.generatedAt,

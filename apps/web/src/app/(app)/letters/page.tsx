@@ -86,7 +86,7 @@ export default function LettersPage() {
 
   function canSubmit(): boolean {
     if (!selectedEmployee || !selectedType) return false;
-    return selectedType.customVariableKeys.every((key) => customValues[key]?.trim());
+    return selectedType.customVariables.required.every((key) => customValues[key]?.trim());
   }
 
   async function handlePreview() {
@@ -226,20 +226,31 @@ export default function LettersPage() {
             </Select>
           </div>
 
-          {selectedType && selectedType.customVariableKeys.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {selectedType.customVariableKeys.map((key) => (
-                <div key={key} className="space-y-2">
-                  <Label htmlFor={`custom-${key}`}>{humanizeKey(key)} *</Label>
-                  <Input
-                    id={`custom-${key}`}
-                    value={customValues[key] ?? ""}
-                    onChange={(e) => setCustomValues((prev) => ({ ...prev, [key]: e.target.value }))}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          {selectedType &&
+            (selectedType.customVariables.required.length > 0 || selectedType.customVariables.optional.length > 0) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {selectedType.customVariables.required.map((key) => (
+                  <div key={key} className="space-y-2">
+                    <Label htmlFor={`custom-${key}`}>{humanizeKey(key)} *</Label>
+                    <Input
+                      id={`custom-${key}`}
+                      value={customValues[key] ?? ""}
+                      onChange={(e) => setCustomValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+                {selectedType.customVariables.optional.map((key) => (
+                  <div key={key} className="space-y-2">
+                    <Label htmlFor={`custom-${key}`}>{humanizeKey(key)} (optional)</Label>
+                    <Input
+                      id={`custom-${key}`}
+                      value={customValues[key] ?? ""}
+                      onChange={(e) => setCustomValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
           {preview && (
             <div className="bg-muted/40 space-y-3 rounded-md border p-4 text-sm">

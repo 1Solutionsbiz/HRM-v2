@@ -176,6 +176,63 @@ describe('Letters (e2e)', () => {
       .expect(403);
   });
 
+  it('keeps an already-generated letter\'s content unchanged after a new template version is promoted', async () => {
+    // The core requirement behind versioning at all: Old Letter -> Old
+    // Version -> Old Content, New Letter -> New Version -> New Content -
+    // promoting a template must never rewrite a letter already issued.
+    const token = await loginAs('hr@example.com');
+
+    const letterOnV1 = await request(app.getHttpServer())
+      .post('/letters/generate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        employeeId: targetEmployeeId(),
+        letterTypeId: 'lt-relieving',
+        customVariables: { lastWorkingDay: '2026-09-30' },
+      })
+      .expect(201);
+
+    const storedV1 = prisma.employeeLetters.get(letterOnV1.body.id)!;
+    expect(storedV1.templateVersionId).toBe('v1');
+    expect(storedV1.renderedContent).toContain('This confirms your last working day as 2026-09-30');
+
+    // Simulate seed-letters.ts's promotion: add version 2, bump currentVersionNumber.
+    prisma.seedLetterTemplateVersion({
+      id: 'v2',
+      templateId: 'tpl-1',
+      versionNumber: 2,
+      content: 'UPDATED TEMPLATE - Dear {{employee.fullName}}, last day {{custom.lastWorkingDay}}. Sincerely,',
+    });
+    prisma.seedLetterTemplate({
+      id: 'tpl-1',
+      letterTypeId: 'lt-relieving',
+      name: 'Standard Relieving Letter',
+      currentVersionNumber: 2,
+    });
+
+    const letterOnV2 = await request(app.getHttpServer())
+      .post('/letters/generate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        employeeId: targetEmployeeId(),
+        letterTypeId: 'lt-relieving',
+        customVariables: { lastWorkingDay: '2026-10-15' },
+      })
+      .expect(201);
+
+    const storedV2 = prisma.employeeLetters.get(letterOnV2.body.id)!;
+    expect(storedV2.templateVersionId).toBe('v2');
+    expect(storedV2.renderedContent).toContain('UPDATED TEMPLATE');
+    expect(storedV2.renderedContent).toContain('last day 2026-10-15');
+
+    // The re-fetch that actually matters: letter A must still read exactly
+    // as it did before the promotion - not silently re-rendered.
+    const stillStoredV1 = prisma.employeeLetters.get(letterOnV1.body.id)!;
+    expect(stillStoredV1.templateVersionId).toBe('v1');
+    expect(stillStoredV1.renderedContent).toBe(storedV1.renderedContent);
+    expect(stillStoredV1.renderedContent).not.toContain('UPDATED TEMPLATE');
+  });
+
   it('lets HR generate a letter and download the real PDF that was written to disk', async () => {
     const token = await loginAs('hr@example.com');
 

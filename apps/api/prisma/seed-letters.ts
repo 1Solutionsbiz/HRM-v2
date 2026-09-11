@@ -86,17 +86,34 @@ async function main() {
       console.log(`  Created template for ${type.key}.`);
     }
 
-    if (template.currentVersionNumber === 0) {
-      const version = await prisma.letterTemplateVersion.create({
-        data: { templateId: template.id, versionNumber: 1, content: letterType.content },
+    // Ensure every declared version exists (append-only - this never edits
+    // an existing version's content, see LetterTypeSeed's comment) and
+    // promote to the latest. Idempotent: re-running with the same
+    // `versions` array creates nothing new and leaves currentVersionNumber
+    // untouched once it's already at the latest, so a repeat seed run is a
+    // no-op for a type whose versions haven't changed.
+    for (let i = 0; i < letterType.versions.length; i++) {
+      const versionNumber = i + 1;
+      const existing = await prisma.letterTemplateVersion.findUnique({
+        where: { templateId_versionNumber: { templateId: template.id, versionNumber } },
       });
+      if (!existing) {
+        await prisma.letterTemplateVersion.create({
+          data: { templateId: template.id, versionNumber, content: letterType.versions[i] },
+        });
+        console.log(`  Seeded version ${versionNumber} content for ${type.key}.`);
+      }
+    }
+
+    const latestVersionNumber = letterType.versions.length;
+    if (template.currentVersionNumber !== latestVersionNumber) {
       await prisma.letterTemplate.update({
         where: { id: template.id },
-        data: { currentVersionNumber: version.versionNumber, signatoryId: template.signatoryId ?? signatory.id },
+        data: { currentVersionNumber: latestVersionNumber, signatoryId: template.signatoryId ?? signatory.id },
       });
-      console.log(`  Seeded version 1 content for ${type.key}.`);
+      console.log(`  Promoted ${type.key} to version ${latestVersionNumber}.`);
     } else {
-      console.log(`  ${type.key} already has a current version (${template.currentVersionNumber}) - left unchanged.`);
+      console.log(`  ${type.key} is already on version ${latestVersionNumber} - left unchanged.`);
     }
   }
 
