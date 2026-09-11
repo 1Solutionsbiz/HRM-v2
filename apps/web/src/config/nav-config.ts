@@ -235,10 +235,13 @@ export const navGroups: NavGroup[] = [
  * The subset of nav items surfaced as bottom-tab shortcuts on mobile.
  * Kept short and employee-first per the mobile design priority - the
  * remaining items are one tap away in the "More" sheet. Employees get the
- * four things they touch most often day-to-day (attendance and leave beat
+ * things they touch most often day-to-day (attendance and leave beat
  * payslips, which is a once-a-month check tucked into "More" instead;
  * tickets beat the more general leave/expense "Requests" list, per user
  * feedback that raising a ticket is the more common action here).
+ * Daily Report joined this list once the module shipped - once a company
+ * enables the policy it's a same-day action for every required employee,
+ * same frequency class as Attendance, not a once-in-a-while "More" item.
  */
 export function getMobilePrimaryNav(role: Role) {
   const home =
@@ -248,6 +251,7 @@ export function getMobilePrimaryNav(role: Role) {
   return [
     home,
     { title: "Attendance", url: "/attendance", icon: Clock },
+    { title: "Daily Report", url: "/daily-report", icon: NotebookPen },
     { title: "Leave", url: "/leave", icon: CalendarDays },
     { title: "Tickets", url: "/support", icon: Ticket },
   ];
