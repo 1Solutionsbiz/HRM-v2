@@ -1851,6 +1851,113 @@ switcher:**
 - `mockLogin` deleted from `mock-api.ts` (dead code — nothing else in
   that file changed).
 
+## Projects lookup + Daily Report polish + leave-cancellation (2026-09-11)
+
+**Projects lookup** (`15182f2`, `1a61895`): Daily Work Report task entries
+previously captured `projectOrClient` as free text; employees now pick from
+a real `Project` lookup instead. New Company Settings → Projects admin page
+(add/rename/archive/delete, `company:manage`-gated, mirrors the Holidays
+module's structure) plus `projectId` FK replacing the free-text field —
+safe to replace outright since the feature had only been live a few hours
+and production had zero rows using it. Deletion is blocked
+(`ConflictException`, checked first) while any task entry references the
+project; archiving (`isActive`) is the supported way to retire one without
+losing history — archived projects drop out of the picker for new task
+entries but still render (labeled "(archived)") on entries that already
+reference them.
+
+**Daily Report reminder test-send** (`da9ce20`): same pattern as the
+existing weekly-attendance-report test-send — `POST
+/daily-reports/reminders/test` (`company:manage`, admin-only) runs the real
+gating/query logic and delivers both notification variants to the caller
+only, so the pipeline can be verified against real production data without
+spamming real employees/managers. `checkAndNotify` (the real cron path) was
+refactored to share the same `loadContext()`/`computeStillMissing()` rather
+than duplicating logic — its own behavior is unchanged, confirmed via the
+existing test suite.
+
+**Blocker-category rollup** (`ab09842`): `DailyReportTaskEntry.blockerCategory`
+has been captured since P1 but had no aggregate view — this was the actual
+reporting need behind the original Daily Work Reporting brief. New `GET
+/daily-reports/blockers` (date-range, defaults to trailing 30 days, capped
+180) returns total-vs-blocked counts and a per-category breakdown, reusing
+the same `resolveTeamScope` every other endpoint in this module uses
+(manager sees direct reports only, hr/admin see everything). New "Blocker
+breakdown" tab on `/team/daily-reports`, rendered as a plain bar list — same
+track/fill pattern already used by the admin dashboard's Roles distribution
+card, no new charting dependency.
+
+**Daily Report template assignment UI** (`a72330c`): the designation-level
+default template and per-employee override/exemption fields have worked
+since P1 but were API-only — every assignment before this was a raw fetch
+call in a browser console. Purely a frontend wiring pass onto existing,
+already-tested endpoints: a new "Daily Report templates" card on Company
+Settings (one row per designation, auto-saving inline `Select`), and a new
+"Daily Report settings" card on the employee detail page's Employment tab
+(resolved template + exemption status, editable via dialog).
+
+**Mobile nav: added then reverted** (`0a2a4da`, `41a1538`): Daily Report was
+added to the mobile bottom-tab bar (reasoning: once a company enables the
+policy, submitting is a same-day action, same frequency class as
+Attendance) then explicitly reverted by the user the same session. Stays
+reachable from the "My work" section of the mobile More sheet, same as
+before. **Standing decision — do not re-add without asking.**
+
+**Template name hidden from employees** (`2b09496`): the Daily Report page's
+header no longer shows which template applies ("General template" etc.) —
+internal categorization, and actively confusing on a Not-Required day
+(implied a report was needed when it wasn't). Manager/HR roster views are
+unaffected, template is still shown there since it's useful context for
+them.
+
+**Leave approvals: active employees only** (`17bfa91`): `GET
+/leave/requests/company` had no employee-status filter at all — a resigned
+employee's old requests stayed visible in Pending/History forever. Filtered
+to `status: 'ACTIVE'`, same convention as `DailyReportsService.getTeamReports`.
+
+**Cancel an approved leave, not just a pending one** (`7ae3ee7`, `8c8c586`):
+employees can now self-cancel an APPROVED leave request, but only while it
+hasn't started yet — once `startDate` arrives, cancelling would misrepresent
+what actually happened rather than correct a plan, so that case stays HR
+territory (409, "contact HR for a correction"). This cutoff was **the
+model's own design decision, not user-specified — surfaced to the user
+2026-09-11, confirmed acceptable as-is.**
+
+Cancelling properly reverses both side effects `decide()` applied on
+approval: `LeaveBalance.usedDays` decremented back
+(`reverseApprovedUsage`), and the `AttendanceDay` rows
+`markAttendanceDaysOnLeave` force-set to ON_LEAVE are unwound via new
+`AttendanceService.unmarkApprovedLeave` — a day with no real punches is
+deleted outright (reverting to synthesize-on-read), a day that already had
+real punches just has `leaveRequestId` cleared and gets reclassified via
+the same `recomputeDay()` every check-in/out goes through (deliberately not
+duplicated in `LeaveService`). Manager gets notified, same pattern as the
+existing approve/reject notification. Frontend: new "Upcoming approved
+leave" card on `/leave`, same Cancel action as the existing "Pending
+requests" card; also fixed a pre-existing gap where a failed cancel had no
+error handling at all.
+
+**Bug found and fixed the same day, live**: the new "Upcoming approved
+leave" card's `r.startDate > today` compared a full ISO timestamp
+(`"2026-09-11T00:00:00.000Z"`) against a bare `"2026-09-11"` — the longer
+string always wins lexicographically regardless of actual date, so a leave
+starting *today* showed a Cancel button the backend was always going to
+reject with 409. Caught by testing the real flow live (applied → approved
+→ cancelled via the actual UI button, not just via API), not by code review
+— fixed by comparing date-only substrings, matching the backend's own
+`startDate <= today` cutoff (`8c8c586`).
+
+**Verification note**: every item above was clicked/tested live on
+`hrm.1solutions.biz` after deploy, including minting real test leave
+requests via authenticated `fetch` calls (apply → approve → cancel,
+checking `/leave/balances` and the `/attendance` calendar before/after)
+and cleaning them up (cancelled/removed) afterward. Confirmed this app's
+`/leave` route is itself ISR-cached (`x-nextjs-cache`, ~300s stale-time) —
+same class of gotcha as the website repo's ISR gap, just not previously
+confirmed on this app; a push can take several minutes beyond the usual
+deploy window to actually surface, check `etag` before trusting a "still
+broken" read.
+
 ## Not started
 
 - ○ Employee-facing resignation submission page — `ResignationController`'s
