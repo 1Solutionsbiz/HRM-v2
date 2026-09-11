@@ -30,5 +30,13 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Runs in the ServiceWorker global scope, not the DOM - `self` means
+    // something different there and conflicts with this program's `dom`
+    // lib. next-pwa's own webpack child-compiler builds this file
+    // independently of this tsconfig; see worker/tsconfig.json for its
+    // own, separately-checked config.
+    "worker"
+  ]
 }

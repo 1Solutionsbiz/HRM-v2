@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { CheckCircle2, Download, KeyRound, Monitor, Moon, Share, Sun } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Download, KeyRound, Monitor, Moon, Share, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { changePassword } from "@/lib/api/auth";
 import { useInstallPrompt } from "@/lib/use-install-prompt";
+import { usePushNotifications } from "@/lib/use-push-notifications";
 import { PageHeader } from "@/components/hrm/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { canInstall, isIos, isInstalled, promptInstall } = useInstallPrompt();
+  const {
+    supported: pushSupported,
+    permission: pushPermission,
+    isSubscribed: pushSubscribed,
+    busy: pushBusy,
+    error: pushError,
+    subscribe: enablePush,
+    unsubscribe: disablePush,
+  } = usePushNotifications();
 
   const [passwordDialogOpen, setPasswordDialogOpen] = React.useState(false);
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -140,6 +150,48 @@ export default function SettingsPage() {
             <p className="text-muted-foreground text-sm">
               Not available in this browser yet — try Chrome or Edge, or open this page on your phone.
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Notifications</CardTitle>
+          <CardDescription>Get alerted on this device even when HRM isn&apos;t open.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {pushError && (
+            <Alert variant="destructive">
+              <AlertDescription>{pushError}</AlertDescription>
+            </Alert>
+          )}
+          {!pushSupported ? (
+            <p className="text-muted-foreground text-sm">
+              Not available in this browser.{" "}
+              {isIos
+                ? "On iPhone/iPad, add HRM to your Home Screen first (Share → Add to Home Screen), then reopen it from there."
+                : "Try Chrome or Edge, or open this page on your phone."}
+            </p>
+          ) : pushPermission === "denied" ? (
+            <p className="text-muted-foreground text-sm">
+              Blocked in your browser&apos;s site settings. Allow notifications for this site there, then reload this page.
+            </p>
+          ) : pushSubscribed ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                <CheckCircle2 className="size-4" />
+                Enabled on this device.
+              </p>
+              <Button variant="outline" size="sm" onClick={disablePush} disabled={pushBusy}>
+                <BellOff />
+                {pushBusy ? "Disabling…" : "Disable"}
+              </Button>
+            </div>
+          ) : (
+            <Button variant="outline" onClick={enablePush} disabled={pushBusy}>
+              <Bell />
+              {pushBusy ? "Enabling…" : "Enable push notifications"}
+            </Button>
           )}
         </CardContent>
       </Card>
