@@ -30,7 +30,7 @@ describe('buildLetterDocDefinition', () => {
   it('leaves a plain paragraph (no leading number) as a single body-styled node', () => {
     const content = contentTexts(['Dear Ritika, welcome aboard.']);
     const node = content[3] as { text: string; style: string };
-    expect(node).toEqual({ text: 'Dear Ritika, welcome aboard.', style: 'body', margin: [0, 0, 0, 10] });
+    expect(node).toEqual({ text: 'Dear Ritika, welcome aboard.', style: 'body', margin: [0, 0, 0, 6] });
   });
 
   it('styles a "Subject:" paragraph distinctly', () => {

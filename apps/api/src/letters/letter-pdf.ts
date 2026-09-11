@@ -82,31 +82,30 @@ function buildParagraphNode(rawParagraph: string) {
         { text: headingMatch[1], style: 'sectionHeading' },
         ...(rest ? [{ text: rest, style: 'body' }] : []),
       ],
-      margin: [0, 12, 0, 6] as [number, number, number, number],
+      margin: [0, 7, 0, 2] as [number, number, number, number],
       unbreakable: true,
     };
   }
 
   if (paragraph.startsWith('Subject:')) {
-    return { text: paragraph, style: 'subject', margin: [0, 8, 0, 10] as [number, number, number, number] };
+    return { text: paragraph, style: 'subject', margin: [0, 5, 0, 7] as [number, number, number, number] };
   }
 
-  return { text: paragraph, style: 'body', margin: [0, 0, 0, 10] as [number, number, number, number] };
+  return { text: paragraph, style: 'body', margin: [0, 0, 0, 6] as [number, number, number, number] };
 }
 
 export function buildLetterDocDefinition(options: LetterPdfOptions) {
   return {
     pageSize: 'A4' as const,
-    pageMargins: [56, 56, 56, 48] as [number, number, number, number],
-    defaultStyle: { font: 'Helvetica', fontSize: 11, lineHeight: 1.35 },
-    // A light running footer, not a repeating full header - the page-1
-    // letterhead block below (companyName/letterTitle/doc-number/date)
-    // would otherwise duplicate on every page if it were a pdfmake
-    // `header` instead; a real corporate letter doesn't repeat its
-    // letterhead per page either. Satisfies "page numbering" from the
-    // presentation requirements without that duplication.
+    // Deliberately tighter than a first draft's [56,56,56,48]/lineHeight
+    // 1.35 - that produced 6 pages for a ~3,000-word letter against an
+    // explicit 3-4 page target. This density is still comfortably
+    // readable at 10.25pt, confirmed by rendering and reading the actual
+    // PDF, not just estimating.
+    pageMargins: [42, 42, 42, 34] as [number, number, number, number],
+    defaultStyle: { font: 'Helvetica', fontSize: 10.25, lineHeight: 1.16 },
     footer: (currentPage: number, pageCount: number) => ({
-      margin: [56, 0, 56, 20] as [number, number, number, number],
+      margin: [42, 0, 42, 14] as [number, number, number, number],
       columns: [
         { text: options.documentNumber, style: 'footer' },
         { text: `Page ${currentPage} of ${pageCount}`, style: 'footer', alignment: 'right' as const },
@@ -120,7 +119,7 @@ export function buildLetterDocDefinition(options: LetterPdfOptions) {
           { text: `Document No: ${options.documentNumber}`, style: 'meta' },
           { text: `Date: ${options.dateLabel}`, style: 'meta', alignment: 'right' as const },
         ],
-        margin: [0, 4, 0, 20] as [number, number, number, number],
+        margin: [0, 3, 0, 14] as [number, number, number, number],
       },
       ...options.paragraphs.map(buildParagraphNode),
       { text: '\n' },
@@ -130,16 +129,16 @@ export function buildLetterDocDefinition(options: LetterPdfOptions) {
       { text: sanitizeForPdf(options.signatoryTitle), style: 'signatoryTitle' },
     ],
     styles: {
-      companyName: { fontSize: 15, bold: true },
-      letterTitle: { fontSize: 13, bold: true, margin: [0, 16, 0, 0] as [number, number, number, number] },
-      meta: { fontSize: 9, color: '#555555' },
-      subject: { fontSize: 11, bold: true },
-      sectionHeading: { fontSize: 11.5, bold: true },
-      body: { fontSize: 11 },
-      forCompany: { fontSize: 11 },
-      signatoryName: { fontSize: 11, bold: true },
-      signatoryTitle: { fontSize: 10, color: '#555555' },
-      footer: { fontSize: 8, color: '#888888' },
+      companyName: { fontSize: 13.5, bold: true },
+      letterTitle: { fontSize: 11.5, bold: true, margin: [0, 10, 0, 0] as [number, number, number, number] },
+      meta: { fontSize: 8.25, color: '#555555' },
+      subject: { fontSize: 10.25, bold: true },
+      sectionHeading: { fontSize: 10.75, bold: true },
+      body: { fontSize: 10.25 },
+      forCompany: { fontSize: 10.25 },
+      signatoryName: { fontSize: 10.25, bold: true },
+      signatoryTitle: { fontSize: 9.25, color: '#555555' },
+      footer: { fontSize: 7.25, color: '#888888' },
     },
   };
 }
