@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { FolderKanban, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, FolderKanban, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import { getProjects, createProject, updateProject, deleteProject, type Project } from "@/lib/api/projects";
@@ -11,6 +11,7 @@ import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { TableSkeleton } from "@/components/hrm/loading-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -88,6 +89,16 @@ export default function ProjectsPage() {
     }
   }
 
+  async function toggleArchived(project: Project) {
+    try {
+      await updateProject(project.id, { isActive: !project.isActive });
+      toast.success(project.isActive ? `${project.name} archived` : `${project.name} unarchived`);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't update this project.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -105,7 +116,7 @@ export default function ProjectsPage() {
         loading={loading}
         error={error}
         onRetry={refetch}
-        loadingFallback={<TableSkeleton rows={6} columns={2} />}
+        loadingFallback={<TableSkeleton rows={6} columns={3} />}
       >
         {projects.length === 0 ? (
           <Card>
@@ -120,17 +131,35 @@ export default function ProjectsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Project name</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="w-0" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {projects.map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className={`font-medium ${!p.isActive ? "text-muted-foreground" : ""}`}>
+                        {p.name}
+                      </TableCell>
+                      <TableCell>
+                        {p.isActive ? (
+                          <Badge variant="secondary">Active</Badge>
+                        ) : (
+                          <Badge variant="outline">Archived</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button size="icon-sm" variant="ghost" aria-label="Edit" onClick={() => openEdit(p)}>
                             <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={p.isActive ? "Archive" : "Unarchive"}
+                            onClick={() => toggleArchived(p)}
+                          >
+                            {p.isActive ? <Archive className="size-3.5" /> : <ArchiveRestore className="size-3.5" />}
                           </Button>
                           <Button
                             size="icon-sm"
@@ -191,7 +220,7 @@ export default function ProjectsPage() {
         title="Remove this project?"
         description={
           deleteTarget
-            ? `"${deleteTarget.name}" will no longer be selectable in Daily Work Reports. Projects already referenced by an existing report can't be removed.`
+            ? `"${deleteTarget.name}" will be gone for good. Projects already referenced by an existing report can't be removed - archive it instead.`
             : ""
         }
         confirmLabel="Remove"

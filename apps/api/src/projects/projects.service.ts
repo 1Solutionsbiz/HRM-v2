@@ -18,7 +18,7 @@ export class ProjectsService {
   ) {}
 
   getAll() {
-    return this.prisma.project.findMany({ orderBy: { name: 'asc' } });
+    return this.prisma.project.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] });
   }
 
   async create(dto: CreateProjectDto, actor: AuthContext) {
@@ -45,12 +45,21 @@ export class ProjectsService {
     const project = await this.prisma.project.findUnique({ where: { id } });
     if (!project) throw new NotFoundException('Project not found');
 
-    if (dto.name !== project.name) {
+    if (dto.name && dto.name !== project.name) {
       const clashing = await this.prisma.project.findUnique({ where: { name: dto.name } });
       if (clashing) throw new ConflictException('A project with this name already exists');
     }
 
-    const updated = await this.prisma.project.update({ where: { id }, data: { name: dto.name } });
+    const updated = await this.prisma.project.update({
+      where: { id },
+      data: { name: dto.name, isActive: dto.isActive },
+    });
+
+    const changes: string[] = [];
+    if (dto.name && dto.name !== project.name) changes.push(`renamed to "${updated.name}"`);
+    if (dto.isActive !== undefined && dto.isActive !== project.isActive) {
+      changes.push(updated.isActive ? 'unarchived' : 'archived');
+    }
 
     await this.auditService.log({
       eventType: 'OTHER',
@@ -58,7 +67,7 @@ export class ProjectsService {
       actorEmail: actor.email,
       targetType: 'Project',
       targetId: id,
-      description: `Renamed project "${project.name}" to "${updated.name}"`,
+      description: `Project "${project.name}" ${changes.join(', ') || 'updated'}`,
     });
 
     return updated;

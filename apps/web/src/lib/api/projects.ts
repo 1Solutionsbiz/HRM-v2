@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api-client";
 export interface Project {
   id: string;
   name: string;
+  isActive: boolean;
 }
 
 export function getProjects(): Promise<Project[]> {
@@ -10,10 +11,11 @@ export function getProjects(): Promise<Project[]> {
 }
 
 export interface ProjectPayload {
-  name: string;
+  name?: string;
+  isActive?: boolean;
 }
 
-export function createProject(payload: ProjectPayload): Promise<Project> {
+export function createProject(payload: { name: string }): Promise<Project> {
   return apiFetch<Project>("/projects", { method: "POST", body: payload });
 }
 

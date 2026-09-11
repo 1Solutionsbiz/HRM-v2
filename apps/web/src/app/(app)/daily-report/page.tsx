@@ -265,11 +265,15 @@ function DailyReportForm({
                           <SelectValue placeholder="Select project" />
                         </SelectTrigger>
                         <SelectContent>
-                          {projects.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
+                          {/* Archived projects only show up if this task already points at one - kept so its name still renders, but not offered for a fresh pick. */}
+                          {projects
+                            .filter((p) => p.isActive || p.id === task.projectId)
+                            .map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                                {!p.isActive ? " (archived)" : ""}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

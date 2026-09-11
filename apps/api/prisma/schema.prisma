@@ -1366,8 +1366,13 @@ model DailyReportTaskEntry {
 /// added alongside Daily Work Reporting (P1), not part of the original P1
 /// scope but the same feature area.
 model Project {
-  id   String @id @default(cuid())
-  name String @unique
+  id       String  @id @default(cuid())
+  name     String  @unique
+  /// Archived projects drop out of the Daily Report dropdown for new task
+  /// entries but stay intact on every task entry that already referenced
+  /// them - the alternative to a hard delete for a discontinued project
+  /// that has real history.
+  isActive Boolean @default(true)
 
   taskEntries DailyReportTaskEntry[]
 
