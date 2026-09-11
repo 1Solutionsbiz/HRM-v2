@@ -370,7 +370,11 @@ export default function EmployeeDetailPage() {
                   {canManageAccess && (
                     <div>
                       {employee.user.isActive ? (
-                        <Button variant="outline" size="sm" onClick={() => setDeactivateOpen(true)}>
+                        <Button
+                          size="sm"
+                          onClick={() => setDeactivateOpen(true)}
+                          className="bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/40"
+                        >
                           <ShieldOff />
                           Deactivate access
                         </Button>
@@ -904,6 +908,7 @@ export default function EmployeeDetailPage() {
         }
         confirmLabel="Deactivate access"
         variant="destructive"
+        confirmClassName="bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/40"
         onConfirm={handleDeactivate}
       />
     </div>

@@ -28,6 +28,8 @@ interface ConfirmDialogProps {
   children?: React.ReactNode;
   /** Disables the confirm button beyond the built-in pending state - e.g. while a required field is still empty. */
   confirmDisabled?: boolean;
+  /** Extra classes on the confirm button, merged after the variant's own classes - e.g. a solid instead of tinted destructive fill. */
+  confirmClassName?: string;
 }
 
 /**
@@ -46,6 +48,7 @@ export function ConfirmDialog({
   onConfirm,
   children,
   confirmDisabled = false,
+  confirmClassName,
 }: ConfirmDialogProps) {
   const [pending, setPending] = React.useState(false);
 
@@ -82,6 +85,7 @@ export function ConfirmDialog({
             className={cn(
               variant === "destructive" &&
                 buttonVariants({ variant: "destructive" }),
+              confirmClassName,
             )}
           >
             {pending ? "Please wait…" : confirmLabel}
