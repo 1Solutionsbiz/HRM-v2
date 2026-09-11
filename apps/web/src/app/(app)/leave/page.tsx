@@ -46,7 +46,7 @@ export default function LeavePage() {
   const pendingRequests = (requests.data ?? []).filter((r) => r.status === "PENDING");
   const today = toDateOnlyString(new Date());
   const upcomingApprovedRequests = (requests.data ?? []).filter(
-    (r) => r.status === "APPROVED" && r.startDate > today,
+    (r) => r.status === "APPROVED" && r.startDate.slice(0, 10) > today,
   );
   const cancelTarget = (requests.data ?? []).find((r) => r.id === cancelId);
 
