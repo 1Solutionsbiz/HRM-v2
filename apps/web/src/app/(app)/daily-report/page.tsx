@@ -9,7 +9,6 @@ import {
   getMyDailyReport,
   upsertMyDailyReport,
   formatDailyReportStatus,
-  formatDailyReportTemplate,
   BLOCKER_CATEGORY_OPTIONS,
   type DailyReport,
   type DailyReportTaskStatus,
@@ -188,10 +187,9 @@ function DailyReportForm({
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
           <div>
             <p className="text-sm font-medium">{formatDate(report.date)}</p>
-            <p className="text-muted-foreground text-xs">
-              {formatDailyReportTemplate(report.template)} template
-              {report.submittedAt ? ` · Submitted ${formatTime(report.submittedAt)}` : ""}
-            </p>
+            {report.submittedAt && (
+              <p className="text-muted-foreground text-xs">Submitted {formatTime(report.submittedAt)}</p>
+            )}
           </div>
           <StatusBadge status={formatDailyReportStatus(report.status)} />
         </CardContent>
