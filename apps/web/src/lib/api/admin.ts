@@ -96,6 +96,18 @@ export function resetUserPassword(userId: string): Promise<PasswordResetResult> 
   return apiFetch<PasswordResetResult>(`/users/${userId}/reset-password`, { method: "POST" });
 }
 
+/**
+ * Deactivating immediately revokes every active session for this user
+ * (JwtAuthGuard re-checks isActive on every request) - so this takes
+ * effect on their very next tap, not at token expiry.
+ */
+export function setUserActiveStatus(userId: string, isActive: boolean): Promise<{ id: string; isActive: boolean }> {
+  return apiFetch<{ id: string; isActive: boolean }>(`/users/${userId}/status`, {
+    method: "PATCH",
+    body: { isActive },
+  });
+}
+
 export type AuditEventType =
   | "LOGIN_SUCCESS"
   | "LOGIN_FAILED"

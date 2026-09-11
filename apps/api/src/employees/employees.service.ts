@@ -26,7 +26,7 @@ import type { UpsertPreviousEmployerDto } from './dto/upsert-previous-employer.d
 import type { FamilyMemberKind } from '../generated/prisma/enums.js';
 
 const EMPLOYEE_INCLUDE = {
-  user: { select: { email: true, isActive: true } },
+  user: { select: { id: true, email: true, isActive: true } },
   department: true,
   designation: true,
   manager: { select: { id: true, firstName: true, lastName: true } },

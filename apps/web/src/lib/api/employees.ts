@@ -98,7 +98,7 @@ export interface EmployeeDocumentEntry {
 }
 
 export interface EmployeeDetail extends Omit<EmployeeListItem, "designation"> {
-  user: { email: string; isActive: boolean };
+  user: { id: string; email: string; isActive: boolean };
   designation: { id: string; title: string; dailyReportTemplate: DailyReportTemplate | null } | null;
   /** Overrides the designation's default template when set; falls back to it (or GENERAL) when null. */
   dailyReportTemplateOverride: DailyReportTemplate | null;

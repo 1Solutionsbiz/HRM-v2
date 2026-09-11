@@ -30,8 +30,11 @@ import {
   BadgeCheck,
   NotebookPen,
   Pencil,
+  ShieldOff,
+  ShieldCheck,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -45,6 +48,7 @@ import {
   type EmployeeDetail,
   type FamilyMemberKind,
 } from "@/lib/api/employees";
+import { setUserActiveStatus } from "@/lib/api/admin";
 import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from "@/lib/api/documents";
 import { getEmployeeLeaveBalances } from "@/lib/api/leave";
 import { formatDailyReportTemplate, type DailyReportTemplate } from "@/lib/api/daily-reports";
@@ -52,6 +56,7 @@ import { LeaveLedgerSheet } from "@/components/hrm/leave-ledger-sheet";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -221,6 +226,8 @@ function DailyReportSettingsDialog({
 
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
+  const currentUser = useAuthenticatedUser();
+  const canManageAccess = currentUser.role === "admin";
   const { data: employee, loading, error, refetch } = useAsync(
     () => getEmployee(params.id),
     [params.id],
@@ -245,6 +252,29 @@ export default function EmployeeDetailPage() {
   const [rejectError, setRejectError] = React.useState<string | null>(null);
   const [rejectSaving, setRejectSaving] = React.useState(false);
   const [editingDailyReport, setEditingDailyReport] = React.useState(false);
+  const [deactivateOpen, setDeactivateOpen] = React.useState(false);
+  const [accessSaving, setAccessSaving] = React.useState(false);
+
+  async function handleDeactivate() {
+    if (!employee) return;
+    await setUserActiveStatus(employee.user.id, false);
+    toast.success(`${employeeFullName(employee)}'s access has been deactivated`);
+    refetch();
+  }
+
+  async function handleReactivate() {
+    if (!employee) return;
+    setAccessSaving(true);
+    try {
+      await setUserActiveStatus(employee.user.id, true);
+      toast.success(`${employeeFullName(employee)}'s access has been restored`);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't restore access.");
+    } finally {
+      setAccessSaving(false);
+    }
+  }
 
   async function handleVerify(doc: DocumentChecklistItem) {
     setDeciding(doc.documentTypeId);
@@ -318,6 +348,7 @@ export default function EmployeeDetailPage() {
                     <h1 className="text-xl font-semibold tracking-tight">{employeeFullName(employee)}</h1>
                     {employee.designation && <Badge variant="outline">{employee.designation.title}</Badge>}
                     <StatusBadge status={titleCase(employee.status)} />
+                    {!employee.user.isActive && <Badge variant="destructive">Login access disabled</Badge>}
                   </div>
                   <p className="text-muted-foreground text-sm">
                     {employee.designation?.title ?? "No designation"} · {employee.department?.name ?? "No department"}
@@ -332,6 +363,21 @@ export default function EmployeeDetailPage() {
                       <span className="font-medium">{formatDateOrDash(employee.dateOfJoining)}</span>
                     </span>
                   </div>
+                  {canManageAccess && (
+                    <div>
+                      {employee.user.isActive ? (
+                        <Button variant="outline" size="sm" onClick={() => setDeactivateOpen(true)}>
+                          <ShieldOff />
+                          Deactivate access
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={handleReactivate} disabled={accessSaving}>
+                          <ShieldCheck />
+                          {accessSaving ? "Restoring…" : "Reactivate access"}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid w-full shrink-0 grid-cols-2 gap-4 border-t pt-4 sm:w-auto sm:min-w-72 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-6">
@@ -842,6 +888,20 @@ export default function EmployeeDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deactivateOpen}
+        onOpenChange={setDeactivateOpen}
+        title="Deactivate this person's access?"
+        description={
+          employee
+            ? `${employeeFullName(employee)} will be signed out of every device immediately and won't be able to log back in until access is restored. This doesn't change their employee record or status.`
+            : ""
+        }
+        confirmLabel="Deactivate access"
+        variant="destructive"
+        onConfirm={handleDeactivate}
+      />
     </div>
   );
 }
