@@ -40,6 +40,8 @@ interface TaskDraft {
   title: string;
   projectId: string;
   status: DailyReportTaskStatus;
+  startTime: string;
+  endTime: string;
   expectedMinutes: string;
   actualMinutes: string;
   output: string;
@@ -53,6 +55,8 @@ function emptyTask(): TaskDraft {
     title: "",
     projectId: "",
     status: "IN_PROGRESS",
+    startTime: "",
+    endTime: "",
     expectedMinutes: "",
     actualMinutes: "",
     output: "",
@@ -68,6 +72,8 @@ function toTaskDrafts(report: DailyReport): TaskDraft[] {
         title: t.title,
         projectId: t.project?.id ?? "",
         status: t.status,
+        startTime: t.startTime ?? "",
+        endTime: t.endTime ?? "",
         expectedMinutes: t.expectedMinutes != null ? String(t.expectedMinutes) : "",
         actualMinutes: t.actualMinutes != null ? String(t.actualMinutes) : "",
         output: t.output ?? "",
@@ -163,6 +169,8 @@ function DailyReportForm({
           title: t.title.trim(),
           projectId: t.projectId || undefined,
           status: t.status,
+          startTime: t.startTime || undefined,
+          endTime: t.endTime || undefined,
           expectedMinutes: t.expectedMinutes ? Number(t.expectedMinutes) : undefined,
           actualMinutes: t.actualMinutes ? Number(t.actualMinutes) : undefined,
           output: t.output.trim() || undefined,
@@ -281,6 +289,22 @@ function DailyReportForm({
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Start time</Label>
+                      <Input
+                        type="time"
+                        value={task.startTime}
+                        onChange={(e) => updateTask(task.key, { startTime: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>End time</Label>
+                      <Input
+                        type="time"
+                        value={task.endTime}
+                        onChange={(e) => updateTask(task.key, { endTime: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label>Expected time (minutes)</Label>

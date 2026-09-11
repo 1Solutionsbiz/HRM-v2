@@ -20,6 +20,8 @@ export interface DailyReportTaskEntry {
   title: string;
   project: { id: string; name: string } | null;
   status: DailyReportTaskStatus;
+  startTime: string | null;
+  endTime: string | null;
   expectedMinutes: number | null;
   actualMinutes: number | null;
   output: string | null;
@@ -43,6 +45,8 @@ export interface DailyReportTaskEntryInput {
   title: string;
   projectId?: string;
   status: DailyReportTaskStatus;
+  startTime?: string;
+  endTime?: string;
   expectedMinutes?: number;
   actualMinutes?: number;
   output?: string;

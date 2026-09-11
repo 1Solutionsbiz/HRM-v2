@@ -57,6 +57,8 @@ export interface ReportComputation {
     title: string;
     project: { id: string; name: string } | null;
     status: string;
+    startTime: string | null;
+    endTime: string | null;
     expectedMinutes: number | null;
     actualMinutes: number | null;
     output: string | null;
@@ -154,6 +156,8 @@ export class DailyReportsService {
             title: task.title,
             projectId: task.projectId,
             status: task.status,
+            startTime: task.startTime,
+            endTime: task.endTime,
             expectedMinutes: task.expectedMinutes,
             actualMinutes: task.actualMinutes,
             output: task.output,
