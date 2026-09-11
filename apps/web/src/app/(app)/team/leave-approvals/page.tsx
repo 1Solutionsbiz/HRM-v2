@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Check, ClipboardList, X } from "lucide-react";
+import { Ban, Check, ClipboardList, X } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { getCompanyLeaveRequests, decideLeaveRequest, type CompanyLeaveRequest } from "@/lib/api/leave";
+import { getCompanyLeaveRequests, decideLeaveRequest, revokeLeaveRequest, type CompanyLeaveRequest } from "@/lib/api/leave";
+import { ApiError } from "@/lib/api-client";
 import { employeeFullName, employeeInitials, titleCase } from "@/lib/api/employees";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
@@ -20,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function LeaveApprovalsPage() {
   const requests = useAsync(getCompanyLeaveRequests);
   const [rejectTarget, setRejectTarget] = React.useState<CompanyLeaveRequest | null>(null);
+  const [revokeTarget, setRevokeTarget] = React.useState<CompanyLeaveRequest | null>(null);
   const [decidingId, setDecidingId] = React.useState<string | null>(null);
 
   const pending = (requests.data ?? []).filter((r) => r.status === "PENDING");
@@ -49,6 +51,21 @@ export default function LeaveApprovalsPage() {
       toast.error("Couldn't reject this request. Please try again.");
     } finally {
       setDecidingId(null);
+    }
+  }
+
+  async function handleRevoke() {
+    if (!revokeTarget) return;
+    setDecidingId(revokeTarget.id);
+    try {
+      await revokeLeaveRequest(revokeTarget.id);
+      toast.success(`${employeeFullName(revokeTarget.employee)}'s approved leave was revoked`);
+      requests.refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't revoke this leave. Please try again.");
+    } finally {
+      setDecidingId(null);
+      setRevokeTarget(null);
     }
   }
 
@@ -147,7 +164,21 @@ export default function LeaveApprovalsPage() {
                         · {r.totalDays} day{r.totalDays !== 1 ? "s" : ""}
                       </p>
                     </div>
-                    <StatusBadge status={titleCase(r.status)} className="shrink-0" />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <StatusBadge status={titleCase(r.status)} />
+                      {r.status === "APPROVED" && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          aria-label="Revoke"
+                          disabled={decidingId === r.id}
+                          onClick={() => setRevokeTarget(r)}
+                        >
+                          <Ban className="size-4" />
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -168,6 +199,20 @@ export default function LeaveApprovalsPage() {
         confirmLabel="Reject"
         variant="destructive"
         onConfirm={handleReject}
+      />
+
+      <ConfirmDialog
+        open={!!revokeTarget}
+        onOpenChange={(open) => !open && setRevokeTarget(null)}
+        title="Revoke this approved leave?"
+        description={
+          revokeTarget
+            ? `${employeeFullName(revokeTarget.employee)}'s balance will be restored and their attendance for this leave un-marked, regardless of whether the leave has already started. Use this for a correction, not a routine cancellation.`
+            : ""
+        }
+        confirmLabel="Revoke"
+        variant="destructive"
+        onConfirm={handleRevoke}
       />
     </div>
   );

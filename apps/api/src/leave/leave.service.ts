@@ -15,6 +15,7 @@ import { LeaveDayType } from '../generated/prisma/enums.js';
 import type { Decimal } from '../generated/prisma/internal/prismaNamespace.js';
 import type { ApplyLeaveDto } from './dto/apply-leave.dto.js';
 import type { DecideLeaveRequestDto } from './dto/decide-leave-request.dto.js';
+import type { RevokeLeaveRequestDto } from './dto/revoke-leave-request.dto.js';
 
 const ACTIVE_REQUEST_STATUSES = ['PENDING', 'APPROVED'] as const;
 
@@ -428,6 +429,79 @@ export class LeaveService {
       description: wasApproved
         ? `Approved leave request ${request.code} cancelled by employee`
         : 'Leave request cancelled by employee',
+    });
+
+    return this.serializeRequest(updated);
+  }
+
+  /**
+   * The HR/admin-side counterpart to cancelMyRequest's self-cancel path -
+   * works on any APPROVED request regardless of who owns it or whether
+   * startDate has already arrived, which is exactly the case self-cancel
+   * deliberately blocks ("contact HR for a correction"). Reuses the same
+   * reversal machinery (reverseApprovedUsage/unmarkApprovedLeave) so a
+   * revoked leave unwinds identically to a self-cancelled one - the
+   * distinction is who's allowed to trigger it and when, not what happens
+   * once triggered.
+   */
+  async revoke(requestId: string, dto: RevokeLeaveRequestDto, actor: AuthContext) {
+    const request = await this.prisma.leaveRequest.findUnique({
+      where: { id: requestId },
+    });
+    if (!request) throw new NotFoundException('Leave request not found');
+    if (request.status !== 'APPROVED') {
+      throw new ConflictException('Only an approved leave request can be revoked');
+    }
+
+    const updated = await this.prisma.leaveRequest.update({
+      where: { id: requestId },
+      data: { status: 'CANCELLED', decisionNote: dto.note ?? request.decisionNote },
+    });
+
+    await this.reverseApprovedUsage(
+      request.employeeId,
+      request.leaveTypeId,
+      request.startDate,
+      request.totalDays,
+    );
+    await this.attendanceService.unmarkApprovedLeave(
+      request.employeeId,
+      request.startDate,
+      request.endDate,
+      request.id,
+    );
+
+    await this.notificationsService.createForEmployee(request.employeeId, {
+      type: 'LEAVE',
+      title: 'Approved leave revoked',
+      description: dto.note
+        ? `Your approved leave request ${request.code} was revoked by HR: ${dto.note}`
+        : `Your approved leave request ${request.code} was revoked by HR.`,
+      linkUrl: '/leave',
+    });
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: request.employeeId },
+      select: { managerId: true, firstName: true, lastName: true },
+    });
+    if (employee?.managerId) {
+      await this.notificationsService.createForEmployee(employee.managerId, {
+        type: 'LEAVE',
+        title: 'Approved leave revoked',
+        description: `${employee.firstName} ${employee.lastName}'s approved leave request ${request.code} was revoked by HR.`,
+        linkUrl: '/team/leave-approvals',
+      });
+    }
+
+    await this.auditService.log({
+      eventType: 'OTHER',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'LeaveRequest',
+      targetId: requestId,
+      description: dto.note
+        ? `Approved leave request ${request.code} revoked by HR: ${dto.note}`
+        : `Approved leave request ${request.code} revoked by HR`,
     });
 
     return this.serializeRequest(updated);

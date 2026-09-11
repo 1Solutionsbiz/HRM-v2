@@ -392,6 +392,66 @@ describe('LeaveService', () => {
     });
   });
 
+  describe('revoke', () => {
+    it('rejects revoking a request that is not approved', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue({
+        id: 'lr-1',
+        employeeId: 'emp-1',
+        status: 'PENDING',
+      });
+      await expect(service.revoke('lr-1', {}, actor)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.leaveRequest.update).not.toHaveBeenCalled();
+    });
+
+    it('revokes an already-started approved request, reversing balance and attendance regardless of date', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      prisma.leaveRequest.findUnique.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0001',
+        employeeId: 'emp-1',
+        leaveTypeId: 'lt-1',
+        status: 'APPROVED',
+        startDate: yesterday,
+        endDate: yesterday,
+        totalDays: decimal(1),
+        decisionNote: null,
+      });
+      prisma.leaveRequest.update.mockResolvedValue({
+        id: 'lr-1',
+        status: 'CANCELLED',
+        totalDays: decimal(1),
+      });
+      prisma.employee.findUnique.mockResolvedValue({
+        managerId: 'mgr-1',
+        firstName: 'Ritika',
+        lastName: 'Rajan',
+      });
+
+      const result = await service.revoke('lr-1', { note: 'Wrong employee' }, actor);
+
+      expect(result.status).toBe('CANCELLED');
+      const balanceUpdateArgs = prisma.leaveBalance.update.mock.calls[0][0];
+      expect(balanceUpdateArgs.data.usedDays.decrement.toNumber()).toBe(1);
+      expect(attendanceService.unmarkApprovedLeave).toHaveBeenCalledWith(
+        'emp-1',
+        yesterday,
+        yesterday,
+        'lr-1',
+      );
+      expect(notificationsService.createForEmployee).toHaveBeenCalledWith(
+        'emp-1',
+        expect.objectContaining({ title: 'Approved leave revoked' }),
+      );
+      expect(notificationsService.createForEmployee).toHaveBeenCalledWith(
+        'mgr-1',
+        expect.objectContaining({ title: 'Approved leave revoked' }),
+      );
+    });
+  });
+
   describe('decide', () => {
     const pendingRequest = {
       id: 'lr-1',

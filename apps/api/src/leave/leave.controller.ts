@@ -5,6 +5,7 @@ import type { AuthContext } from '../common/auth-context.js';
 import { LeaveService } from './leave.service.js';
 import { ApplyLeaveDto } from './dto/apply-leave.dto.js';
 import { DecideLeaveRequestDto } from './dto/decide-leave-request.dto.js';
+import { RevokeLeaveRequestDto } from './dto/revoke-leave-request.dto.js';
 
 @Controller('leave')
 export class LeaveController {
@@ -80,5 +81,15 @@ export class LeaveController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.leaveService.decide(id, dto, actor);
+  }
+
+  @Patch('requests/:id/revoke')
+  @RequirePermissions('leave:approve')
+  revoke(
+    @Param('id') id: string,
+    @Body() dto: RevokeLeaveRequestDto,
+    @CurrentUser() actor: AuthContext,
+  ) {
+    return this.leaveService.revoke(id, dto, actor);
   }
 }

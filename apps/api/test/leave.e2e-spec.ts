@@ -249,4 +249,67 @@ describe('Leave (e2e)', () => {
       .set('Authorization', `Bearer ${workerToken}`)
       .expect(409);
   });
+
+  it('lets HR revoke an already-started approved request, which the employee could not self-cancel', async () => {
+    const workerToken = await loginAs('worker@example.com');
+    const hrToken = await loginAs('hr@example.com');
+
+    const applied = await request(app.getHttpServer())
+      .post('/leave/requests')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({
+        leaveTypeId: 'lt-casual',
+        startDate: '2026-01-01',
+        endDate: '2026-01-01',
+        reason: 'x',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/decide`)
+      .set('Authorization', `Bearer ${hrToken}`)
+      .send({ decision: 'APPROVED' })
+      .expect(200);
+
+    // Confirms the self-cancel block from the previous test is still true
+    // for this same request, then shows revoke succeeding where it failed.
+    await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/cancel`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/revoke`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({ note: 'test' })
+      .expect(403);
+
+    const revoked = await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/revoke`)
+      .set('Authorization', `Bearer ${hrToken}`)
+      .send({ note: 'Wrong employee' })
+      .expect(200);
+    expect(revoked.body.status).toBe('CANCELLED');
+
+    const balances = await request(app.getHttpServer())
+      .get('/leave/balances')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    const casual = balances.body.find(
+      (b: { leaveTypeKey: string }) => b.leaveTypeKey === 'casual',
+    );
+    expect(casual.usedDays).toBe(0);
+    expect(casual.remainingDays).toBe(12);
+
+    const employee = [...prisma.employees.values()][0];
+    const day = [...prisma.attendanceDays.values()].find(
+      (d) => d.employeeId === employee.id,
+    );
+    expect(day).toBeUndefined();
+
+    await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/revoke`)
+      .set('Authorization', `Bearer ${hrToken}`)
+      .expect(409);
+  });
 });

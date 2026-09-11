@@ -147,3 +147,11 @@ export function decideLeaveRequest(
     body: { decision, decisionNote },
   });
 }
+
+/** HR/admin-only: revokes an approved request regardless of who owns it or whether it's already started - the self-cancel button's "contact HR" escape hatch. */
+export function revokeLeaveRequest(id: string, note?: string): Promise<LeaveRequest> {
+  return apiFetch<LeaveRequest>(`/leave/requests/${id}/revoke`, {
+    method: "PATCH",
+    body: { note },
+  });
+}
