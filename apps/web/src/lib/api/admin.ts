@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 import type { Role } from "@/types/role";
+import type { DailyReportTemplate } from "@/lib/api/daily-reports";
 
 export interface CompanySettings {
   id: string;
@@ -180,4 +181,23 @@ export interface DepartmentRow {
 
 export function getDepartments(): Promise<DepartmentRow[]> {
   return apiFetch<DepartmentRow[]>("/departments");
+}
+
+export interface DesignationRow {
+  id: string;
+  title: string;
+  department: { id: string; name: string };
+  /** The default Daily Work Report template for anyone holding this designation, unless a per-employee override is set - see Employee.dailyReportTemplateOverride. Falls back to GENERAL when null. */
+  dailyReportTemplate: DailyReportTemplate | null;
+}
+
+export function getDesignations(): Promise<DesignationRow[]> {
+  return apiFetch<DesignationRow[]>("/designations");
+}
+
+export function updateDesignationTemplate(
+  id: string,
+  dailyReportTemplate: DailyReportTemplate | null,
+): Promise<DesignationRow> {
+  return apiFetch<DesignationRow>(`/designations/${id}`, { method: "PATCH", body: { dailyReportTemplate } });
 }

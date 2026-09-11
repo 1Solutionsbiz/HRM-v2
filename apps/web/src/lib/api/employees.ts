@@ -1,4 +1,5 @@
 import { apiFetch, apiUpload } from "@/lib/api-client";
+import type { DailyReportTemplate } from "@/lib/api/daily-reports";
 
 export type EmployeeStatus = "ACTIVE" | "INACTIVE";
 export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN";
@@ -96,8 +97,13 @@ export interface EmployeeDocumentEntry {
   documentType: { name: string; category: string };
 }
 
-export interface EmployeeDetail extends EmployeeListItem {
+export interface EmployeeDetail extends Omit<EmployeeListItem, "designation"> {
   user: { email: string; isActive: boolean };
+  designation: { id: string; title: string; dailyReportTemplate: DailyReportTemplate | null } | null;
+  /** Overrides the designation's default template when set; falls back to it (or GENERAL) when null. */
+  dailyReportTemplateOverride: DailyReportTemplate | null;
+  /** Never required to submit a Daily Work Report, regardless of the company policy. */
+  dailyReportExempt: boolean;
   personalEmail: string | null;
   dateOfBirth: string | null;
   currentAddress: string | null;
@@ -192,6 +198,18 @@ export function getOnboardingRoster(): Promise<OnboardingRosterEmployee[]> {
 
 export function getEmployee(id: string): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>(`/employees/${id}`);
+}
+
+export interface UpdateEmployeeDailyReportSettingsPayload {
+  dailyReportTemplateOverride?: DailyReportTemplate | null;
+  dailyReportExempt?: boolean;
+}
+
+export function updateEmployeeDailyReportSettings(
+  id: string,
+  payload: UpdateEmployeeDailyReportSettingsPayload,
+): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/${id}`, { method: "PATCH", body: payload });
 }
 
 export function getMyProfile(): Promise<EmployeeDetail> {

@@ -28,21 +28,26 @@ import {
   Baby,
   HeartHandshake,
   BadgeCheck,
+  NotebookPen,
+  Pencil,
 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import {
   getEmployee,
+  updateEmployeeDailyReportSettings,
   employeeFullName,
   employeeInitials,
   titleCase,
   formatBloodGroup,
   maskAccountNumber,
+  type EmployeeDetail,
   type FamilyMemberKind,
 } from "@/lib/api/employees";
 import { getEmployeeDocuments, decideDocument, type DocumentChecklistItem } from "@/lib/api/documents";
 import { getEmployeeLeaveBalances } from "@/lib/api/leave";
+import { formatDailyReportTemplate, type DailyReportTemplate } from "@/lib/api/daily-reports";
 import { LeaveLedgerSheet } from "@/components/hrm/leave-ledger-sheet";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -56,6 +61,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
@@ -120,6 +127,98 @@ function HeaderSkeleton() {
   );
 }
 
+const DAILY_REPORT_TEMPLATE_VALUES: DailyReportTemplate[] = [
+  "DEVELOPMENT",
+  "SEO",
+  "SOCIAL_MEDIA",
+  "SALES",
+  "HR",
+  "GENERAL",
+];
+const NO_TEMPLATE_OVERRIDE = "NONE";
+
+/** Employee override -> Designation default -> GENERAL, same hierarchy DailyReportsService.computeReport resolves at read time - this dialog is just a UI for the two pieces that feed it. */
+function DailyReportSettingsDialog({
+  employee,
+  onClose,
+  onSaved,
+}: {
+  employee: EmployeeDetail;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [override, setOverride] = React.useState(employee.dailyReportTemplateOverride ?? NO_TEMPLATE_OVERRIDE);
+  const [exempt, setExempt] = React.useState(employee.dailyReportExempt);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const designationDefault = formatDailyReportTemplate(employee.designation?.dailyReportTemplate ?? "GENERAL");
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateEmployeeDailyReportSettings(employee.id, {
+        dailyReportTemplateOverride: override === NO_TEMPLATE_OVERRIDE ? null : (override as DailyReportTemplate),
+        dailyReportExempt: exempt,
+      });
+      toast.success("Daily Report settings updated");
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't save these changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Daily Report settings</DialogTitle>
+          <DialogDescription>{employeeFullName(employee)}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label>Template override</Label>
+            <Select value={override} onValueChange={setOverride}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_TEMPLATE_OVERRIDE}>Use designation default ({designationDefault})</SelectItem>
+                {DAILY_REPORT_TEMPLATE_VALUES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {formatDailyReportTemplate(t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch id="dr-exempt" checked={exempt} onCheckedChange={setExempt} />
+            <Label htmlFor="dr-exempt">Exempt from Daily Work Reporting</Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
   const { data: employee, loading, error, refetch } = useAsync(
@@ -145,6 +244,7 @@ export default function EmployeeDetailPage() {
   const [rejectNotes, setRejectNotes] = React.useState("");
   const [rejectError, setRejectError] = React.useState<string | null>(null);
   const [rejectSaving, setRejectSaving] = React.useState(false);
+  const [editingDailyReport, setEditingDailyReport] = React.useState(false);
 
   async function handleVerify(doc: DocumentChecklistItem) {
     setDeciding(doc.documentTypeId);
@@ -306,7 +406,7 @@ export default function EmployeeDetailPage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="employment" className="mt-4">
+              <TabsContent value="employment" className="mt-4 space-y-4">
                 <Card>
                   <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
                     <InfoRow label="Employee code" value={employee.employeeCode} />
@@ -320,6 +420,32 @@ export default function EmployeeDetailPage() {
                     <InfoRow label="Date of joining" value={formatDateOrDash(employee.dateOfJoining)} />
                     <InfoRow label="Employment type" value={titleCase(employee.employmentType)} />
                     <InfoRow label="Work location" value={employee.workLocation} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <NotebookPen className="text-muted-foreground size-4" />
+                        <p className="text-sm font-semibold">Daily Report settings</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setEditingDailyReport(true)}>
+                        <Pencil />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <InfoRow
+                        label="Template"
+                        value={
+                          employee.dailyReportTemplateOverride
+                            ? `${formatDailyReportTemplate(employee.dailyReportTemplateOverride)} (override)`
+                            : `${formatDailyReportTemplate(employee.designation?.dailyReportTemplate ?? "GENERAL")} (designation default)`
+                        }
+                      />
+                      <InfoRow label="Exempt from Daily Work Reporting" value={employee.dailyReportExempt ? "Yes" : "No"} />
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -658,6 +784,14 @@ export default function EmployeeDetailPage() {
           </>
         )}
       </AsyncSection>
+
+      {employee && editingDailyReport && (
+        <DailyReportSettingsDialog
+          employee={employee}
+          onClose={() => setEditingDailyReport(false)}
+          onSaved={refetch}
+        />
+      )}
 
       {employee && ledgerLeaveTypeId && (
         <LeaveLedgerSheet

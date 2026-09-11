@@ -11,8 +11,12 @@ import {
   updateCompanySettings,
   updateGeofenceSettings,
   updateDailyReportPolicy,
+  getDesignations,
+  updateDesignationTemplate,
   type CompanySettings,
+  type DesignationRow,
 } from "@/lib/api/admin";
+import { formatDailyReportTemplate, type DailyReportTemplate } from "@/lib/api/daily-reports";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { CardSkeleton } from "@/components/hrm/loading-state";
@@ -22,6 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface FormState {
   legalName: string;
@@ -390,6 +396,94 @@ function DailyReportPolicyForm({ initial, onSaved }: { initial: CompanySettings;
   );
 }
 
+const DAILY_REPORT_TEMPLATE_VALUES: DailyReportTemplate[] = [
+  "GENERAL",
+  "DEVELOPMENT",
+  "SEO",
+  "SOCIAL_MEDIA",
+  "SALES",
+  "HR",
+];
+
+/**
+ * A separate fetch/card from the settings form above it - designations
+ * aren't part of CompanySettings, and each row auto-saves on change (no
+ * "Save changes" button) since a template pick is low-stakes and instantly
+ * reversible, same reasoning as the Projects admin page's archive toggle.
+ * An employee's own dailyReportTemplateOverride (set on their profile)
+ * always wins over whatever's picked here - see DailyReportsService's
+ * template-resolution comment.
+ */
+function DailyReportTemplatesCard() {
+  const { data, loading, error, refetch } = useAsync(getDesignations);
+  const [savingId, setSavingId] = React.useState<string | null>(null);
+
+  async function handleChange(designation: DesignationRow, value: string) {
+    const template = value === "GENERAL" ? null : (value as DailyReportTemplate);
+    setSavingId(designation.id);
+    try {
+      await updateDesignationTemplate(designation.id, template);
+      toast.success(`${designation.title} → ${formatDailyReportTemplate(template ?? "GENERAL")}`);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't update this designation's template.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Daily Report templates</CardTitle>
+        <CardDescription>
+          The default Daily Work Report template per designation. A per-employee override, set on their profile,
+          always wins over this.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AsyncSection
+          loading={loading}
+          error={error}
+          onRetry={refetch}
+          loadingFallback={<Skeleton className="h-40 w-full" />}
+        >
+          {(data ?? []).length === 0 ? (
+            <p className="text-muted-foreground text-sm">No designations configured yet.</p>
+          ) : (
+            <ul className="divide-y">
+              {(data ?? []).map((d) => (
+                <li key={d.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{d.title}</p>
+                    <p className="text-muted-foreground text-xs">{d.department.name}</p>
+                  </div>
+                  <Select
+                    value={d.dailyReportTemplate ?? "GENERAL"}
+                    onValueChange={(v) => handleChange(d, v)}
+                    disabled={savingId === d.id}
+                  >
+                    <SelectTrigger className="w-[160px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DAILY_REPORT_TEMPLATE_VALUES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {formatDailyReportTemplate(t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </li>
+              ))}
+            </ul>
+          )}
+        </AsyncSection>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CompanySettingsPage() {
   const { data, loading, error, refetch } = useAsync(getCompanySettings);
 
@@ -408,6 +502,7 @@ export default function CompanySettingsPage() {
             <CompanyProfileForm initial={data} />
             <GeofenceSettingsForm initial={data} onSaved={refetch} />
             <DailyReportPolicyForm initial={data} onSaved={refetch} />
+            <DailyReportTemplatesCard />
           </>
         )}
       </AsyncSection>
