@@ -257,9 +257,13 @@ export default function EmployeeDetailPage() {
 
   async function handleDeactivate() {
     if (!employee) return;
-    await setUserActiveStatus(employee.user.id, false);
-    toast.success(`${employeeFullName(employee)}'s access has been deactivated`);
-    refetch();
+    try {
+      await setUserActiveStatus(employee.user.id, false);
+      toast.success(`${employeeFullName(employee)}'s access has been deactivated`);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't deactivate access.");
+    }
   }
 
   async function handleReactivate() {
