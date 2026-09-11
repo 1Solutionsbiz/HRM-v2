@@ -62,6 +62,54 @@ export interface LetterPdfOptions {
   paragraphs: string[];
   signatoryName: string;
   signatoryTitle: string;
+  companyWebsite?: string | null;
+  companyPhone?: string | null;
+  companySupportEmail?: string | null;
+  /**
+   * Base64 data URI for the company logo. Deliberately never sourced from
+   * CompanySettings.logoUrl today - there is no upload endpoint for it
+   * anywhere in the API, so it is always unset in production. Until that
+   * exists, the header simply reserves the space (see HEADER_LOGO_HEIGHT)
+   * without an image.
+   */
+  logoDataUri?: string | null;
+}
+
+/** A thin rule under each numbered section, matching the reference appointment-letter format supplied 2026-09-11. */
+function sectionDivider() {
+  return {
+    canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 511, y2: 0, lineWidth: 0.75, lineColor: '#cccccc' }],
+    margin: [0, 8, 0, 0] as [number, number, number, number],
+  };
+}
+
+/**
+ * A line starting with "- " is a bullet item; runs of consecutive bullet
+ * lines become one `ul` node, and everything else becomes its own
+ * body-styled line - this is what lets a template section (see
+ * letter-seed-data.ts) render as a labelled list instead of one dense
+ * paragraph, without needing any richer template syntax.
+ */
+function buildBodyNodes(rest: string) {
+  const lines = rest.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const nodes: Record<string, unknown>[] = [];
+  let bulletBuffer: string[] = [];
+  const flushBullets = () => {
+    if (bulletBuffer.length > 0) {
+      nodes.push({ ul: bulletBuffer, style: 'body', margin: [0, 2, 0, 2] });
+      bulletBuffer = [];
+    }
+  };
+  for (const line of lines) {
+    if (line.startsWith('- ')) {
+      bulletBuffer.push(line.slice(2));
+    } else {
+      flushBullets();
+      nodes.push({ text: line, style: 'body' });
+    }
+  }
+  flushBullets();
+  return nodes;
 }
 
 function buildParagraphNode(rawParagraph: string) {
@@ -77,10 +125,13 @@ function buildParagraphNode(rawParagraph: string) {
       // `unbreakable` only reliably keeps a `stack`'s children together
       // across a page boundary; on a plain multi-run `text` node it had no
       // effect (confirmed empirically: the heading still landed alone at
-      // the bottom of a page with its body starting the next one).
+      // the bottom of a page with its body starting the next one). The
+      // divider is included in the same stack so a section's closing rule
+      // can never be separated from its own body.
       stack: [
-        { text: headingMatch[1], style: 'sectionHeading' },
-        ...(rest ? [{ text: rest, style: 'body' }] : []),
+        { text: headingMatch[1].toUpperCase(), style: 'sectionHeading' },
+        ...buildBodyNodes(rest),
+        sectionDivider(),
       ],
       margin: [0, 7, 0, 2] as [number, number, number, number],
       unbreakable: true,
@@ -94,7 +145,14 @@ function buildParagraphNode(rawParagraph: string) {
   return { text: paragraph, style: 'body', margin: [0, 0, 0, 6] as [number, number, number, number] };
 }
 
+/** Reserved header height (pt) when no logo is set, so adding one later doesn't reflow the page. */
+const HEADER_LOGO_RESERVED_HEIGHT = 32;
+
 export function buildLetterDocDefinition(options: LetterPdfOptions) {
+  const contactLine = [options.companyWebsite, options.companyPhone, options.companySupportEmail]
+    .filter((v): v is string => !!v && v.trim().length > 0)
+    .join('   |   ');
+
   return {
     pageSize: 'A4' as const,
     // Deliberately tighter than a first draft's [56,56,56,48]/lineHeight
@@ -102,21 +160,36 @@ export function buildLetterDocDefinition(options: LetterPdfOptions) {
     // explicit 3-4 page target. This density is still comfortably
     // readable at 10.25pt, confirmed by rendering and reading the actual
     // PDF, not just estimating.
-    pageMargins: [42, 42, 42, 34] as [number, number, number, number],
+    pageMargins: [42, 42, 42, 44] as [number, number, number, number],
     defaultStyle: { font: 'Helvetica', fontSize: 10.25, lineHeight: 1.16 },
     footer: (currentPage: number, pageCount: number) => ({
       margin: [42, 0, 42, 14] as [number, number, number, number],
-      columns: [
-        { text: options.documentNumber, style: 'footer' },
-        { text: `Page ${currentPage} of ${pageCount}`, style: 'footer', alignment: 'right' as const },
+      stack: [
+        ...(contactLine
+          ? [{ text: sanitizeForPdf(contactLine), style: 'footer', alignment: 'center' as const }]
+          : []),
+        {
+          columns: [
+            { text: options.documentNumber, style: 'footer' },
+            { text: `Page ${currentPage} of ${pageCount}`, style: 'footer', alignment: 'right' as const },
+          ],
+          margin: [0, 2, 0, 0] as [number, number, number, number],
+        },
       ],
     }),
     content: [
+      // Reserved space for a company logo - CompanySettings.logoUrl has no
+      // upload endpoint anywhere in the API today, so logoDataUri is
+      // always unset in production; this keeps the header's shape stable
+      // for whenever that changes rather than rendering a placeholder box.
+      ...(options.logoDataUri
+        ? [{ image: options.logoDataUri, width: 130, margin: [0, 0, 0, 10] as [number, number, number, number] }]
+        : [{ text: '', margin: [0, HEADER_LOGO_RESERVED_HEIGHT, 0, 0] as [number, number, number, number] }]),
       { text: sanitizeForPdf(options.companyName), style: 'companyName' },
       { text: options.letterTitle, style: 'letterTitle' },
       {
         columns: [
-          { text: `Document No: ${options.documentNumber}`, style: 'meta' },
+          { text: `Reference No.: ${options.documentNumber}`, style: 'meta' },
           { text: `Date: ${options.dateLabel}`, style: 'meta', alignment: 'right' as const },
         ],
         margin: [0, 3, 0, 14] as [number, number, number, number],
@@ -127,6 +200,7 @@ export function buildLetterDocDefinition(options: LetterPdfOptions) {
       { text: '\n' },
       { text: sanitizeForPdf(options.signatoryName), style: 'signatoryName' },
       { text: sanitizeForPdf(options.signatoryTitle), style: 'signatoryTitle' },
+      { text: 'Authorised Signatory', style: 'signatoryTitle' },
     ],
     styles: {
       companyName: { fontSize: 13.5, bold: true },

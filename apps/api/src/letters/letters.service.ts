@@ -316,6 +316,9 @@ export class LettersService {
       paragraphs,
       signatoryName: result.signatory.name,
       signatoryTitle: result.signatory.title,
+      companyWebsite: result.companySettings.website,
+      companyPhone: result.companySettings.phone,
+      companySupportEmail: result.companySettings.supportEmail,
     });
     const filename = await saveLetterPdf(pdfBuffer);
 
