@@ -24,6 +24,10 @@ interface ConfirmDialogProps {
   /** Use "destructive" for actions like rejecting, deleting, or revoking. */
   variant?: "default" | "destructive";
   onConfirm: () => void | Promise<void>;
+  /** Extra content between the description and the footer - e.g. a required reason field. */
+  children?: React.ReactNode;
+  /** Disables the confirm button beyond the built-in pending state - e.g. while a required field is still empty. */
+  confirmDisabled?: boolean;
 }
 
 /**
@@ -40,6 +44,8 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   variant = "default",
   onConfirm,
+  children,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   const [pending, setPending] = React.useState(false);
 
@@ -62,12 +68,13 @@ export function ConfirmDialog({
             <AlertDialogDescription>{description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>
             {cancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction
-            disabled={pending}
+            disabled={pending || confirmDisabled}
             onClick={(e) => {
               e.preventDefault();
               void handleConfirm();

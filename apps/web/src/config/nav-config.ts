@@ -23,6 +23,7 @@ import {
   Palette,
   PartyPopper,
   BookOpen,
+  FileText,
 } from "lucide-react";
 import type { NavGroup } from "@/types/nav";
 import type { Role } from "@/types/role";
@@ -144,6 +145,16 @@ export const navGroups: NavGroup[] = [
         url: "/people/resignations",
         icon: UserMinus,
         color: "text-stone-500",
+        roles: ["hr", "admin"],
+      },
+      {
+        title: "Letters",
+        url: "/letters",
+        icon: FileText,
+        color: "text-slate-500",
+        // letters:generate/letters:view (this page's permissions) are only
+        // granted to hr/admin in seed-letters.ts, same reasoning as
+        // "Employees" above.
         roles: ["hr", "admin"],
       },
     ],

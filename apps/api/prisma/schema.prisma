@@ -67,6 +67,8 @@ model User {
   createdPolls                 Poll[]
   nominatedEmployeesOfTheMonth EmployeeOfTheMonth[]
   excusedDailyReports          DailyReport[]        @relation("DailyReportExcuser")
+  generatedLetters             EmployeeLetter[]     @relation("LetterGenerator")
+  cancelledLetters             EmployeeLetter[]     @relation("LetterCanceller")
 
   @@map("users")
 }
@@ -199,6 +201,11 @@ enum AuditEventType {
   /// Added alongside Daily Work Reporting (P1) - the one action in that
   /// feature with real audit-trail stakes (see DailyReportsService.excuse).
   DAILY_REPORT_EXCUSED
+  /// Added alongside the Employee Letters module (P1) - letter generation
+  /// and cancellation both carry legal/compliance weight, same reasoning
+  /// as DAILY_REPORT_EXCUSED.
+  LETTER_GENERATED
+  LETTER_CANCELLED
   OTHER
 }
 
@@ -402,6 +409,7 @@ model Employee {
   dailyReports             DailyReport[]
   tasks                    Task[]
   tickets                  Ticket[]
+  letters                  EmployeeLetter[]
   moodCheckIns             MoodCheckIn[]
   pollVotes                PollVote[]
   employeeOfTheMonthAwards EmployeeOfTheMonth[]
@@ -1548,6 +1556,7 @@ enum NotificationType {
   SYSTEM
   BIRTHDAY
   DAILY_REPORT
+  LETTER
 }
 
 model Notification {
@@ -1605,8 +1614,153 @@ model CompanySettings {
   dailyReportDeadline     DateTime? @db.Time
   dailyReportGraceMinutes Int?
 
+  /// Embedded on generated letter PDFs (letters module, P1). Nullable - a
+  /// letter renders without a logo until one is uploaded.
+  logoUrl String?
+
   updatedAt       DateTime @updatedAt
   updatedByUserId String?
 
   @@map("company_settings")
+}
+
+// =============================================================================
+// Employee Letters — server-generated, numbered HR documents (offer,
+// appointment, relieving, experience, warning, etc.). P1 scope: categories,
+// types, versioned templates, variable-driven generation, and an immutable
+// per-letter snapshot. No template-editor UI, no employee-profile
+// integration, and no approval workflow yet (P2/P3/P4 - see
+// PROJECT_STATUS.md).
+// =============================================================================
+
+model LetterCategory {
+  id   String @id @default(cuid())
+  key  String @unique
+  name String
+
+  types LetterType[]
+
+  @@map("letter_categories")
+}
+
+model LetterType {
+  id         String  @id @default(cuid())
+  key        String  @unique
+  name       String
+  categoryId String
+  /// Prefix used in the generated document number, e.g. "APT" ->
+  /// "APT/2026/0001" (see LettersService's use of SequenceService).
+  numberPrefix String @unique
+  isActive     Boolean @default(true)
+
+  category  LetterCategory   @relation(fields: [categoryId], references: [id])
+  templates LetterTemplate[]
+  letters   EmployeeLetter[]
+
+  @@map("letter_types")
+}
+
+model LetterTemplate {
+  id           String  @id @default(cuid())
+  letterTypeId String
+  name         String
+  isActive     Boolean @default(true)
+  signatoryId  String?
+  /// Denormalized pointer into LetterTemplateVersion, mirroring
+  /// SalaryStructure.currentAmount + SalaryRevision's parent/current-value
+  /// + append-only-log split - avoids a circular FK between a template and
+  /// its own "current" version row.
+  currentVersionNumber Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  letterType LetterType              @relation(fields: [letterTypeId], references: [id])
+  signatory  LetterSignatory?        @relation(fields: [signatoryId], references: [id])
+  versions   LetterTemplateVersion[]
+  letters    EmployeeLetter[]
+
+  @@map("letter_templates")
+}
+
+/// Append-only - a version's content is never edited in place once created
+/// (matches SalaryRevision's tamper-evident-trail reasoning: an
+/// already-generated letter's templateVersionId must keep pointing at
+/// content that never changes out from under it).
+model LetterTemplateVersion {
+  id              String   @id @default(cuid())
+  templateId      String
+  versionNumber   Int
+  /// Raw template body with {{variable}} tokens - see the variable
+  /// whitelist in letters/template-variables.ts. Unknown tokens are
+  /// rejected at generation time, not silently left in the output.
+  content         String   @db.Text
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  template LetterTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  letters  EmployeeLetter[]
+
+  @@unique([templateId, versionNumber])
+  @@map("letter_template_versions")
+}
+
+model LetterSignatory {
+  id        String  @id @default(cuid())
+  name      String
+  title     String
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  templates LetterTemplate[]
+
+  @@map("letter_signatories")
+}
+
+enum LetterStatus {
+  GENERATED
+  CANCELLED
+}
+
+/// One generated document. Everything needed to reproduce exactly what the
+/// employee received lives on this row (resolvedVariables + renderedContent
+/// + fileUrl) - changing the employee's live HR record afterward must never
+/// alter a past letter, so nothing here is derived by joining through to
+/// Employee at read time.
+model EmployeeLetter {
+  id                String       @id @default(cuid())
+  employeeId        String
+  letterTypeId      String
+  templateId        String
+  templateVersionId String
+  /// Human-facing number, e.g. "APT/2026/0001" - allocated once via
+  /// SequenceService and never reused or regenerated.
+  documentNumber    String       @unique
+  status            LetterStatus @default(GENERATED)
+  /// Snapshot of every resolved {{variable}} -> value pair at generation
+  /// time - the historical-integrity requirement (see class comment).
+  resolvedVariables Json
+  /// Snapshot of the exact template text that was rendered - belt-and-
+  /// suspenders alongside templateVersionId, since a version's content is
+  /// already append-only (see LetterTemplateVersion), but this keeps the
+  /// letter's own history readable even if that convention ever changes.
+  renderedContent   String       @db.Text
+  fileUrl           String
+
+  generatedByUserId String
+  generatedAt       DateTime  @default(now())
+  cancelledByUserId String?
+  cancelledAt       DateTime?
+  cancellationReason String?  @db.Text
+
+  employee        Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  letterType      LetterType            @relation(fields: [letterTypeId], references: [id])
+  template        LetterTemplate        @relation(fields: [templateId], references: [id])
+  templateVersion LetterTemplateVersion @relation(fields: [templateVersionId], references: [id])
+  generatedByUser User                  @relation("LetterGenerator", fields: [generatedByUserId], references: [id], onDelete: Restrict)
+  cancelledByUser User?                 @relation("LetterCanceller", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@map("employee_letters")
 }

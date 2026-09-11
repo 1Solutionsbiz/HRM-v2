@@ -198,3 +198,38 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
+
+/**
+ * Same auth-attach/401-refresh-retry behavior as apiFetch, but returns the
+ * raw response body as a Blob instead of JSON-parsing it - for a real
+ * authenticated binary download (letters/:id/download), not the
+ * @Public()-unguessable-filename pattern other file routes use, which the
+ * browser can just load directly via <a href>/<img src> with no auth header.
+ */
+export async function apiDownload(path: string): Promise<Blob> {
+  async function attempt(): Promise<Response> {
+    const headers: Record<string, string> = {};
+    const tokens = getStoredTokens();
+    if (tokens) headers.Authorization = `Bearer ${tokens.accessToken}`;
+    return fetch(`${API_URL}${path}`, { headers });
+  }
+
+  let response = await attempt();
+
+  if (response.status === 401) {
+    const newAccessToken = await refreshAccessToken();
+    if (!newAccessToken) {
+      dispatchSessionExpired();
+      throw new ApiError(401, "Your session has expired. Please sign in again.");
+    }
+    response = await attempt();
+  }
+
+  if (!response.ok) {
+    const message = await readErrorMessage(response);
+    if (response.status === 401) dispatchSessionExpired();
+    throw new ApiError(response.status, message);
+  }
+
+  return response.blob();
+}

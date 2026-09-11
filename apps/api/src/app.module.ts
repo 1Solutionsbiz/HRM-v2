@@ -35,6 +35,7 @@ import { HandbookModule } from './handbook/handbook.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { DailyReportsModule } from './daily-reports/daily-reports.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
+import { LettersModule } from './letters/letters.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -80,6 +81,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     ReportsModule,
     DailyReportsModule,
     ProjectsModule,
+    LettersModule,
   ],
   controllers: [AppController],
   providers: [

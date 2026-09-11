@@ -33,3 +33,52 @@ describe('SequenceService', () => {
     );
   });
 });
+
+describe('SequenceService.nextOrCreate', () => {
+  it('returns the incremented value when the counter already exists', async () => {
+    const prisma = {
+      sequenceCounter: {
+        update: vi.fn().mockResolvedValue({ key: 'letter:APT:2026', value: 3 }),
+        create: vi.fn(),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new SequenceService(prisma as any);
+
+    await expect(service.nextOrCreate('letter:APT:2026')).resolves.toBe(3);
+    expect(prisma.sequenceCounter.create).not.toHaveBeenCalled();
+  });
+
+  it('creates the counter starting at 1 on first use for a new key', async () => {
+    const prisma = {
+      sequenceCounter: {
+        update: vi.fn().mockRejectedValueOnce(new Error('Record not found')),
+        create: vi.fn().mockResolvedValue({ key: 'letter:APT:2027', value: 1 }),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new SequenceService(prisma as any);
+
+    await expect(service.nextOrCreate('letter:APT:2027')).resolves.toBe(1);
+    expect(prisma.sequenceCounter.create).toHaveBeenCalledWith({
+      data: { key: 'letter:APT:2027', value: 1 },
+    });
+  });
+
+  it('falls back to update when a concurrent request wins the create race', async () => {
+    const prisma = {
+      sequenceCounter: {
+        update: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Record not found'))
+          .mockResolvedValueOnce({ key: 'letter:APT:2027', value: 2 }),
+        create: vi.fn().mockRejectedValue(new Error('Unique constraint failed')),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new SequenceService(prisma as any);
+
+    await expect(service.nextOrCreate('letter:APT:2027')).resolves.toBe(2);
+    expect(prisma.sequenceCounter.update).toHaveBeenCalledTimes(2);
+  });
+});

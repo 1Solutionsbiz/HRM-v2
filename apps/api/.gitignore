@@ -7,3 +7,7 @@ node_modules
 # build output
 /dist
 *.tsbuildinfo
+
+# Local-dev copy of UPLOADS_DIR's default ('./uploads') - real
+# document/avatar/letter files should never land in version control.
+/uploads

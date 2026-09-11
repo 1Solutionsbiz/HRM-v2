@@ -28,4 +28,38 @@ export class SequenceService {
       );
     }
   }
+
+  /**
+   * Like `next()`, but lazily creates the counter row on first use instead
+   * of requiring it pre-seeded — for keys whose full set isn't known ahead
+   * of time (letter document numbers are scoped per calendar year, e.g.
+   * "letter:APT:2026", and a new year's key can't be pre-seeded). Race-safe
+   * without upserting: the common path is the same atomic `UPDATE ... SET
+   * value = value + 1` as `next()`; only a first-ever call for a given key
+   * falls through to `create()`, and `key`'s primary-key constraint means
+   * at most one concurrent `create()` can win — the loser retries the
+   * `update()` and gets the correct next value instead of erroring.
+   */
+  async nextOrCreate(key: string): Promise<number> {
+    try {
+      const counter = await this.prisma.sequenceCounter.update({
+        where: { key },
+        data: { value: { increment: 1 } },
+      });
+      return counter.value;
+    } catch {
+      try {
+        const counter = await this.prisma.sequenceCounter.create({
+          data: { key, value: 1 },
+        });
+        return counter.value;
+      } catch {
+        const counter = await this.prisma.sequenceCounter.update({
+          where: { key },
+          data: { value: { increment: 1 } },
+        });
+        return counter.value;
+      }
+    }
+  }
 }

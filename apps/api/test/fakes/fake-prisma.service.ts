@@ -160,6 +160,24 @@ interface FakePayslipLineItem {
   sortOrder: number;
 }
 
+interface FakeEmployeeLetter {
+  id: string;
+  employeeId: string;
+  letterTypeId: string;
+  templateId: string;
+  templateVersionId: string;
+  documentNumber: string;
+  status: string;
+  resolvedVariables: Record<string, string>;
+  renderedContent: string;
+  fileUrl: string;
+  generatedByUserId: string;
+  generatedAt: Date;
+  cancelledByUserId: string | null;
+  cancelledAt: Date | null;
+  cancellationReason: string | null;
+}
+
 export class FakePrismaService {
   // No real atomicity — the fake is single-threaded and in-memory, so a
   // transaction is just "run the callback against this same instance." Good
@@ -515,6 +533,13 @@ export class FakePrismaService {
       const value = current + data.value.increment;
       this.sequenceCounters.set(where.key, value);
       return { key: where.key, value };
+    },
+    create: async ({ data }: { data: { key: string; value: number } }) => {
+      if (this.sequenceCounters.has(data.key)) {
+        throw new Error(`fake sequence counter "${data.key}" already exists`);
+      }
+      this.sequenceCounters.set(data.key, data.value);
+      return { key: data.key, value: data.value };
     },
   };
 
@@ -2247,6 +2272,203 @@ export class FakePrismaService {
       existing.push(item);
       this.payslipLineItems.set(data.payslipId, existing);
       return item;
+    },
+  };
+
+  // --- Employee Letters ---------------------------------------------------
+
+  letterCategories = new Map<string, { id: string; key: string; name: string }>();
+  letterTypes = new Map<
+    string,
+    { id: string; key: string; name: string; categoryId: string; numberPrefix: string; isActive: boolean }
+  >();
+  letterTemplates = new Map<
+    string,
+    {
+      id: string;
+      letterTypeId: string;
+      name: string;
+      isActive: boolean;
+      signatoryId: string | null;
+      currentVersionNumber: number;
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  >();
+  letterTemplateVersions = new Map<
+    string,
+    { id: string; templateId: string; versionNumber: number; content: string; createdByUserId: string | null; createdAt: Date }
+  >();
+  letterSignatories = new Map<
+    string,
+    { id: string; name: string; title: string; isDefault: boolean; isActive: boolean; createdAt: Date }
+  >();
+  employeeLetters = new Map<string, FakeEmployeeLetter>();
+
+  seedLetterCategory(input: { id: string; key: string; name: string }): void {
+    this.letterCategories.set(input.id, input);
+  }
+
+  seedLetterType(input: {
+    id: string;
+    key: string;
+    name: string;
+    categoryId: string;
+    numberPrefix: string;
+    isActive?: boolean;
+  }): void {
+    this.letterTypes.set(input.id, { isActive: true, ...input });
+  }
+
+  seedLetterTemplate(input: {
+    id: string;
+    letterTypeId: string;
+    name: string;
+    isActive?: boolean;
+    signatoryId?: string | null;
+    currentVersionNumber: number;
+  }): void {
+    this.letterTemplates.set(input.id, {
+      isActive: true,
+      signatoryId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...input,
+    });
+  }
+
+  seedLetterTemplateVersion(input: {
+    id: string;
+    templateId: string;
+    versionNumber: number;
+    content: string;
+    createdByUserId?: string | null;
+  }): void {
+    this.letterTemplateVersions.set(input.id, {
+      createdByUserId: null,
+      createdAt: new Date(),
+      ...input,
+    });
+  }
+
+  seedLetterSignatory(input: {
+    id: string;
+    name: string;
+    title: string;
+    isDefault?: boolean;
+    isActive?: boolean;
+  }): void {
+    this.letterSignatories.set(input.id, {
+      isDefault: false,
+      isActive: true,
+      createdAt: new Date(),
+      ...input,
+    });
+  }
+
+  letterCategory = {
+    findMany: async () =>
+      [...this.letterCategories.values()].map((category) => ({
+        ...category,
+        types: [...this.letterTypes.values()].filter(
+          (type) => type.categoryId === category.id && type.isActive,
+        ),
+      })),
+  };
+
+  letterType = {
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.letterTypes.get(where.id) ?? null,
+  };
+
+  letterTemplate = {
+    findFirst: async ({ where }: { where: { letterTypeId: string; isActive: boolean } }) =>
+      [...this.letterTemplates.values()].find(
+        (template) => template.letterTypeId === where.letterTypeId && template.isActive === where.isActive,
+      ) ?? null,
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.letterTemplates.get(where.id) ?? null,
+  };
+
+  letterTemplateVersion = {
+    findUnique: async ({
+      where,
+    }: {
+      where: { templateId_versionNumber: { templateId: string; versionNumber: number } };
+    }) => {
+      const { templateId, versionNumber } = where.templateId_versionNumber;
+      return (
+        [...this.letterTemplateVersions.values()].find(
+          (version) => version.templateId === templateId && version.versionNumber === versionNumber,
+        ) ?? null
+      );
+    },
+  };
+
+  letterSignatory = {
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.letterSignatories.get(where.id) ?? null,
+    findFirst: async ({ where }: { where: { isDefault: boolean; isActive: boolean } }) =>
+      [...this.letterSignatories.values()].find(
+        (signatory) => signatory.isDefault === where.isDefault && signatory.isActive === where.isActive,
+      ) ?? null,
+  };
+
+  private employeeLetterWithRelations(letter: FakeEmployeeLetter) {
+    const employee = this.employees.get(letter.employeeId);
+    const letterType = this.letterTypes.get(letter.letterTypeId);
+    return {
+      ...letter,
+      employee: employee
+        ? { firstName: employee.firstName, lastName: employee.lastName, employeeCode: employee.employeeCode }
+        : null,
+      letterType: letterType ? { name: letterType.name } : null,
+    };
+  }
+
+  employeeLetter = {
+    create: async ({
+      data,
+    }: {
+      data: Omit<
+        FakeEmployeeLetter,
+        'id' | 'status' | 'generatedAt' | 'cancelledByUserId' | 'cancelledAt' | 'cancellationReason'
+      >;
+    }) => {
+      const id = `employee-letter-${this.employeeLetters.size + 1}`;
+      const letter: FakeEmployeeLetter = {
+        id,
+        status: 'GENERATED',
+        generatedAt: new Date(),
+        cancelledByUserId: null,
+        cancelledAt: null,
+        cancellationReason: null,
+        ...data,
+      };
+      this.employeeLetters.set(id, letter);
+      return letter;
+    },
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.employeeLetters.get(where.id) ?? null,
+    findMany: async ({
+      where,
+    }: {
+      where?: { employeeId?: string };
+    } = {}) =>
+      [...this.employeeLetters.values()]
+        .filter((letter) => !where?.employeeId || letter.employeeId === where.employeeId)
+        .map((letter) => this.employeeLetterWithRelations(letter)),
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Partial<FakeEmployeeLetter>;
+    }) => {
+      const letter = this.employeeLetters.get(where.id);
+      if (!letter) throw new Error(`no fake employee letter ${where.id}`);
+      Object.assign(letter, data);
+      return letter;
     },
   };
 }
