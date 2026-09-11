@@ -3,6 +3,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { DailyReportsService } from './daily-reports.service.js';
+import { DailyReportRemindersService } from './daily-report-reminders.service.js';
 import { UpsertDailyReportDto } from './dto/upsert-daily-report.dto.js';
 import { ExcuseDailyReportDto } from './dto/excuse-daily-report.dto.js';
 import {
@@ -21,7 +22,10 @@ import {
 @Controller('daily-reports')
 @RequirePermissions('performance:manage')
 export class DailyReportsController {
-  constructor(private readonly dailyReportsService: DailyReportsService) {}
+  constructor(
+    private readonly dailyReportsService: DailyReportsService,
+    private readonly dailyReportRemindersService: DailyReportRemindersService,
+  ) {}
 
   @Get('me')
   @RequirePermissions()
@@ -72,5 +76,12 @@ export class DailyReportsController {
     @Body() dto: ExcuseDailyReportDto,
   ) {
     return this.dailyReportsService.excuse(actor, employeeId, dto);
+  }
+
+  /** Admin-only, stricter than the class default - fires both reminder notifications for the caller only, never a real employee. See DailyReportRemindersService.sendTest. */
+  @Post('reminders/test')
+  @RequirePermissions('company:manage')
+  sendTestReminder(@CurrentUser() actor: AuthContext) {
+    return this.dailyReportRemindersService.sendTest(actor.userId);
   }
 }
