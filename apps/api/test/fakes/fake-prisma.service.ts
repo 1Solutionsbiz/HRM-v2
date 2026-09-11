@@ -187,6 +187,35 @@ export class FakePrismaService {
     return fn(this);
   }
 
+  /**
+   * Only supports LettersService.findEmployeeIdsMatchingTerm's exact
+   * tagged-template shape (a LIKE-across-3-columns employee search) - not a
+   * general SQL fake. This CANNOT catch the real MariaDB collation bug
+   * (error 1267) that made $queryRaw necessary here in the first place -
+   * that only reproduces against real MariaDB (no shadow DB in this
+   * environment, see prisma/seed.ts's own header) and was found by
+   * querying production directly. This fake exists only so the HTTP route
+   * wiring (DTO/guard/service/controller) can be exercised in e2e tests.
+   */
+  async $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> {
+    const sql = strings.join('?');
+    if (!/FROM employees/i.test(sql) || !/LIKE/i.test(sql)) {
+      throw new Error(`fake $queryRaw does not support this query: ${sql}`);
+    }
+    const likePattern = String(values[0] ?? '');
+    const term = likePattern
+      .replace(/^%|%$/g, '')
+      .replace(/\\(.)/g, '$1')
+      .toLowerCase();
+    const matches = [...this.employees.values()].filter(
+      (e) =>
+        e.firstName.toLowerCase().includes(term) ||
+        e.lastName.toLowerCase().includes(term) ||
+        e.employeeCode.toLowerCase().includes(term),
+    );
+    return matches.map((e) => ({ id: e.id })) as T;
+  }
+
   users = new Map<string, FakeUser>();
   sessions = new Map<string, FakeSession>();
   roles = new Map<string, FakeRole>();

@@ -18,6 +18,7 @@ vi.mock('./letter-file-storage.js', () => ({
 
 function buildPrismaMock() {
   return {
+    $queryRaw: vi.fn(),
     employee: { findUnique: vi.fn(), findMany: vi.fn() },
     letterType: { findUnique: vi.fn() },
     letterCategory: { findMany: vi.fn() },
@@ -62,6 +63,7 @@ const MANAGER_ACTOR: AuthContext = {
 describe('LettersService.searchEmployees', () => {
   it('lets an HR/admin actor search all active employees', async () => {
     const prisma = buildPrismaMock();
+    prisma.$queryRaw.mockResolvedValue([{ id: 'emp-1' }]);
     prisma.employee.findMany.mockResolvedValue([{ id: 'emp-1', firstName: 'Ritika' }]);
     const { service } = buildService(prisma);
 
@@ -70,7 +72,37 @@ describe('LettersService.searchEmployees', () => {
     expect(result).toEqual([{ id: 'emp-1', firstName: 'Ritika' }]);
     const call = prisma.employee.findMany.mock.calls[0][0];
     expect(call.where.status).toBe('ACTIVE');
-    expect(call.where.id).toBeUndefined(); // 'ALL' scope - no id filter
+    expect(call.where.id).toEqual({ in: ['emp-1'] }); // narrowed by the raw-SQL term match
+  });
+
+  it('matches a search term via $queryRaw, not Prisma\'s contains filter (MariaDB collation bug)', async () => {
+    // Prisma's `contains` (and even a plain $queryRaw tagged template)
+    // fails against this table with MariaDB error 1267 ("Illegal mix of
+    // collations") - confirmed against production. findEmployeeIdsMatchingTerm
+    // must go through $queryRaw with an explicit COLLATE, and
+    // employee.findMany must never receive a `contains`/`OR` text filter.
+    const prisma = buildPrismaMock();
+    prisma.$queryRaw.mockResolvedValue([{ id: 'emp-1' }, { id: 'emp-2' }]);
+    prisma.employee.findMany.mockResolvedValue([]);
+    const { service } = buildService(prisma);
+
+    await service.searchEmployees(HR_ACTOR, { q: 'Ritika' });
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const findManyArgs = prisma.employee.findMany.mock.calls[0][0];
+    expect(JSON.stringify(findManyArgs)).not.toContain('contains');
+    expect(findManyArgs.where.id).toEqual({ in: ['emp-1', 'emp-2'] });
+  });
+
+  it('returns an empty list without querying employees when the term matches nobody', async () => {
+    const prisma = buildPrismaMock();
+    prisma.$queryRaw.mockResolvedValue([]);
+    const { service } = buildService(prisma);
+
+    const result = await service.searchEmployees(HR_ACTOR, { q: 'nobody-matches-this' });
+
+    expect(result).toEqual([]);
+    expect(prisma.employee.findMany).not.toHaveBeenCalled();
   });
 
   it('scopes a manager (no hr/admin role) to their direct reports only', async () => {

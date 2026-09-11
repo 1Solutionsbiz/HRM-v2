@@ -154,6 +154,28 @@ describe('Letters (e2e)', () => {
       .expect(403);
   });
 
+  it('lets HR search employees by name and finds the target employee', async () => {
+    const token = await loginAs('hr@example.com');
+
+    const results = await request(app.getHttpServer())
+      .get('/letters/employees?q=Ritika')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(results.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ employeeCode: 'EXP-26-0002-OM' })]),
+    );
+  });
+
+  it('rejects employee search for a user without letters:generate', async () => {
+    const token = await loginAs('worker@example.com');
+
+    await request(app.getHttpServer())
+      .get('/letters/employees?q=Ritika')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+  });
+
   it('lets HR generate a letter and download the real PDF that was written to disk', async () => {
     const token = await loginAs('hr@example.com');
 

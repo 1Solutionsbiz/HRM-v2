@@ -74,19 +74,17 @@ export class LettersService {
     if (scope !== 'ALL' && scope.length === 0) return [];
 
     const term = query.q?.trim();
+    let matchingIds: string[] | undefined;
+    if (term) {
+      matchingIds = await this.findEmployeeIdsMatchingTerm(term);
+      if (matchingIds.length === 0) return [];
+    }
+
     return this.prisma.employee.findMany({
       where: {
         ...(scope === 'ALL' ? {} : { id: { in: scope } }),
+        ...(matchingIds ? { id: { in: matchingIds } } : {}),
         status: 'ACTIVE',
-        ...(term
-          ? {
-              OR: [
-                { firstName: { contains: term } },
-                { lastName: { contains: term } },
-                { employeeCode: { contains: term } },
-              ],
-            }
-          : {}),
       },
       select: {
         id: true,
@@ -99,6 +97,34 @@ export class LettersService {
       take: 25,
       orderBy: { firstName: 'asc' },
     });
+  }
+
+  /**
+   * `@prisma/adapter-mariadb` binds string parameters with a collation
+   * that conflicts with this table's `utf8mb4_unicode_ci` columns for LIKE
+   * specifically - MariaDB error 1267, "Illegal mix of collations
+   * (utf8mb4_unicode_ci,IMPLICIT) and (utf8mb4_bin,NONE) for operation
+   * 'like'". Confirmed empirically against production: Prisma's `contains`
+   * filter hit this (it compiles to the same parameterized LIKE), and so
+   * did a plain `$queryRaw` tagged template - it's the driver's parameter
+   * binding, not Prisma's query builder specifically. An explicit
+   * `COLLATE utf8mb4_unicode_ci` on the bound parameter works around it,
+   * confirmed against production too. Kept to just this id lookup so the
+   * rest of searchEmployees (joins, select, scope, ordering) stays on the
+   * type-safe Prisma query builder.
+   */
+  private async findEmployeeIdsMatchingTerm(term: string): Promise<string[]> {
+    // Escape LIKE wildcards in the user's own input so e.g. searching "50%"
+    // matches the literal characters, not an unintended wildcard.
+    const escaped = term.replace(/[%_\\]/g, (c) => `\\${c}`);
+    const like = `%${escaped}%`;
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM employees
+      WHERE firstName LIKE ${like} COLLATE utf8mb4_unicode_ci
+         OR lastName LIKE ${like} COLLATE utf8mb4_unicode_ci
+         OR employeeCode LIKE ${like} COLLATE utf8mb4_unicode_ci
+    `;
+    return rows.map((r) => r.id);
   }
 
   // ---------------------------------------------------------------------
