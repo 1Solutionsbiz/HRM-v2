@@ -1012,9 +1012,19 @@ export class FakePrismaService {
       Object.assign(day, data);
       return day;
     },
+    delete: async ({ where }: { where: { id: string } }) => {
+      const day = this.attendanceDays.get(where.id);
+      if (!day) throw new Error(`no fake attendance day ${where.id}`);
+      this.attendanceDays.delete(where.id);
+      return day;
+    },
   };
 
   attendanceEvent = {
+    count: async ({ where }: { where: { attendanceDayId: string } }) =>
+      [...this.attendanceEvents.values()].filter(
+        (event) => event.attendanceDayId === where.attendanceDayId,
+      ).length,
     findFirst: async ({
       where,
     }: {
@@ -1220,6 +1230,49 @@ export class FakePrismaService {
       };
       this.leaveBalances.set(key, record);
       return record;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: {
+        employeeId_leaveTypeId_year: {
+          employeeId: string;
+          leaveTypeId: string;
+          year: number;
+        };
+      };
+      data: {
+        usedDays?: {
+          increment?: number | { toNumber(): number };
+          decrement?: number | { toNumber(): number };
+        };
+      };
+    }) => {
+      const { employeeId, leaveTypeId, year } =
+        where.employeeId_leaveTypeId_year;
+      const key = this.leaveBalanceKey(employeeId, leaveTypeId, year);
+      const existing = this.leaveBalances.get(key);
+      if (!existing) throw new Error(`no fake leave balance ${key}`);
+      if (data.usedDays?.increment !== undefined) {
+        const amount =
+          typeof data.usedDays.increment === 'number'
+            ? data.usedDays.increment
+            : data.usedDays.increment.toNumber();
+        existing.usedDays = FakePrismaService.decimalShim(
+          existing.usedDays.toNumber() + amount,
+        );
+      }
+      if (data.usedDays?.decrement !== undefined) {
+        const amount =
+          typeof data.usedDays.decrement === 'number'
+            ? data.usedDays.decrement
+            : data.usedDays.decrement.toNumber();
+        existing.usedDays = FakePrismaService.decimalShim(
+          existing.usedDays.toNumber() - amount,
+        );
+      }
+      return existing;
     },
   };
 

@@ -177,7 +177,7 @@ describe('Leave (e2e)', () => {
     expect(casual.remainingDays).toBe(11);
   });
 
-  it('rejects a self-cancel of an already-approved request', async () => {
+  it('allows a self-cancel of a future-dated approved request, reversing the balance and un-marking attendance', async () => {
     const workerToken = await loginAs('worker@example.com');
     const hrToken = await loginAs('hr@example.com');
 
@@ -188,6 +188,52 @@ describe('Leave (e2e)', () => {
         leaveTypeId: 'lt-casual',
         startDate: '2026-09-14',
         endDate: '2026-09-14',
+        reason: 'x',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/decide`)
+      .set('Authorization', `Bearer ${hrToken}`)
+      .send({ decision: 'APPROVED' })
+      .expect(200);
+
+    const cancelled = await request(app.getHttpServer())
+      .patch(`/leave/requests/${applied.body.id}/cancel`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    expect(cancelled.body.status).toBe('CANCELLED');
+
+    const balances = await request(app.getHttpServer())
+      .get('/leave/balances')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    const casual = balances.body.find(
+      (b: { leaveTypeKey: string }) => b.leaveTypeKey === 'casual',
+    );
+    expect(casual.usedDays).toBe(0);
+    expect(casual.remainingDays).toBe(12);
+
+    const employee = [...prisma.employees.values()][0];
+    const day = [...prisma.attendanceDays.values()].find(
+      (d) => d.employeeId === employee.id,
+    );
+    // No punches were ever recorded for this day, so unmarking it deletes
+    // the placeholder row outright rather than leaving a stale ON_LEAVE one.
+    expect(day).toBeUndefined();
+  });
+
+  it('rejects a self-cancel of an approved request that has already started', async () => {
+    const workerToken = await loginAs('worker@example.com');
+    const hrToken = await loginAs('hr@example.com');
+
+    const applied = await request(app.getHttpServer())
+      .post('/leave/requests')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({
+        leaveTypeId: 'lt-casual',
+        startDate: '2026-01-01',
+        endDate: '2026-01-01',
         reason: 'x',
       })
       .expect(201);

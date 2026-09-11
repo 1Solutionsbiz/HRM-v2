@@ -464,6 +464,47 @@ export class AttendanceService {
   }
 
   /**
+   * Reverses LeaveService's markAttendanceDaysOnLeave when an approved
+   * leave is cancelled by the employee. A day that leave created outright
+   * (no real punches — the common case) is deleted so it reverts to the
+   * normal synthesize-on-read state (WEEKEND/HOLIDAY/ABSENT/PENDING,
+   * computed fresh at read time); a day that already had real punches
+   * before being overwritten just has its leaveRequestId cleared and gets
+   * reclassified from those punches via the same recomputeDay() every
+   * check-in/out already goes through — never duplicated here.
+   */
+  async unmarkApprovedLeave(
+    employeeId: string,
+    startDate: Date,
+    endDate: Date,
+    leaveRequestId: string,
+  ): Promise<void> {
+    for (
+      let cursor = startDate;
+      cursor <= endDate;
+      cursor = addDays(cursor, 1)
+    ) {
+      const day = await this.prisma.attendanceDay.findUnique({
+        where: { employeeId_date: { employeeId, date: cursor } },
+      });
+      if (!day || day.leaveRequestId !== leaveRequestId) continue;
+
+      const eventCount = await this.prisma.attendanceEvent.count({
+        where: { attendanceDayId: day.id },
+      });
+      if (eventCount === 0) {
+        await this.prisma.attendanceDay.delete({ where: { id: day.id } });
+      } else {
+        await this.prisma.attendanceDay.update({
+          where: { id: day.id },
+          data: { leaveRequestId: null },
+        });
+        await this.recomputeDay(day.id);
+      }
+    }
+  }
+
+  /**
    * Which event "wins" per type is resolved by recency of *creation*
    * (insertion order, approximated by cuid ordering — AttendanceEvent has
    * no separate createdAt), not by `occurredAt`. This is deliberate: a

@@ -8,7 +8,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SequenceService } from '../sequence/sequence.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { addDays, parseDateOnly } from '../common/date-only.js';
+import { AttendanceService } from '../attendance/attendance.service.js';
+import { addDays, parseDateOnly, toDateOnly } from '../common/date-only.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { LeaveDayType } from '../generated/prisma/enums.js';
 import type { Decimal } from '../generated/prisma/internal/prismaNamespace.js';
@@ -40,6 +41,7 @@ export class LeaveService {
     private readonly auditService: AuditService,
     private readonly sequenceService: SequenceService,
     private readonly notificationsService: NotificationsService,
+    private readonly attendanceService: AttendanceService,
   ) {}
 
   getLeaveTypes() {
@@ -356,6 +358,14 @@ export class LeaveService {
     return requests.reduce((sum, r) => sum + r.totalDays.toNumber(), 0);
   }
 
+  /**
+   * PENDING cancels freely, same as before. APPROVED can also be
+   * self-cancelled now (plans changed after the fact), but only while the
+   * leave hasn't started yet — once startDate has arrived, the employee
+   * has (or hasn't) actually taken the day; "cancelling" it after the fact
+   * would misrepresent what happened rather than correct a plan, so that
+   * case is HR territory, not self-service.
+   */
   async cancelMyRequest(userId: string, requestId: string, actor: AuthContext) {
     const employeeId = await this.requireEmployeeId(userId);
     const request = await this.prisma.leaveRequest.findUnique({
@@ -364,9 +374,15 @@ export class LeaveService {
     if (!request || request.employeeId !== employeeId) {
       throw new NotFoundException('Leave request not found');
     }
-    if (request.status !== 'PENDING') {
+    if (request.status !== 'PENDING' && request.status !== 'APPROVED') {
       throw new ConflictException(
-        'Only a pending leave request can be cancelled',
+        'Only a pending or approved leave request can be cancelled',
+      );
+    }
+    const wasApproved = request.status === 'APPROVED';
+    if (wasApproved && request.startDate <= toDateOnly(new Date())) {
+      throw new ConflictException(
+        'This leave has already started or passed and can no longer be self-cancelled — contact HR for a correction',
       );
     }
 
@@ -375,13 +391,43 @@ export class LeaveService {
       data: { status: 'CANCELLED' },
     });
 
+    if (wasApproved) {
+      await this.reverseApprovedUsage(
+        request.employeeId,
+        request.leaveTypeId,
+        request.startDate,
+        request.totalDays,
+      );
+      await this.attendanceService.unmarkApprovedLeave(
+        request.employeeId,
+        request.startDate,
+        request.endDate,
+        request.id,
+      );
+
+      const employee = await this.prisma.employee.findUnique({
+        where: { id: request.employeeId },
+        select: { managerId: true, firstName: true, lastName: true },
+      });
+      if (employee?.managerId) {
+        await this.notificationsService.createForEmployee(employee.managerId, {
+          type: 'LEAVE',
+          title: 'Approved leave cancelled',
+          description: `${employee.firstName} ${employee.lastName} cancelled their approved leave request ${request.code}.`,
+          linkUrl: '/team/leave-approvals',
+        });
+      }
+    }
+
     await this.auditService.log({
       eventType: 'OTHER',
       actorUserId: actor.userId,
       actorEmail: actor.email,
       targetType: 'LeaveRequest',
       targetId: requestId,
-      description: 'Leave request cancelled by employee',
+      description: wasApproved
+        ? `Approved leave request ${request.code} cancelled by employee`
+        : 'Leave request cancelled by employee',
     });
 
     return this.serializeRequest(updated);
@@ -493,6 +539,20 @@ export class LeaveService {
         usedDays: totalDays,
       },
       update: { usedDays: { increment: totalDays } },
+    });
+  }
+
+  /** Reverses recordApprovedUsage when an approved leave is cancelled — the LeaveBalance row is guaranteed to already exist, since only an APPROVED request (which always ran recordApprovedUsage on the way in) reaches here. */
+  private async reverseApprovedUsage(
+    employeeId: string,
+    leaveTypeId: string,
+    startDate: Date,
+    totalDays: Decimal,
+  ) {
+    const year = startDate.getFullYear();
+    await this.prisma.leaveBalance.update({
+      where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year } },
+      data: { usedDays: { decrement: totalDays } },
     });
   }
 

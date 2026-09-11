@@ -5,9 +5,10 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { CalendarPlus, Ban } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
+import { ApiError } from "@/lib/api-client";
 import { getLeaveBalances, getLeaveLedger, getMyLeaveRequests, cancelLeaveRequest, type LeaveLedgerRequest } from "@/lib/api/leave";
 import { titleCase } from "@/lib/api/employees";
-import { formatDate, formatDateShort } from "@/lib/format";
+import { formatDate, formatDateShort, toDateOnlyString } from "@/lib/format";
 import { monthName } from "@/lib/api/payroll";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -43,12 +44,21 @@ export default function LeavePage() {
   const requests = useAsync(getMyLeaveRequests);
   const [cancelId, setCancelId] = React.useState<string | null>(null);
   const pendingRequests = (requests.data ?? []).filter((r) => r.status === "PENDING");
+  const today = toDateOnlyString(new Date());
+  const upcomingApprovedRequests = (requests.data ?? []).filter(
+    (r) => r.status === "APPROVED" && r.startDate > today,
+  );
+  const cancelTarget = (requests.data ?? []).find((r) => r.id === cancelId);
 
   async function handleCancel() {
     if (!cancelId) return;
-    await cancelLeaveRequest(cancelId);
-    toast.success("Leave request cancelled");
-    requests.refetch();
+    try {
+      await cancelLeaveRequest(cancelId);
+      toast.success("Leave request cancelled");
+      requests.refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't cancel this request. Please try again.");
+    }
   }
 
   return (
@@ -148,6 +158,44 @@ export default function LeavePage() {
         </Card>
       )}
 
+      {upcomingApprovedRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Upcoming approved leave</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {upcomingApprovedRequests.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {r.leaveType.name} · {titleCase(r.dayType)}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {r.startDate === r.endDate
+                        ? formatDate(r.startDate)
+                        : `${formatDate(r.startDate)} - ${formatDate(r.endDate)}`}{" "}
+                      · {r.totalDays} day{r.totalDays !== 1 ? "s" : ""} · {r.reason}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <StatusBadge status={titleCase(r.status)} />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Cancel leave"
+                      onClick={() => setCancelId(r.id)}
+                    >
+                      <Ban className="text-muted-foreground size-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       <AsyncSection
         loading={ledger.loading}
         error={ledger.error}
@@ -224,8 +272,12 @@ export default function LeavePage() {
       <ConfirmDialog
         open={!!cancelId}
         onOpenChange={(open) => !open && setCancelId(null)}
-        title="Cancel this leave request?"
-        description="Your manager will no longer see this request for approval."
+        title={cancelTarget?.status === "APPROVED" ? "Cancel this approved leave?" : "Cancel this leave request?"}
+        description={
+          cancelTarget?.status === "APPROVED"
+            ? "This day no longer counts against your leave balance and your manager will be notified."
+            : "Your manager will no longer see this request for approval."
+        }
         confirmLabel="Cancel request"
         variant="destructive"
         onConfirm={handleCancel}

@@ -23,6 +23,7 @@ function buildPrismaMock() {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn().mockResolvedValue(undefined),
     },
     leaveRequest: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -52,6 +53,7 @@ describe('LeaveService', () => {
   let sequenceService: { next: ReturnType<typeof vi.fn> };
   let auditService: { log: ReturnType<typeof vi.fn> };
   let notificationsService: { createForEmployee: ReturnType<typeof vi.fn> };
+  let attendanceService: { unmarkApprovedLeave: ReturnType<typeof vi.fn> };
   let service: LeaveService;
 
   beforeEach(() => {
@@ -60,12 +62,14 @@ describe('LeaveService', () => {
     sequenceService = { next: vi.fn().mockResolvedValue(42) };
     auditService = { log: vi.fn().mockResolvedValue(undefined) };
     notificationsService = { createForEmployee: vi.fn().mockResolvedValue(undefined) };
+    attendanceService = { unmarkApprovedLeave: vi.fn().mockResolvedValue(undefined) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     service = new LeaveService(
       prisma as any,
       auditService as any,
       sequenceService as any,
       notificationsService as any,
+      attendanceService as any,
     );
   });
 
@@ -303,11 +307,11 @@ describe('LeaveService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('rejects cancelling an already-decided request', async () => {
+    it('rejects cancelling an already-rejected request', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue({
         id: 'lr-1',
         employeeId: 'emp-1',
-        status: 'APPROVED',
+        status: 'REJECTED',
       });
       await expect(
         service.cancelMyRequest('user-1', 'lr-1', actor),
@@ -328,6 +332,63 @@ describe('LeaveService', () => {
 
       const result = await service.cancelMyRequest('user-1', 'lr-1', actor);
       expect(result.status).toBe('CANCELLED');
+      expect(prisma.leaveBalance.update).not.toHaveBeenCalled();
+      expect(attendanceService.unmarkApprovedLeave).not.toHaveBeenCalled();
+    });
+
+    it('rejects self-cancelling an approved request that has already started', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      prisma.leaveRequest.findUnique.mockResolvedValue({
+        id: 'lr-1',
+        employeeId: 'emp-1',
+        leaveTypeId: 'lt-1',
+        status: 'APPROVED',
+        startDate: yesterday,
+        endDate: yesterday,
+        totalDays: decimal(1),
+      });
+      await expect(
+        service.cancelMyRequest('user-1', 'lr-1', actor),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.leaveRequest.update).not.toHaveBeenCalled();
+    });
+
+    it("cancels a future-dated approved request, reversing the balance and un-marking attendance", async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      prisma.leaveRequest.findUnique.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0001',
+        employeeId: 'emp-1',
+        leaveTypeId: 'lt-1',
+        status: 'APPROVED',
+        startDate: tomorrow,
+        endDate: tomorrow,
+        totalDays: decimal(1),
+      });
+      prisma.leaveRequest.update.mockResolvedValue({
+        id: 'lr-1',
+        status: 'CANCELLED',
+        totalDays: decimal(1),
+      });
+
+      const result = await service.cancelMyRequest('user-1', 'lr-1', actor);
+
+      expect(result.status).toBe('CANCELLED');
+      const balanceUpdateArgs = prisma.leaveBalance.update.mock.calls[0][0];
+      expect(balanceUpdateArgs.where.employeeId_leaveTypeId_year).toEqual({
+        employeeId: 'emp-1',
+        leaveTypeId: 'lt-1',
+        year: tomorrow.getFullYear(),
+      });
+      expect(balanceUpdateArgs.data.usedDays.decrement.toNumber()).toBe(1);
+      expect(attendanceService.unmarkApprovedLeave).toHaveBeenCalledWith(
+        'emp-1',
+        tomorrow,
+        tomorrow,
+        'lr-1',
+      );
     });
   });
 
