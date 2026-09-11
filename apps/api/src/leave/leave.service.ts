@@ -387,8 +387,10 @@ export class LeaveService {
     return this.serializeRequest(updated);
   }
 
+  /** Active employees only - a resigned employee's past leave history isn't this approvals screen's concern, same convention as DailyReportsService.getTeamReports' roster query. */
   async getCompanyRequests() {
     const requests = await this.prisma.leaveRequest.findMany({
+      where: { employee: { status: 'ACTIVE' } },
       include: {
         employee: { select: { id: true, firstName: true, lastName: true } },
         leaveType: { select: { key: true, name: true } },
