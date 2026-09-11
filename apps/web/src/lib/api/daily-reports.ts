@@ -18,7 +18,7 @@ export type BlockerCategory =
 export interface DailyReportTaskEntry {
   id: string;
   title: string;
-  projectOrClient: string | null;
+  project: { id: string; name: string } | null;
   status: DailyReportTaskStatus;
   expectedMinutes: number | null;
   actualMinutes: number | null;
@@ -41,7 +41,7 @@ export interface DailyReport {
 
 export interface DailyReportTaskEntryInput {
   title: string;
-  projectOrClient?: string;
+  projectId?: string;
   status: DailyReportTaskStatus;
   expectedMinutes?: number;
   actualMinutes?: number;

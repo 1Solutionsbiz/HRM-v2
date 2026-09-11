@@ -14,6 +14,7 @@ import {
   UserMinus,
   ClipboardList,
   NotebookPen,
+  FolderKanban,
   BadgeIndianRupee,
   BarChart3,
   Building2,
@@ -196,6 +197,13 @@ export const navGroups: NavGroup[] = [
         url: "/admin/company",
         icon: Building2,
         color: "text-cyan-600",
+        roles: ["admin"],
+      },
+      {
+        title: "Projects",
+        url: "/admin/projects",
+        icon: FolderKanban,
+        color: "text-emerald-600",
         roles: ["admin"],
       },
       {

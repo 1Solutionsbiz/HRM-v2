@@ -63,7 +63,7 @@ function ReportDetailDialog({ row, onClose }: { row: TeamDailyReportRow; onClose
                       <span className="font-medium">{t.title}</span>
                       <StatusBadge status={t.status.replace("_", " ")} />
                     </div>
-                    {t.projectOrClient && <p className="text-muted-foreground text-xs">{t.projectOrClient}</p>}
+                    {t.project && <p className="text-muted-foreground text-xs">{t.project.name}</p>}
                     {(t.expectedMinutes != null || t.actualMinutes != null) && (
                       <p className="text-muted-foreground text-xs">
                         Expected {t.expectedMinutes ?? "—"}m · Actual {t.actualMinutes ?? "—"}m

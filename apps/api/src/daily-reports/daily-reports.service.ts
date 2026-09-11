@@ -40,7 +40,7 @@ export interface ReportComputation {
   tasks: {
     id: string;
     title: string;
-    projectOrClient: string | null;
+    project: { id: string; name: string } | null;
     status: string;
     expectedMinutes: number | null;
     actualMinutes: number | null;
@@ -137,7 +137,7 @@ export class DailyReportsService {
           data: dto.tasks.map((task, index) => ({
             dailyReportId: report.id,
             title: task.title,
-            projectOrClient: task.projectOrClient,
+            projectId: task.projectId,
             status: task.status,
             expectedMinutes: task.expectedMinutes,
             actualMinutes: task.actualMinutes,
@@ -303,7 +303,7 @@ export class DailyReportsService {
       }),
       this.prisma.dailyReport.findUnique({
         where: { employeeId_date: { employeeId, date } },
-        include: { tasks: { orderBy: { sortOrder: 'asc' } } },
+        include: { tasks: { include: { project: true }, orderBy: { sortOrder: 'asc' } } },
       }),
       this.prisma.companySettings.findUniqueOrThrow({ where: { id: 'singleton' } }),
     ]);

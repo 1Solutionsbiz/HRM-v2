@@ -14,6 +14,7 @@ import {
   type DailyReportTaskStatus,
   type BlockerCategory,
 } from "@/lib/api/daily-reports";
+import { getProjects, type Project } from "@/lib/api/projects";
 import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -49,7 +50,7 @@ const BLOCKER_CATEGORY_OPTIONS: { value: BlockerCategory; label: string }[] = [
 interface TaskDraft {
   key: string;
   title: string;
-  projectOrClient: string;
+  projectId: string;
   status: DailyReportTaskStatus;
   expectedMinutes: string;
   actualMinutes: string;
@@ -62,7 +63,7 @@ function emptyTask(): TaskDraft {
   return {
     key: crypto.randomUUID(),
     title: "",
-    projectOrClient: "",
+    projectId: "",
     status: "IN_PROGRESS",
     expectedMinutes: "",
     actualMinutes: "",
@@ -77,7 +78,7 @@ function toTaskDrafts(report: DailyReport): TaskDraft[] {
     ? report.tasks.map((t) => ({
         key: t.id,
         title: t.title,
-        projectOrClient: t.projectOrClient ?? "",
+        projectId: t.project?.id ?? "",
         status: t.status,
         expectedMinutes: t.expectedMinutes != null ? String(t.expectedMinutes) : "",
         actualMinutes: t.actualMinutes != null ? String(t.actualMinutes) : "",
@@ -101,6 +102,7 @@ export default function DailyReportPage() {
     () => getMyDailyReport(selectedDate),
     [selectedDate],
   );
+  const { data: projects } = useAsync(getProjects);
 
   return (
     <div className="space-y-6">
@@ -121,13 +123,23 @@ export default function DailyReportPage() {
             its own lazily-initialized draft state with no effect needed to
             re-sync it - same "mounts fresh, no sync effect" pattern used across
             this app's dialogs (e.g. EditProfileDialog). */}
-        {report && <DailyReportForm key={report.date} report={report} onSaved={refetch} />}
+        {report && (
+          <DailyReportForm key={report.date} report={report} projects={projects ?? []} onSaved={refetch} />
+        )}
       </AsyncSection>
     </div>
   );
 }
 
-function DailyReportForm({ report, onSaved }: { report: DailyReport; onSaved: () => void }) {
+function DailyReportForm({
+  report,
+  projects,
+  onSaved,
+}: {
+  report: DailyReport;
+  projects: Project[];
+  onSaved: () => void;
+}) {
   const [summary, setSummary] = React.useState(report.summary ?? "");
   const [blockers, setBlockers] = React.useState(report.blockers ?? "");
   const [tomorrowPlan, setTomorrowPlan] = React.useState(report.tomorrowPlan ?? "");
@@ -161,7 +173,7 @@ function DailyReportForm({ report, onSaved }: { report: DailyReport; onSaved: ()
         tomorrowPlan: tomorrowPlan.trim() || undefined,
         tasks: validTasks.map((t) => ({
           title: t.title.trim(),
-          projectOrClient: t.projectOrClient.trim() || undefined,
+          projectId: t.projectId || undefined,
           status: t.status,
           expectedMinutes: t.expectedMinutes ? Number(t.expectedMinutes) : undefined,
           actualMinutes: t.actualMinutes ? Number(t.actualMinutes) : undefined,
@@ -244,11 +256,22 @@ function DailyReportForm({ report, onSaved }: { report: DailyReport; onSaved: ()
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Project / client</Label>
-                      <Input
-                        value={task.projectOrClient}
-                        onChange={(e) => updateTask(task.key, { projectOrClient: e.target.value })}
-                      />
+                      <Label>Project</Label>
+                      <Select
+                        value={task.projectId}
+                        onValueChange={(v) => updateTask(task.key, { projectId: v })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {projects.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label>Status</Label>

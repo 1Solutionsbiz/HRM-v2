@@ -19,8 +19,7 @@ export class DailyReportTaskEntryDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(200)
-  projectOrClient?: string;
+  projectId?: string;
 
   @IsEnum(DailyReportTaskStatus)
   status!: DailyReportTaskStatus;

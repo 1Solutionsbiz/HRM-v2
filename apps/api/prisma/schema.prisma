@@ -1342,7 +1342,7 @@ model DailyReportTaskEntry {
   id              String                @id @default(cuid())
   dailyReportId   String
   title           String
-  projectOrClient String?
+  projectId       String?
   status          DailyReportTaskStatus @default(IN_PROGRESS)
   expectedMinutes Int?
   actualMinutes   Int?
@@ -1352,8 +1352,26 @@ model DailyReportTaskEntry {
   sortOrder       Int                   @default(0)
 
   dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  // Restrict, not SetNull: silently orphaning which project a historical
+  // task entry was logged against would be a quiet data loss. ProjectsService
+  // checks usage before allowing a delete, so this is a backstop, not the
+  // primary guard.
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   @@map("daily_report_task_entries")
+}
+
+/// A simple admin-managed lookup so Daily Work Report task entries tag a
+/// real company project/client from a dropdown instead of free text -
+/// added alongside Daily Work Reporting (P1), not part of the original P1
+/// scope but the same feature area.
+model Project {
+  id   String @id @default(cuid())
+  name String @unique
+
+  taskEntries DailyReportTaskEntry[]
+
+  @@map("projects")
 }
 
 // =============================================================================
