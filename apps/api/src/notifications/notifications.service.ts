@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PushSubscriptionsService, type PushPayload } from '../push-subscriptions/push-subscriptions.service.js';
 import type { NotificationType } from '../generated/prisma/enums.js';
 
 export interface CreateNotificationInput {
@@ -17,24 +18,67 @@ export interface CreateNotificationInput {
  * — being authenticated is enough to see your own notifications. `create()`
  * has no controller route at all; it's called by other modules (Leave,
  * Expenses, ...) when something happens a user should be notified about.
+ *
+ * Every notification also gets a push sent via pushQuietly() (both
+ * create() and createForUsers() call it), so every caller of this service
+ * gets push for free without any change on their end. pushQuietly is a
+ * second, redundant safety net on top of PushSubscriptionsService.
+ * sendToUser's own internal try/catch - deliberately double-guarded,
+ * because create()/createForEmployee() sit directly inside business-
+ * critical flows (leave approval, expense decisions, resignation
+ * decisions, ...) that never wrap this call in their own try/catch. A
+ * push subsystem hiccup (even one sendToUser itself doesn't anticipate,
+ * e.g. its own findMany query failing) must never be able to fail one of
+ * those.
  */
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pushSubscriptionsService: PushSubscriptionsService,
+  ) {}
+
+  private async pushQuietly(userId: string, payload: PushPayload) {
+    try {
+      await this.pushSubscriptionsService.sendToUser(userId, payload);
+    } catch (err) {
+      this.logger.warn(`Push failed for user ${userId}: ${(err as Error).message}`);
+    }
+  }
 
   async create(input: CreateNotificationInput) {
-    return this.prisma.notification.create({ data: input });
+    const notification = await this.prisma.notification.create({ data: input });
+    await this.pushQuietly(input.userId, {
+      title: input.title,
+      body: input.description,
+      url: input.linkUrl,
+    });
+    return notification;
   }
 
   /**
    * Bulk fan-out for company-wide events (e.g. a published announcement) -
-   * one `createMany` instead of N sequential `create` calls.
+   * one `createMany` instead of N sequential `create` calls. Push still
+   * has to go per-user (there's no bulk-send in the Web Push protocol
+   * itself), so that part isn't a single query either way.
    */
   async createForUsers(userIds: string[], input: Omit<CreateNotificationInput, 'userId'>) {
     if (userIds.length === 0) return { count: 0 };
-    return this.prisma.notification.createMany({
+    const result = await this.prisma.notification.createMany({
       data: userIds.map((userId) => ({ ...input, userId })),
     });
+    await Promise.all(
+      userIds.map((userId) =>
+        this.pushQuietly(userId, {
+          title: input.title,
+          body: input.description,
+          url: input.linkUrl,
+        }),
+      ),
+    );
+    return result;
   }
 
   /**

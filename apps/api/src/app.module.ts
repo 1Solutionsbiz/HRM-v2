@@ -15,6 +15,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { PushSubscriptionsModule } from './push-subscriptions/push-subscriptions.module.js';
 import { AttendanceModule } from './attendance/attendance.module.js';
 import { LeaveModule } from './leave/leave.module.js';
 import { RequestsModule } from './requests/requests.module.js';
@@ -61,6 +62,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     UsersModule,
     EmployeesModule,
     NotificationsModule,
+    PushSubscriptionsModule,
     AttendanceModule,
     LeaveModule,
     RequestsModule,

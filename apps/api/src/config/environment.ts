@@ -145,6 +145,30 @@ class EnvironmentVariables {
   @IsString()
   @MinLength(1)
   UPLOADS_DIR: string = './uploads';
+
+  /**
+   * Web Push. Both optional, same "falls back to a logged no-op" posture
+   * as the SMTP_* block above: PushSubscriptionsService just doesn't send
+   * pushes until both are set, rather than failing startup. Generate a
+   * pair once with `npx web-push generate-vapid-keys` and never rotate
+   * them casually - every subscription a browser holds is tied to the
+   * public key it subscribed with.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  VAPID_PUBLIC_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  VAPID_PRIVATE_KEY?: string;
+
+  /** Must be a `mailto:` address or `https:` URL per the VAPID spec - a push service may contact this if it needs to reach the sender. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  VAPID_SUBJECT: string = 'mailto:hr@1solutions.biz';
 }
 
 export function validateEnv(

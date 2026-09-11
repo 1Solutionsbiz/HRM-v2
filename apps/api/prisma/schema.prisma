@@ -49,6 +49,7 @@ model User {
   sessions            Session[]
   devices             Device[]
   notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
   passwordResetTokens PasswordResetToken[]
 
   announcementReads            AnnouncementRead[]
@@ -1575,6 +1576,29 @@ model Notification {
   @@map("notifications")
 }
 
+/// One row per subscribed browser/device (a user can have several - phone,
+/// laptop). Written by the frontend's Push API subscribe flow; read only by
+/// PushSubscriptionsService.sendToUser, which NotificationsService.create
+/// calls for every notification type - see that method's comment.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  /// VarChar, not Text - it sits in the @@unique below, and MySQL/MariaDB
+  /// can't index a TEXT column without a prefix length. 500 comfortably
+  /// covers real FCM/Mozilla push endpoint URLs while keeping the
+  /// (userId, endpoint) composite key under InnoDB's index byte limit.
+  endpoint  String   @db.VarChar(500)
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@map("push_subscriptions")
+}
+
 // =============================================================================
 // Company settings — single-tenant by deliberate decision (see
 // database-design.md: the legacy schema had three unrelated, inconsistently
@@ -1644,13 +1668,13 @@ model LetterCategory {
 }
 
 model LetterType {
-  id         String  @id @default(cuid())
-  key        String  @unique
-  name       String
-  categoryId String
+  id           String  @id @default(cuid())
+  key          String  @unique
+  name         String
+  categoryId   String
   /// Prefix used in the generated document number, e.g. "APT" ->
   /// "APT/2026/0001" (see LettersService's use of SequenceService).
-  numberPrefix String @unique
+  numberPrefix String  @unique
   isActive     Boolean @default(true)
 
   category  LetterCategory   @relation(fields: [categoryId], references: [id])
@@ -1661,16 +1685,16 @@ model LetterType {
 }
 
 model LetterTemplate {
-  id           String  @id @default(cuid())
-  letterTypeId String
-  name         String
-  isActive     Boolean @default(true)
-  signatoryId  String?
+  id                   String  @id @default(cuid())
+  letterTypeId         String
+  name                 String
+  isActive             Boolean @default(true)
+  signatoryId          String?
   /// Denormalized pointer into LetterTemplateVersion, mirroring
   /// SalaryStructure.currentAmount + SalaryRevision's parent/current-value
   /// + append-only-log split - avoids a circular FK between a template and
   /// its own "current" version row.
-  currentVersionNumber Int @default(0)
+  currentVersionNumber Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1706,11 +1730,11 @@ model LetterTemplateVersion {
 }
 
 model LetterSignatory {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
   title     String
-  isDefault Boolean @default(false)
-  isActive  Boolean @default(true)
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
   templates LetterTemplate[]
@@ -1748,11 +1772,11 @@ model EmployeeLetter {
   renderedContent   String       @db.Text
   fileUrl           String
 
-  generatedByUserId String
-  generatedAt       DateTime  @default(now())
-  cancelledByUserId String?
-  cancelledAt       DateTime?
-  cancellationReason String?  @db.Text
+  generatedByUserId  String
+  generatedAt        DateTime  @default(now())
+  cancelledByUserId  String?
+  cancelledAt        DateTime?
+  cancellationReason String?   @db.Text
 
   employee        Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   letterType      LetterType            @relation(fields: [letterTypeId], references: [id])
