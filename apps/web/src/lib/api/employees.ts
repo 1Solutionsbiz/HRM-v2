@@ -136,6 +136,32 @@ export function getEmployees(): Promise<EmployeeListItem[]> {
   return apiFetch<EmployeeListItem[]>("/employees");
 }
 
+export interface CreateEmployeePayload {
+  email: string;
+  firstName: string;
+  lastName: string;
+  dateOfJoining: string;
+  personalEmail?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  employmentType?: EmploymentType;
+  workLocation?: string;
+  currentAddress?: string;
+  permanentAddress?: string;
+  departmentId?: string;
+  designationId?: string;
+  managerId?: string;
+}
+
+export interface CreateEmployeeResult extends EmployeeDetail {
+  /** Shown once, right after creation — no invite email is sent (see EmployeesService.create). */
+  temporaryPassword: string;
+}
+
+export function createEmployee(payload: CreateEmployeePayload): Promise<CreateEmployeeResult> {
+  return apiFetch<CreateEmployeeResult>("/employees", { method: "POST", body: payload });
+}
+
 export interface UpcomingBirthday {
   id: string;
   firstName: string;

@@ -2,15 +2,19 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { UserPlus } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useAsync } from "@/lib/use-async";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { getEmployees, employeeFullName, employeeInitials, titleCase, type EmployeeListItem } from "@/lib/api/employees";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { TableSkeleton } from "@/components/hrm/loading-state";
+import { AddEmployeeSheet } from "@/components/hrm/add-employee-sheet";
 import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,7 +38,10 @@ function EmployeeCell({ employee }: { employee: EmployeeListItem }) {
 }
 
 export default function EmployeesPage() {
+  const user = useAuthenticatedUser();
+  const canManage = user.role === "admin" || user.role === "hr";
   const { data, loading, error, refetch } = useAsync(getEmployees);
+  const [addOpen, setAddOpen] = React.useState(false);
 
   const active = React.useMemo(() => (data ?? []).filter((e) => e.status === "ACTIVE"), [data]);
   const past = React.useMemo(
@@ -106,6 +113,14 @@ export default function EmployeesPage() {
       <PageHeader
         title="Employees"
         description={data ? `${active.length} active employees across the company.` : "The full employee directory."}
+        actions={
+          canManage && (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <UserPlus />
+              Add employee
+            </Button>
+          )
+        }
       />
 
       <Tabs defaultValue="active">
@@ -158,6 +173,15 @@ export default function EmployeesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {canManage && (
+        <AddEmployeeSheet
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          managers={active}
+          onCreated={refetch}
+        />
+      )}
     </div>
   );
 }
