@@ -1958,6 +1958,134 @@ confirmed on this app; a push can take several minutes beyond the usual
 deploy window to actually surface, check `etag` before trusting a "still
 broken" read.
 
+## Leave admin-revoke + Daily Report polish + Employee Letters P1 (2026-09-11)
+
+**Admin leave revoke, fixing a live data-integrity bug** (`9dfd37c`):
+self-cancel already blocked an employee from touching an approved leave
+once it started, pointing them to "contact HR for a correction" — but no
+such correction path actually existed. Found this the hard way: a leave
+request meant for one employee had been submitted and approved under a
+*different* employee's account (the reason text named the actual intended
+person), which docked that other employee's leave balance and force-set
+their attendance to ON_LEAVE despite a real check-in that day, and nobody
+could fix it through the app. New `PATCH /leave/requests/:id/revoke`
+(`leave:approve`-gated) closes the gap: works on any `APPROVED` request
+regardless of owner or start date, reusing `cancelMyRequest`'s exact
+reversal machinery (`reverseApprovedUsage` +
+`AttendanceService.unmarkApprovedLeave`) so it unwinds identically to a
+self-cancel. Notifies both the employee and their manager; audit-logged
+with an optional note. New "Revoke" action in the History tab on
+`/team/leave-approvals` for any still-`APPROVED` row. Used live to correct
+the real record — verified via direct API checks that both the leave
+balance and attendance were correctly restored.
+
+**Daily Report: Start time / End time** (`3b39129`): new optional
+`startTime`/`endTime` (`"HH:mm"`) fields on `DailyReportTaskEntry`,
+rendered as a row above Expected/Actual time. Informational only — no
+duration math depends on them, that's still what expected/actualMinutes
+covers.
+
+**Daily Report: required fields** (`b7a4a9d`): per-task Project, Start/End
+time, Expected/Actual time, and Output/deliverable are now required on
+every submitted task (Task title already was); Blocker reason/details stay
+required only when that task is Blocked. At the report level, Overall
+summary and Tomorrow's plan are now required; Blockers (overall) stays
+optional. Enforced at both layers — class-validator on the DTOs (a direct
+API call can't skip it either) and specific per-field toast messages on
+the frontend before it even attempts to save.
+
+**Employee Letters module — P1 (Core Letter Engine)** (`2b86103`): a new
+`letters` module for generating numbered, server-rendered HR documents
+(offer, appointment, confirmation, promotion, salary revision, transfer,
+warning, experience, relieving, NOC, salary certificate, termination — 12
+default letter types across 4 categories, seeded via `prisma/seed-letters.ts`,
+**not** `prisma/seed.ts`, which stays local-dev-only per its own header).
+Built from a 57-section user spec, explicitly phased (P0 discovery → P1
+core engine → P2 employee-profile integration → P3 template editor → P4
+approval workflow); this covers P1 only.
+
+- **Variable whitelist, not a generic template interpreter**
+  (`letters/template-variables.ts`): a fixed `employee.*`/`company.*`/
+  `letter.*`/`signatory.*` set resolved automatically at generation time,
+  plus a per-letter-type declared `custom.*` set (e.g. `RELIEVING_LETTER`
+  only allows `custom.lastWorkingDay`). Both a template's `{{token}}`s and
+  a generation request's supplied custom-variable keys are validated
+  against this before anything renders — an unrecognized token is a 400,
+  never rendered literally into a document. Code-owned rather than a DB
+  column since P1 ships no template-editor UI (P3); every template that
+  exists is seed-authored. A regression test
+  (`prisma/letter-seed-data.spec.ts`) checks all 12 seeded templates
+  against the whitelist so the two can't silently drift apart.
+- **Historical integrity**: `EmployeeLetter` stores a full snapshot —
+  every resolved variable value and the exact rendered text — at
+  generation time, plus which `LetterTemplateVersion` produced it
+  (versions are append-only, never edited in place). Changing the
+  employee's live HR record afterward can't alter a letter already issued.
+- **PDF generation**: `pdfmake` (new dependency, zero new `npm audit`
+  findings) using only the pdfkit standard-14 fonts (no TTF files to ship,
+  no native bindings) — deliberately the lowest-risk option given
+  Hostinger's documented history of breaking on native/runtime-
+  incompatible packages; Puppeteer/Playwright were ruled out for that
+  reason. Verified with a throwaway spike before any schema/service code
+  was written.
+- **Document numbering**: `SequenceService.nextOrCreate()`, a new
+  sibling to the existing `next()` — lazily creates a counter row on
+  first use (`letter:<prefix>:<year>`) instead of requiring pre-seeding,
+  since a new calendar year's key can't be pre-seeded. Race-safe via a
+  create-then-retry-update pattern (the primary-key constraint means at
+  most one concurrent `create()` wins), not an upsert.
+- **Authenticated download, deliberately not the `@Public()` pattern**:
+  every other file route in this app (`documents`, `avatars`) relies on an
+  unguessable 32-hex filename behind `@Public()`. A generated letter is a
+  legal HR document, so `GET /letters/:id/download` is a real
+  `letters:download`-gated + per-employee-scoped route instead.
+- **Employee lookup is letters-specific**, not a reuse of `GET
+  /employees` — that route requires `employee:manage`, which a
+  `letters:generate`-only holder wouldn't have. `GET /letters/employees`
+  does its own narrow, scoped query (no bulk PII, matching
+  `EmployeesService.findAll`'s reasoning).
+- **Permissions**: `letters:view`, `letters:generate`, `letters:download`,
+  `letters:cancel` — granted to hr/admin only, not manager.
+- **Frontend**: `/letters` — employee search, letter-type select (dynamic
+  custom-variable inputs, driven by `customVariableKeys` the categories
+  endpoint returns per type — not a duplicated frontend copy of the
+  whitelist), preview, generate, a minimal generated-letters list, and
+  cancel. New nav entry under People (hr/admin only). New `apiDownload()`
+  helper in `api-client.ts` for a real authenticated binary download
+  (blob + `Authorization` header), alongside the existing JSON `apiFetch`
+  and multipart `apiUpload`.
+- **Not in P1**: template-editor UI, employee-profile "Documents → Letters"
+  tab, approval workflow, DOCX output.
+- **Tests**: 33 new unit tests (`template-variables.spec.ts`,
+  `letters.service.spec.ts`, `letter-seed-data.spec.ts`,
+  `sequence.service.spec.ts`'s new `nextOrCreate` cases) plus 5 new e2e
+  tests exercising real HTTP + a real PDF written to and read back from
+  disk (403 without permission, full generate→download round trip, 400 on
+  a missing required variable, 401 unauthenticated, cancel→409 on
+  double-cancel). Cross-employee scope enforcement (search/preview/
+  generate/download) is unit-tested against `ForbiddenException`.
+- Built on a feature branch, reviewed, then fast-forward merged and
+  pushed to `main` only on explicit instruction; the production migration
+  (`20260911090000_add_employee_letters`) and `seed-letters.ts` were run
+  separately, also only on explicit instruction — verified live afterward
+  (`/letters/categories` and `/letters` return `401` not `404`; `/letters`
+  on the web app returns `200`).
+
+## Corrections to this file
+
+- **Real file storage for documents/receipts** and **weekly attendance
+  email report** were both previously listed below under "Not started."
+  Both are actually built — real file storage: `f6022fc` (multer +
+  disk storage, `@Public()` + unguessable-filename pattern, see the
+  Employee Letters entry above for why the *new* download route
+  deliberately does *not* reuse that pattern). Weekly attendance email:
+  `f071921` (`src/reports/weekly-attendance-report.service.ts`) +
+  `390b0aa` (admin test-send). Caught and corrected 2026-09-11 after
+  giving a stale "what's next" answer twice in the same session by
+  trusting this file instead of checking the actual code first — a
+  standing reminder to verify against `git log`/code before restating
+  backlog items from here.
+
 ## Not started
 
 - ○ Employee-facing resignation submission page — `ResignationController`'s
@@ -1970,26 +2098,9 @@ broken" read.
   `newuser_attendance` which **is** now imported — see Data migration) —
   still blocked on name-based employee-id ambiguity, needs manual
   disambiguation first, not a "hasn't gotten to it" gap.
-- ○ Real file storage for documents/receipts/payslip PDFs — no provider
-  wired anywhere; every "file" field in the schema is a URL string with
-  nothing populating it from a real upload yet. Employee photos are no
-  longer part of this gap (self-hosted as static files under `apps/web/
-  public/avatars/`, see "Employee profile photos" in Data migration) — that
-  worked because it's a small, fixed set of 35 images touched once, not
-  ongoing user uploads. Documents/receipts are actual user uploads that
-  grow over time and still need a real provider (S3/R2/etc.) — checking
-  those into git the same way would not scale.
 - ○ Workspace integration (whatever external system(s) this needs to talk to
   — not yet scoped)
-- ○ **Weekly attendance email report** (explicitly requested 2026-09-06,
-  explicitly deferred by the user - "we can work on this later... but it is
-  important"): every employee should receive their own Mon-Fri attendance
-  for the week, emailed Saturday 8am. Needs two things neither of which
-  exist yet: an outbound email provider (nothing sends email anywhere in
-  this app today) and a scheduled-job mechanism (no cron/scheduler
-  infrastructure exists - Hostinger Node.js Web Apps don't have a
-  standing background-job runner distinct from the request-serving
-  process, this needs its own decision). The data side is ready:
-  `AttendanceService.getHistoryForEmployeeId` (added 2026-09-06 for the
-  Team attendance per-employee search) already returns exactly a Mon-Fri
-  week's rows for any employee.
+- ○ Employee Letters P2 (employee-profile "Documents → Letters" tab, a
+  fuller Generated Letters list with search/filter), P3 (template-editor
+  UI, variable picker), P4 (optional approval workflow) — see the Employee
+  Letters entry above for what P1 shipped.
