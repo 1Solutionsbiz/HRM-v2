@@ -20,6 +20,8 @@ function buildPrismaMock() {
     dailyReportTaskEntry: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      count: vi.fn().mockResolvedValue(0),
+      groupBy: vi.fn().mockResolvedValue([]),
     },
     companySettings: {
       findUniqueOrThrow: vi.fn(),
@@ -248,6 +250,58 @@ describe('DailyReportsService', () => {
 
     it('hr is never restricted to a team and never even queries direct reports', async () => {
       await service.getEmployeeReport(hr, 'anyone', {});
+      expect(prisma.employee.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getBlockerBreakdown', () => {
+    const manager: AuthContext = { userId: 'mgr-user', sessionId: 's', email: 'm@x.com', roles: ['manager'], permissions: ['performance:manage'] };
+    const hr: AuthContext = { userId: 'hr-user', sessionId: 's', email: 'hr@x.com', roles: ['hr'], permissions: ['performance:manage'] };
+
+    it('rejects a "from" after "to"', async () => {
+      await expect(
+        service.getBlockerBreakdown(hr, { from: '2026-01-10', to: '2026-01-01' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a range wider than the maximum', async () => {
+      await expect(
+        service.getBlockerBreakdown(hr, { from: '2026-01-01', to: '2026-12-31' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('sorts categories by count descending and sums blockedTasks from them', async () => {
+      prisma.dailyReportTaskEntry.count.mockResolvedValueOnce(50);
+      prisma.dailyReportTaskEntry.groupBy.mockResolvedValueOnce([
+        { blockerCategory: 'BUG', _count: 3 },
+        { blockerCategory: 'DEPENDENCY', _count: 7 },
+      ]);
+
+      const result = await service.getBlockerBreakdown(hr, { from: '2026-01-01', to: '2026-01-07' });
+
+      expect(result.totalTasks).toBe(50);
+      expect(result.blockedTasks).toBe(10);
+      expect(result.byCategory).toEqual([
+        { category: 'DEPENDENCY', count: 7 },
+        { category: 'BUG', count: 3 },
+      ]);
+    });
+
+    it("a manager's query is scoped to their direct reports, not the whole company", async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce({ id: 'mgr-employee' }); // requireEmployeeId(manager)
+      prisma.employee.findMany.mockResolvedValueOnce([{ id: 'report-1' }, { id: 'report-2' }]);
+
+      await service.getBlockerBreakdown(manager, {});
+
+      const countArgs = prisma.dailyReportTaskEntry.count.mock.calls[0][0];
+      expect(countArgs.where.dailyReport.employeeId).toEqual({ in: ['report-1', 'report-2'] });
+    });
+
+    it("hr's query has no employeeId filter at all - org-wide", async () => {
+      await service.getBlockerBreakdown(hr, {});
+
+      const countArgs = prisma.dailyReportTaskEntry.count.mock.calls[0][0];
+      expect(countArgs.where.dailyReport.employeeId).toBeUndefined();
       expect(prisma.employee.findMany).not.toHaveBeenCalled();
     });
   });

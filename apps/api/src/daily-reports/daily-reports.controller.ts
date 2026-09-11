@@ -51,6 +51,12 @@ export class DailyReportsController {
     return this.dailyReportsService.getTeamReports(actor, date);
   }
 
+  /** Same scope rule as 'team' - registered before the :employeeId routes so "blockers" is never matched as an id. */
+  @Get('blockers')
+  getBlockerBreakdown(@CurrentUser() actor: AuthContext, @Query() query: GetDailyReportHistoryQueryDto) {
+    return this.dailyReportsService.getBlockerBreakdown(actor, query);
+  }
+
   @Get('employees/:employeeId')
   getEmployeeReport(
     @CurrentUser() actor: AuthContext,

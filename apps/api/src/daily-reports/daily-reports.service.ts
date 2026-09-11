@@ -11,6 +11,7 @@ import { addDays, formatDateOnly, parseDateOnly, toDateOnly } from '../common/da
 import type {
   DailyReportTemplate,
   DailyReportStatus,
+  BlockerCategory,
 } from '../generated/prisma/enums.js';
 import type { UpsertDailyReportDto } from './dto/upsert-daily-report.dto.js';
 import type { ExcuseDailyReportDto } from './dto/excuse-daily-report.dto.js';
@@ -21,6 +22,20 @@ import type {
 
 const DEFAULT_HISTORY_DAYS = 45;
 const MAX_HISTORY_DAYS = 92;
+// Separate bounds from the per-employee history window above - a rollup
+// naturally wants a wider default (a month of signal, not a fortnight)
+// and a wider ceiling (a quarter, for a real trend), and the two aren't
+// coupled by anything but coincidence.
+const DEFAULT_BREAKDOWN_DAYS = 30;
+const MAX_BREAKDOWN_DAYS = 180;
+
+export interface BlockerBreakdown {
+  from: string;
+  to: string;
+  totalTasks: number;
+  blockedTasks: number;
+  byCategory: { category: BlockerCategory; count: number }[];
+}
 // How far back an employee can still create/edit their own report - a
 // fixed, simple window (not a configurable policy field, unlike the
 // deadline/grace pair) covering "forgot yesterday, catching up this
@@ -180,6 +195,43 @@ export class DailyReportsService {
       })),
     );
     return reports;
+  }
+
+  /**
+   * Rolls up why work is blocked over a date range - the reporting need
+   * the original brief actually asked for (distinguish dependency vs.
+   * unclear requirements vs. waiting-for-approval, etc.), which task-level
+   * blockerCategory has been capturing since P1 with nowhere to see the
+   * pattern until now. Same team-scope rule as everything else here.
+   */
+  async getBlockerBreakdown(actor: AuthContext, query: GetDailyReportHistoryQueryDto): Promise<BlockerBreakdown> {
+    const to = query.to ? parseDateOnly(query.to) : this.today();
+    const from = query.from ? parseDateOnly(query.from) : addDays(to, -(DEFAULT_BREAKDOWN_DAYS - 1));
+    if (from > to) throw new BadRequestException('"from" must not be after "to"');
+    const spanDays = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+    if (spanDays > MAX_BREAKDOWN_DAYS) {
+      throw new BadRequestException(`Requested range spans ${spanDays} days; the maximum is ${MAX_BREAKDOWN_DAYS}`);
+    }
+
+    const scope = await this.resolveTeamScope(actor);
+    const employeeFilter = scope === 'ALL' ? {} : { employeeId: { in: scope } };
+    const dailyReportFilter = { date: { gte: from, lte: to }, ...employeeFilter };
+
+    const [totalTasks, blockedGroups] = await Promise.all([
+      this.prisma.dailyReportTaskEntry.count({ where: { dailyReport: dailyReportFilter } }),
+      this.prisma.dailyReportTaskEntry.groupBy({
+        by: ['blockerCategory'],
+        where: { blockerCategory: { not: null }, dailyReport: dailyReportFilter },
+        _count: true,
+      }),
+    ]);
+
+    const byCategory = blockedGroups
+      .map((g) => ({ category: g.blockerCategory as BlockerCategory, count: g._count }))
+      .sort((a, b) => b.count - a.count);
+    const blockedTasks = byCategory.reduce((sum, g) => sum + g.count, 0);
+
+    return { from: formatDateOnly(from), to: formatDateOnly(to), totalTasks, blockedTasks, byCategory };
   }
 
   async getEmployeeReport(actor: AuthContext, employeeId: string, query: GetDailyReportQueryDto) {

@@ -10,6 +10,7 @@ import {
   upsertMyDailyReport,
   formatDailyReportStatus,
   formatDailyReportTemplate,
+  BLOCKER_CATEGORY_OPTIONS,
   type DailyReport,
   type DailyReportTaskStatus,
   type BlockerCategory,
@@ -34,18 +35,6 @@ const TASK_STATUS_OPTIONS: { value: DailyReportTaskStatus; label: string }[] = [
   { value: "BLOCKED", label: "Blocked" },
 ];
 
-const BLOCKER_CATEGORY_OPTIONS: { value: BlockerCategory; label: string }[] = [
-  { value: "REQUIREMENT_UNCLEAR", label: "Requirement unclear" },
-  { value: "TECHNICAL_COMPLEXITY", label: "Technical complexity" },
-  { value: "BUG", label: "Bug" },
-  { value: "DEPENDENCY", label: "Dependency" },
-  { value: "WAITING_DESIGN", label: "Waiting for design" },
-  { value: "WAITING_APPROVAL", label: "Waiting for approval" },
-  { value: "WAITING_CLIENT", label: "Waiting for client" },
-  { value: "ENVIRONMENT", label: "Environment issue" },
-  { value: "REWORK", label: "Rework" },
-  { value: "OTHER", label: "Other" },
-];
 
 interface TaskDraft {
   key: string;
