@@ -99,7 +99,103 @@ describe('Daily Reports (e2e)', () => {
     await request(app.getHttpServer())
       .put('/daily-reports/me')
       .set('Authorization', `Bearer ${token}`)
-      .send({ summary: 'Worked on onboarding docs', tasks: [{ title: 'Draft README', status: 'COMPLETED' }] })
+      .send({
+        summary: 'Worked on onboarding docs',
+        tomorrowPlan: 'Continue onboarding docs',
+        tasks: [
+          {
+            title: 'Draft README',
+            status: 'COMPLETED',
+            projectId: 'proj-1',
+            startTime: '09:00',
+            endTime: '10:00',
+            expectedMinutes: 60,
+            actualMinutes: 60,
+            output: 'README drafted',
+          },
+        ],
+      })
+      .expect(200);
+  });
+
+  it('rejects a submission missing a required field', async () => {
+    await makeUserAndEmployee({ userId: 'u-worker', email: 'worker@example.com', employeeCode: 'EXP-1', firstName: 'Worker' });
+    const token = await loginAs('worker@example.com');
+
+    await request(app.getHttpServer())
+      .put('/daily-reports/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        summary: 'Worked on onboarding docs',
+        // tomorrowPlan intentionally omitted
+        tasks: [
+          {
+            title: 'Draft README',
+            status: 'COMPLETED',
+            projectId: 'proj-1',
+            startTime: '09:00',
+            endTime: '10:00',
+            expectedMinutes: 60,
+            actualMinutes: 60,
+            output: 'README drafted',
+          },
+        ],
+      })
+      .expect(400);
+  });
+
+  it('requires blockerCategory/blockerNote only when a task is BLOCKED', async () => {
+    await makeUserAndEmployee({ userId: 'u-worker', email: 'worker@example.com', employeeCode: 'EXP-1', firstName: 'Worker' });
+    const token = await loginAs('worker@example.com');
+
+    const baseTask = {
+      title: 'Draft README',
+      projectId: 'proj-1',
+      startTime: '09:00',
+      endTime: '10:00',
+      expectedMinutes: 60,
+      actualMinutes: 60,
+      output: 'README drafted',
+    };
+
+    // BLOCKED without blockerCategory/blockerNote is rejected.
+    await request(app.getHttpServer())
+      .put('/daily-reports/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        summary: 'x',
+        tomorrowPlan: 'x',
+        tasks: [{ ...baseTask, status: 'BLOCKED' }],
+      })
+      .expect(400);
+
+    // A non-BLOCKED task never needs blockerCategory/blockerNote.
+    await request(app.getHttpServer())
+      .put('/daily-reports/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        summary: 'x',
+        tomorrowPlan: 'x',
+        tasks: [{ ...baseTask, status: 'IN_PROGRESS' }],
+      })
+      .expect(200);
+
+    // BLOCKED with both fields present succeeds.
+    await request(app.getHttpServer())
+      .put('/daily-reports/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        summary: 'x',
+        tomorrowPlan: 'x',
+        tasks: [
+          {
+            ...baseTask,
+            status: 'BLOCKED',
+            blockerCategory: 'DEPENDENCY',
+            blockerNote: 'Waiting on API access',
+          },
+        ],
+      })
       .expect(200);
   });
 

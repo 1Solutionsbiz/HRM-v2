@@ -153,27 +153,45 @@ function DailyReportForm({
   }
 
   async function handleSave() {
-    const validTasks = tasks.filter((t) => t.title.trim());
+    const validTasks = tasks
+      .map((t, index) => ({ t, index }))
+      .filter(({ t }) => t.title.trim());
     if (validTasks.length === 0) {
       toast.error("Add at least one task with a title.");
       return;
     }
+    for (const { t, index } of validTasks) {
+      const label = `Task ${index + 1}`;
+      if (!t.projectId) return toast.error(`${label}: select a project.`);
+      if (!t.startTime) return toast.error(`${label}: enter a start time.`);
+      if (!t.endTime) return toast.error(`${label}: enter an end time.`);
+      if (!t.expectedMinutes) return toast.error(`${label}: enter expected time.`);
+      if (!t.actualMinutes) return toast.error(`${label}: enter actual time.`);
+      if (!t.output.trim()) return toast.error(`${label}: enter the output / deliverable.`);
+      if (t.status === "BLOCKED") {
+        if (!t.blockerCategory) return toast.error(`${label}: select a blocker reason.`);
+        if (!t.blockerNote.trim()) return toast.error(`${label}: enter blocker details.`);
+      }
+    }
+    if (!summary.trim()) return toast.error("Add an overall summary.");
+    if (!tomorrowPlan.trim()) return toast.error("Add tomorrow's plan.");
+
     setSaving(true);
     try {
       await upsertMyDailyReport({
         date: report.date,
-        summary: summary.trim() || undefined,
+        summary: summary.trim(),
         blockers: blockers.trim() || undefined,
-        tomorrowPlan: tomorrowPlan.trim() || undefined,
-        tasks: validTasks.map((t) => ({
+        tomorrowPlan: tomorrowPlan.trim(),
+        tasks: validTasks.map(({ t }) => ({
           title: t.title.trim(),
-          projectId: t.projectId || undefined,
+          projectId: t.projectId,
           status: t.status,
-          startTime: t.startTime || undefined,
-          endTime: t.endTime || undefined,
-          expectedMinutes: t.expectedMinutes ? Number(t.expectedMinutes) : undefined,
-          actualMinutes: t.actualMinutes ? Number(t.actualMinutes) : undefined,
-          output: t.output.trim() || undefined,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          expectedMinutes: Number(t.expectedMinutes),
+          actualMinutes: Number(t.actualMinutes),
+          output: t.output.trim(),
           blockerCategory: t.blockerCategory || undefined,
           blockerNote: t.blockerNote.trim() || undefined,
         })),
@@ -251,7 +269,7 @@ function DailyReportForm({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Project</Label>
+                      <Label>Project *</Label>
                       <Select
                         value={task.projectId}
                         onValueChange={(v) => updateTask(task.key, { projectId: v })}
@@ -291,7 +309,7 @@ function DailyReportForm({
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Start time</Label>
+                      <Label>Start time *</Label>
                       <Input
                         type="time"
                         value={task.startTime}
@@ -299,7 +317,7 @@ function DailyReportForm({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>End time</Label>
+                      <Label>End time *</Label>
                       <Input
                         type="time"
                         value={task.endTime}
@@ -307,7 +325,7 @@ function DailyReportForm({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Expected time (minutes)</Label>
+                      <Label>Expected time (minutes) *</Label>
                       <Input
                         type="number"
                         min={0}
@@ -316,7 +334,7 @@ function DailyReportForm({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Actual time (minutes)</Label>
+                      <Label>Actual time (minutes) *</Label>
                       <Input
                         type="number"
                         min={0}
@@ -325,7 +343,7 @@ function DailyReportForm({
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                      <Label>Output / deliverable</Label>
+                      <Label>Output / deliverable *</Label>
                       <Textarea
                         rows={2}
                         value={task.output}
@@ -335,7 +353,7 @@ function DailyReportForm({
                     {task.status === "BLOCKED" && (
                       <>
                         <div className="space-y-1.5">
-                          <Label>Blocker reason</Label>
+                          <Label>Blocker reason *</Label>
                           <Select
                             value={task.blockerCategory}
                             onValueChange={(v) => updateTask(task.key, { blockerCategory: v as BlockerCategory })}
@@ -353,7 +371,7 @@ function DailyReportForm({
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <Label>Blocker details</Label>
+                          <Label>Blocker details *</Label>
                           <Input
                             value={task.blockerNote}
                             onChange={(e) => updateTask(task.key, { blockerNote: e.target.value })}
@@ -370,7 +388,7 @@ function DailyReportForm({
           <Card>
             <CardContent className="space-y-4 pt-6">
               <div className="space-y-1.5">
-                <Label>Overall summary</Label>
+                <Label>Overall summary *</Label>
                 <Textarea rows={2} value={summary} onChange={(e) => setSummary(e.target.value)} />
               </div>
               <div className="space-y-1.5">
@@ -378,7 +396,7 @@ function DailyReportForm({
                 <Textarea rows={2} value={blockers} onChange={(e) => setBlockers(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Tomorrow&apos;s plan</Label>
+                <Label>Tomorrow&apos;s plan *</Label>
                 <Textarea rows={2} value={tomorrowPlan} onChange={(e) => setTomorrowPlan(e.target.value)} />
               </div>
             </CardContent>

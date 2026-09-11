@@ -43,22 +43,23 @@ export interface DailyReport {
 
 export interface DailyReportTaskEntryInput {
   title: string;
-  projectId?: string;
+  projectId: string;
   status: DailyReportTaskStatus;
-  startTime?: string;
-  endTime?: string;
-  expectedMinutes?: number;
-  actualMinutes?: number;
-  output?: string;
+  startTime: string;
+  endTime: string;
+  expectedMinutes: number;
+  actualMinutes: number;
+  output: string;
+  // Required only when status is BLOCKED - see the DTO's matching ValidateIf.
   blockerCategory?: BlockerCategory;
   blockerNote?: string;
 }
 
 export interface UpsertDailyReportPayload {
   date?: string;
-  summary?: string;
+  summary: string;
   blockers?: string;
-  tomorrowPlan?: string;
+  tomorrowPlan: string;
   tasks: DailyReportTaskEntryInput[];
 }
 

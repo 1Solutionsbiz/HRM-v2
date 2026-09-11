@@ -1,12 +1,13 @@
 import {
   IsEnum,
   IsInt,
-  IsOptional,
   IsString,
   Matches,
   Max,
   MaxLength,
   Min,
+  MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 const TIME_OF_DAY_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -20,46 +21,45 @@ export class DailyReportTaskEntryDto {
   @MaxLength(300)
   title!: string;
 
-  @IsOptional()
   @IsString()
-  projectId?: string;
+  projectId!: string;
 
   @IsEnum(DailyReportTaskStatus)
   status!: DailyReportTaskStatus;
 
-  @IsOptional()
   @Matches(TIME_OF_DAY_PATTERN, { message: 'startTime must be in HH:mm format' })
-  startTime?: string;
+  startTime!: string;
 
-  @IsOptional()
   @Matches(TIME_OF_DAY_PATTERN, { message: 'endTime must be in HH:mm format' })
-  endTime?: string;
+  endTime!: string;
 
   // Minutes, not hours - avoids float rounding on something that drives
   // time-variance math later, same reasoning as AttendanceDay.workedMinutes.
-  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(24 * 60)
-  expectedMinutes?: number;
+  expectedMinutes!: number;
 
-  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(24 * 60)
-  actualMinutes?: number;
+  actualMinutes!: number;
 
-  @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(2000)
-  output?: string;
+  output!: string;
 
-  @IsOptional()
+  // Required only for a BLOCKED task - a task that isn't blocked has no
+  // blocker to describe, so these stay entirely unvalidated (undefined is
+  // fine) rather than forcing a placeholder value in.
+  @ValidateIf((entry: DailyReportTaskEntryDto) => entry.status === 'BLOCKED')
   @IsEnum(BlockerCategory)
   blockerCategory?: BlockerCategory;
 
-  @IsOptional()
+  @ValidateIf((entry: DailyReportTaskEntryDto) => entry.status === 'BLOCKED')
   @IsString()
+  @MinLength(1)
   @MaxLength(1000)
   blockerNote?: string;
 }

@@ -145,14 +145,24 @@ describe('DailyReportsService', () => {
       const future = new Date();
       future.setDate(future.getDate() + 5);
       await expect(
-        service.upsertMyReport(USER_ID, { date: future.toISOString().slice(0, 10), tasks: [] }),
+        service.upsertMyReport(USER_ID, {
+          date: future.toISOString().slice(0, 10),
+          summary: 'x',
+          tomorrowPlan: 'x',
+          tasks: [],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('rejects a date older than the self-edit window', async () => {
       prisma.companySettings.findUniqueOrThrow.mockResolvedValue(OFF_SETTINGS);
       await expect(
-        service.upsertMyReport(USER_ID, { date: '2020-01-01', tasks: [] }),
+        service.upsertMyReport(USER_ID, {
+          date: '2020-01-01',
+          summary: 'x',
+          tomorrowPlan: 'x',
+          tasks: [],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -166,7 +176,7 @@ describe('DailyReportsService', () => {
       today.setHours(10, 0, 0, 0);
       vi.setSystemTime(today);
 
-      await service.upsertMyReport(USER_ID, { tasks: [] });
+      await service.upsertMyReport(USER_ID, { summary: 'x', tomorrowPlan: 'x', tasks: [] });
 
       expect(prisma.dailyReport.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: expect.objectContaining({ status: 'SUBMITTED' }) }),
@@ -180,7 +190,7 @@ describe('DailyReportsService', () => {
       today.setHours(20, 0, 0, 0); // local wall-clock, well past 18:00 + 30min
       vi.setSystemTime(today);
 
-      await service.upsertMyReport(USER_ID, { tasks: [] });
+      await service.upsertMyReport(USER_ID, { summary: 'x', tomorrowPlan: 'x', tasks: [] });
 
       expect(prisma.dailyReport.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: expect.objectContaining({ status: 'LATE' }) }),
@@ -190,7 +200,20 @@ describe('DailyReportsService', () => {
     it('replaces task entries wholesale rather than diffing', async () => {
       prisma.companySettings.findUniqueOrThrow.mockResolvedValue(OFF_SETTINGS);
       await service.upsertMyReport(USER_ID, {
-        tasks: [{ title: 'Fix bug', status: 'COMPLETED' }],
+        summary: 'x',
+        tomorrowPlan: 'x',
+        tasks: [
+          {
+            title: 'Fix bug',
+            status: 'COMPLETED',
+            projectId: 'proj-1',
+            startTime: '09:00',
+            endTime: '10:00',
+            expectedMinutes: 60,
+            actualMinutes: 60,
+            output: 'Fixed',
+          },
+        ],
       });
       expect(prisma.dailyReportTaskEntry.deleteMany).toHaveBeenCalledWith({ where: { dailyReportId: 'dr-1' } });
       expect(prisma.dailyReportTaskEntry.createMany).toHaveBeenCalledWith({
