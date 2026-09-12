@@ -20,16 +20,7 @@ const STATUS_LABELS: Record<AttendanceDayStatus, string> = {
   WEEKEND: 'Weekend',
 };
 
-const ISO_WEEKDAY_LABELS = [
-  '',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-];
+const ISO_WEEKDAY_LABELS = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // hr@1solutions.biz is also the sending mailbox (MailService's MS_SENDER_EMAIL
 // default) - the admin report is effectively self-addressed, which is fine,
@@ -128,6 +119,7 @@ export class WeeklyAttendanceReportService {
           dayLabel: ISO_WEEKDAY_LABELS[date.getUTCDay() === 0 ? 7 : date.getUTCDay()],
           date: this.formatDisplayDate(date),
           status: STATUS_LABELS[day.status],
+          statusKey: day.status,
           checkIn: this.formatTime(day.firstCheckInAt),
           checkOut: this.formatTime(day.lastCheckOutAt),
           hours: day.workedMinutes != null ? (day.workedMinutes / 60).toFixed(1) : null,

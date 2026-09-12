@@ -81,6 +81,13 @@ describe('WeeklyAttendanceReportService', () => {
     expect(to).toBe('asha@1solutions.biz');
     expect(payload.employeeName).toBe('Asha Rao');
     expect(payload.rows).toHaveLength(5);
+    // dayLabel is the short form (Mon-Fri, not Monday-Friday) - both the
+    // email table and the admin CSV header read this same field.
+    expect(payload.rows.map((r: { dayLabel: string }) => r.dayLabel)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    // statusKey is the raw enum (drives the email's colour-coded status
+    // pill), separate from `status`, the display label.
+    expect(payload.rows[0]).toMatchObject({ status: 'Present', statusKey: 'PRESENT' });
+    expect(payload.rows[4]).toMatchObject({ status: 'Absent', statusKey: 'ABSENT' });
     expect(payload.totals).toEqual({
       present: 3,
       late: 1,
@@ -101,7 +108,7 @@ describe('WeeklyAttendanceReportService', () => {
     const csv = Buffer.from(payload.csvBase64, 'base64').toString('utf-8');
     const lines = csv.trim().split('\r\n');
     expect(lines).toHaveLength(3); // header + 2 employees
-    expect(lines[0]).toBe('Employee code,Name,Monday,Tuesday,Wednesday,Thursday,Friday,Present,Late,Absent,On leave,Total hours');
+    expect(lines[0]).toBe('Employee code,Name,Mon,Tue,Wed,Thu,Fri,Present,Late,Absent,On leave,Total hours');
     expect(lines[1]).toContain('EXP-1,Asha Rao');
     expect(lines[1]).toContain('Absent'); // Friday, no "(Nh)" suffix for a day with no worked minutes
   });
