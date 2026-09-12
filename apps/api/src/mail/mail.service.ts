@@ -78,6 +78,27 @@ function wrapAttendanceEmail(bodyHtml: string): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no" />
+<style>
+  /* The format-detection meta tag above doesn't reliably stop iOS Mail's
+     own "Data Detectors" from turning things like "10:25 am" into a blue,
+     underlined, tappable link - confirmed on a real device (a screenshot
+     showed every check-in/out time linked, meta tag alone not enough).
+     Apple Mail marks detected text with x-apple-data-detectors and
+     specifically honours overriding its styling via CSS - this neutralises
+     the link's appearance (still technically tappable, but reads as plain
+     text, which is what actually matters here). */
+  .x-apple-data-detectors,
+  .x-apple-data-detectors *,
+  a[x-apple-data-detectors="true"],
+  a[x-apple-data-detectors="true"] * {
+    color: inherit !important;
+    text-decoration: none !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+    font-weight: inherit !important;
+    line-height: inherit !important;
+  }
+</style>
 </head>
 <body style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
