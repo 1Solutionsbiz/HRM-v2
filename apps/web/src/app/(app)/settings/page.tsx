@@ -188,7 +188,11 @@ export default function SettingsPage() {
               </Button>
             </div>
           ) : (
-            <Button variant="outline" onClick={enablePush} disabled={pushBusy}>
+            <Button
+              onClick={enablePush}
+              disabled={pushBusy}
+              className="bg-success text-success-foreground hover:bg-success/90 focus-visible:ring-success/40"
+            >
               <Bell />
               {pushBusy ? "Enabling…" : "Enable push notifications"}
             </Button>
