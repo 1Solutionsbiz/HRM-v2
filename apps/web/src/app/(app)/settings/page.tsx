@@ -3,9 +3,11 @@
 import * as React from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { Bell, BellOff, CheckCircle2, Download, KeyRound, Monitor, Moon, Share, Sun } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Download, KeyRound, Mail, Monitor, Moon, Share, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { changePassword } from "@/lib/api/auth";
+import { sendTestWeeklyAttendanceReport } from "@/lib/api/reports";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useInstallPrompt } from "@/lib/use-install-prompt";
 import { usePushNotifications } from "@/lib/use-push-notifications";
 import { PageHeader } from "@/components/hrm/page-header";
@@ -29,6 +31,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const user = useAuthenticatedUser();
+  const canManageReports = user.role === "admin" || user.role === "hr";
   const { canInstall, isIos, isInstalled, promptInstall } = useInstallPrompt();
   const {
     supported: pushSupported,
@@ -46,6 +50,19 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [passwordError, setPasswordError] = React.useState<string | null>(null);
   const [changingPassword, setChangingPassword] = React.useState(false);
+  const [sendingTestReport, setSendingTestReport] = React.useState(false);
+
+  async function handleSendTestReport() {
+    setSendingTestReport(true);
+    try {
+      await sendTestWeeklyAttendanceReport();
+      toast.success(`Sent to ${user.email}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send the test email.");
+    } finally {
+      setSendingTestReport(false);
+    }
+  }
 
   function openPasswordDialog() {
     setCurrentPassword("");
@@ -199,6 +216,23 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {canManageReports && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Weekly attendance report</CardTitle>
+            <CardDescription>
+              Send yourself a preview of the report every employee gets each Saturday, with your own real data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={handleSendTestReport} disabled={sendingTestReport}>
+              <Mail />
+              {sendingTestReport ? "Sending…" : "Send test email to myself"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent>
