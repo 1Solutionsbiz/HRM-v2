@@ -81,22 +81,18 @@ function wrapAttendanceEmail(bodyHtml: string): string {
 <style>
   /* The format-detection meta tag above doesn't reliably stop iOS Mail's
      own "Data Detectors" from turning things like "10:25 am" into a blue,
-     underlined, tappable link - confirmed on a real device (a screenshot
-     showed every check-in/out time linked, meta tag alone not enough).
-     Apple Mail marks detected text with x-apple-data-detectors and
-     specifically honours overriding its styling via CSS - this neutralises
-     the link's appearance (still technically tappable, but reads as plain
-     text, which is what actually matters here). */
-  .x-apple-data-detectors,
-  .x-apple-data-detectors *,
-  a[x-apple-data-detectors="true"],
-  a[x-apple-data-detectors="true"] * {
+     underlined, tappable link - confirmed on a real device. Apple Mail
+     marks detected text with x-apple-data-detectors and specifically
+     honours overriding its styling via CSS - this neutralises the link's
+     appearance (still technically tappable, but reads as plain text,
+     which is what actually matters here). Kept to just the class selector
+     (the minimal, most commonly documented version of this fix) rather
+     than also targeting the attribute-selector form, to keep this block
+     as unexotic as possible.
+  */
+  .x-apple-data-detectors, .x-apple-data-detectors * {
     color: inherit !important;
     text-decoration: none !important;
-    font-size: inherit !important;
-    font-family: inherit !important;
-    font-weight: inherit !important;
-    line-height: inherit !important;
   }
 </style>
 </head>
@@ -112,10 +108,12 @@ function wrapAttendanceEmail(bodyHtml: string): string {
         ${bodyHtml}
       </td>
     </tr>
+  </table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:12px auto 0;">
     <tr>
-      <td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;">
-        <p style="margin:0;font-size:11px;line-height:1.5;color:#9ca3af;text-align:center;">
-          This email is confidential and intended only for the internal employees of 1Solutions.
+      <td style="padding:16px 32px;text-align:center;border-top:1px solid #d1d5db;">
+        <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7280;font-family:Arial,Helvetica,sans-serif;">
+          This email is confidential and intended only for the internal employees of 1Solutions.<br/>
           If you received it in error, please delete it and notify us.
         </p>
       </td>
@@ -335,19 +333,23 @@ export class MailService {
     const rowsHtml = input.rows
       .map((r, i) => {
         const rowBg = i % 2 === 0 ? '#ffffff' : '#f9fafb';
+        // "Mon 7", not "Mon, 7 Sep" - the day number without the month is
+        // unambiguous for a single Mon-Fri week and keeps this column
+        // reliably on one line even on a narrow phone screen.
+        const dayNumber = r.date.match(/^\d+/)?.[0] ?? r.date;
         return `
           <tr style="background:${rowBg};">
-            <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1f2937;white-space:nowrap;">${r.dayLabel}, ${r.date}</td>
-            <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">${statusPill(r.statusKey, r.status)}</td>
-            <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#4b5563;">${r.checkIn ?? '—'}</td>
-            <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#4b5563;">${r.checkOut ?? '—'}</td>
-            <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#4b5563;">${r.hours ?? '—'}</td>
+            <td style="padding:10px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1f2937;white-space:nowrap;">${r.dayLabel} ${dayNumber}</td>
+            <td style="padding:10px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap;">${statusPill(r.statusKey, r.status)}</td>
+            <td style="padding:10px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#4b5563;white-space:nowrap;">${r.checkIn ?? '—'}</td>
+            <td style="padding:10px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#4b5563;white-space:nowrap;">${r.checkOut ?? '—'}</td>
+            <td style="padding:10px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#4b5563;white-space:nowrap;">${r.hours ?? '—'}</td>
           </tr>`;
       })
       .join('');
 
     const thStyle =
-      'padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;border-bottom:1px solid #e5e7eb;';
+      'padding:10px 8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;border-bottom:1px solid #e5e7eb;white-space:nowrap;';
 
     const bodyHtml = `
       <h2 style="margin:0 0 4px;font-size:19px;color:#111827;">Weekly Attendance Summary</h2>
