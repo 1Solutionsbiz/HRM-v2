@@ -232,6 +232,13 @@ export function getOnboardingRoster(): Promise<OnboardingRosterEmployee[]> {
   return apiFetch<OnboardingRosterEmployee[]>("/employees/onboarding");
 }
 
+/** One-directional - there's no "un-complete" action, matching the backend. */
+export function completeOnboardingStep(employeeId: string, stepId: string): Promise<OnboardingStepRow> {
+  return apiFetch<OnboardingStepRow>(`/employees/${employeeId}/onboarding-steps/${stepId}/complete`, {
+    method: "PATCH",
+  });
+}
+
 export function getEmployee(id: string): Promise<EmployeeDetail> {
   return apiFetch<EmployeeDetail>(`/employees/${id}`);
 }

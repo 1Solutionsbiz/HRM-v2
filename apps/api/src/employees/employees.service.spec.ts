@@ -365,4 +365,21 @@ describe('EmployeesService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('getOnboardingRoster', () => {
+    it('only queries active employees with an active login and at least one incomplete step (regression: a deactivated login used to still clutter this roster)', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      await service.getOnboardingRoster();
+
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: 'ACTIVE',
+            user: { isActive: true },
+            onboardingSteps: { some: { isCompleted: false } },
+          }),
+        }),
+      );
+    });
+  });
 });

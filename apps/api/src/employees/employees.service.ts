@@ -842,6 +842,11 @@ export class EmployeesService {
     const employees = await this.prisma.employee.findMany({
       where: {
         status: 'ACTIVE',
+        // Someone whose login was deactivated shouldn't still clutter an
+        // "in progress" roster, even if a checklist item was never
+        // finished for them - same reasoning as the new-hire announcement
+        // flow's own user.isActive gate.
+        user: { isActive: true },
         onboardingSteps: { some: { isCompleted: false } },
       },
       select: {
