@@ -36,15 +36,15 @@ interface RequestMeta {
 }
 
 /**
- * Derives "today" from the API process's own local clock — there is no
- * per-user timezone support, and this is a single-tenant system
- * (`CompanySettings.timezone`, default "Asia/Kolkata"). This is only
- * correct if the API host's system timezone is set to the company's. A
- * punch made close to local midnight on a misconfigured (e.g. UTC) host
- * would silently land on the wrong `AttendanceDay` — `@@unique([employeeId,
- * date])` means it would merge into the adjacent day's row rather than
- * erroring. This is a real deployment constraint, not just a code comment:
- * see PROJECT_STATUS.md.
+ * Derives "today" in the company's own timezone (see toDateOnly /
+ * COMPANY_TIME_ZONE) — there is no per-user timezone support, and this is
+ * a single-tenant system (`CompanySettings.timezone`, default
+ * "Asia/Kolkata"). Used to depend on the API host's own system clock
+ * being set to that timezone, which was wrong in production (the host
+ * runs UTC) and caused a real, confirmed bug: "today" lagged real IST by
+ * up to 5.5 hours after each midnight. toDateOnly now resolves the
+ * calendar day explicitly via Intl regardless of host timezone, so this
+ * is correct unconditionally.
  */
 function companyToday(): Date {
   return toDateOnly(new Date());
