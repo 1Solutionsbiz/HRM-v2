@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, ChevronLeft, ChevronRight } from "lucide-react";
+import { useAuthenticatedUser } from "@/lib/auth-context";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -32,10 +34,19 @@ interface TopbarProps {
 }
 
 export function Topbar({ pathname }: TopbarProps) {
+  const router = useRouter();
+  const { role } = useAuthenticatedUser();
   const { data, refetch } = useAsync(getNotifications);
   const notifications = data ?? [];
   const unread = notifications.filter((n) => !n.isRead);
   const breadcrumb = getBreadcrumb(pathname);
+  // Mobile has no persistent sidebar, and a page like Settings isn't one of
+  // the bottom tab bar's four primary destinations or reachable from its
+  // "More" sheet either - without this there was genuinely no way back
+  // except the device's own gesture. Hidden on the home route itself,
+  // where "back" has nowhere useful to go.
+  const homeUrl = role === "employee" ? "/my-day" : "/dashboard";
+  const showBack = pathname !== homeUrl;
   // Clicking a notification in the popover opens this rather than
   // navigating directly - a Link to the current route (e.g. an
   // attendance reminder clicked while already on /attendance) is a
@@ -55,6 +66,17 @@ export function Topbar({ pathname }: TopbarProps) {
   return (
     <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur sm:px-4">
       <SidebarTrigger className="-ml-1" />
+      {showBack && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="-ml-1 md:hidden"
+          aria-label="Back"
+          onClick={() => router.back()}
+        >
+          <ChevronLeft />
+        </Button>
+      )}
       <Separator orientation="vertical" className="mr-1 h-5" />
       <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
         <ol className="text-muted-foreground flex items-center gap-1 truncate text-sm">
