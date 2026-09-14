@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
@@ -52,7 +51,6 @@ import { PermissionsGuard } from './common/guards/permissions.guard.js';
     // rows (real external IPs since that fix deployed, vs 127.0.0.1
     // before it).
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
-    ScheduleModule.forRoot(),
     PrismaModule,
     SecurityModule,
     MailModule,

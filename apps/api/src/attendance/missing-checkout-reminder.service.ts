@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { toDateOnly } from '../common/date-only.js';
@@ -15,6 +14,15 @@ const REMINDER_DESCRIPTION = "You checked in today but haven't checked out yet."
  * policy, not yet configurable" posture as leave.service.ts's monthly
  * Casual Leave cap).
  *
+ * No @Cron here on purpose - Hostinger appears to run more than one copy
+ * of this process, and @nestjs/schedule has no cross-instance locking, so
+ * an in-process cron fires once PER live copy at the same instant (caught
+ * live on 2026-09-14: three near-simultaneous "Forgot to check out?"
+ * notifications per person at 21:00 IST). The real trigger is the
+ * external cron-job.org hit to POST /attendance/cron/missing-checkout-reminders
+ * (AttendanceController, guarded by CronAuthGuard) - exactly one call, one
+ * process handles it, no duplication risk.
+ *
  * Deliberately does not touch anyone's ability to check in tomorrow or
  * finish checking out today after this fires - it's a nudge, not an
  * enforcement mechanism. The actual backstop for someone who misses it
@@ -28,7 +36,6 @@ export class MissingCheckoutReminderService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  @Cron('0 21 * * *', { timeZone: 'Asia/Kolkata' })
   async remindMissingCheckouts(): Promise<void> {
     const employeeIds = await this.findMissingCheckoutEmployeeIds();
     for (const employeeId of employeeIds) {

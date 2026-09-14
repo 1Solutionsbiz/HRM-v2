@@ -1,14 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { toDateOnly } from '../common/date-only.js';
 
 /**
  * Fires the pre-deadline reminder and the post-grace overdue notice
- * (employee + one digest per manager). Ticks every 15 minutes and no-ops
- * immediately if `dailyReportRequired` is off — decision #6: the policy
- * being disabled must mean zero notification traffic, not just zero
+ * (employee + one digest per manager). Meant to run every 15 minutes and
+ * no-ops immediately if `dailyReportRequired` is off — decision #6: the
+ * policy being disabled must mean zero notification traffic, not just zero
  * attendance consequences.
  *
  * Each notification is one-shot per day by construction: the tick window
@@ -17,6 +16,15 @@ import { toDateOnly } from '../common/date-only.js';
  * separate "already sent" flag. A missed tick (e.g. a redeploy at the
  * exact moment) means that day's reminder silently doesn't fire — an
  * accepted simplification for a reminder, not a compliance record.
+ *
+ * No @Cron here on purpose - see MissingCheckoutReminderService's comment
+ * for why: Hostinger runs more than one copy of this process, so an
+ * in-process cron fires once per live copy at the same instant instead of
+ * once. The trigger is the external cron-job.org hit to
+ * POST /daily-reports/cron/reminders (DailyReportsController, guarded by
+ * CronAuthGuard) every 15 minutes - exactly one call, one process handles
+ * it, no duplication risk. If this fires more than once for the same
+ * window before that's set up, expect duplicate reminder notifications.
  */
 @Injectable()
 export class DailyReportRemindersService {
@@ -25,7 +33,6 @@ export class DailyReportRemindersService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  @Cron('*/15 * * * *', { timeZone: 'Asia/Kolkata' })
   async checkAndNotify(): Promise<void> {
     const context = await this.loadContext();
     if (!context) return;

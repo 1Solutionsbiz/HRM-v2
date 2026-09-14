@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MailService } from '../mail/mail.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -29,6 +28,15 @@ const CATCH_UP_WINDOW_DAYS = 7;
  * for exactly that miss without retroactively announcing someone who
  * joined years ago (welcomeEmailSentAt is null for every legacy-imported
  * employee too, not just recent ones).
+ *
+ * No @Cron here on purpose - see MissingCheckoutReminderService's comment
+ * for why: Hostinger runs more than one copy of this process, so an
+ * in-process cron fires once per live copy at the same instant. Here that's
+ * not just noisy - two copies could both read welcomeEmailSentAt: null for
+ * the same employee before either writes it, sending the real welcome
+ * announcement twice. The trigger is the external cron-job.org hit to
+ * POST /employees/cron/new-hire-announcements (EmployeesController,
+ * guarded by CronAuthGuard) - exactly one call, one process handles it.
  */
 @Injectable()
 export class NewHireAnnouncementService {
@@ -38,7 +46,6 @@ export class NewHireAnnouncementService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  @Cron('0 11 * * *', { timeZone: 'Asia/Kolkata' })
   async announceTodaysNewHires(): Promise<void> {
     const today = toDateOnly(new Date());
     const windowStart = addDays(today, -CATCH_UP_WINDOW_DAYS);

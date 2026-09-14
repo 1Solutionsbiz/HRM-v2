@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AttendanceService } from '../attendance/attendance.service.js';
 import {
@@ -41,6 +40,14 @@ interface EmployeeWeekRow {
  * in a single CSV attachment. Both come from the same underlying per-employee
  * query (AttendanceService.getHistoryForEmployeeId), run once per employee,
  * not fetched twice.
+ *
+ * No @Cron here on purpose - see MissingCheckoutReminderService's comment
+ * for why: Hostinger runs more than one copy of this process, so an
+ * in-process cron fires once per live copy at the same instant - here that
+ * would mean every employee, and HR, getting the same weekly report
+ * emailed to them multiple times. The trigger is the external cron-job.org
+ * hit to POST /reports/cron/weekly-attendance (ReportsController, guarded
+ * by CronAuthGuard) - exactly one call, one process handles it.
  */
 @Injectable()
 export class WeeklyAttendanceReportService {
@@ -50,7 +57,6 @@ export class WeeklyAttendanceReportService {
     private readonly mailService: MailService,
   ) {}
 
-  @Cron('0 8 * * 6', { timeZone: 'Asia/Kolkata' })
   async sendWeeklyReports(): Promise<void> {
     const { label, weekRows } = await this.computeWeekRows();
 
