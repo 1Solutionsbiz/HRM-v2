@@ -22,6 +22,10 @@ function buildPrismaMock() {
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
       count: vi.fn().mockResolvedValue(0),
       groupBy: vi.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    project: {
+      findUnique: vi.fn(),
     },
     companySettings: {
       findUniqueOrThrow: vi.fn(),
@@ -411,6 +415,183 @@ describe('DailyReportsService', () => {
       expect(auditService.log).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'DAILY_REPORT_EXCUSED' }),
       );
+    });
+  });
+
+  describe('getEmployeeTimeReport', () => {
+    beforeEach(() => {
+      prisma.employee.findUnique.mockResolvedValue({ id: EMPLOYEE_ID });
+    });
+
+    it('sums minutes across two tasks on the same project', async () => {
+      prisma.dailyReportTaskEntry.findMany.mockResolvedValue([
+        {
+          title: 'Task A',
+          startTime: '09:00',
+          endTime: '10:00', // 60 min
+          output: 'a',
+          status: 'COMPLETED',
+          projectId: 'proj-1',
+          project: { id: 'proj-1', name: 'Website' },
+          dailyReport: { date: new Date('2026-09-10') },
+        },
+        {
+          title: 'Task B',
+          startTime: '11:00',
+          endTime: '11:30', // 30 min
+          output: 'b',
+          status: 'IN_PROGRESS',
+          projectId: 'proj-1',
+          project: { id: 'proj-1', name: 'Website' },
+          dailyReport: { date: new Date('2026-09-10') },
+        },
+      ]);
+
+      const result = await service.getEmployeeTimeReport({
+        employeeId: EMPLOYEE_ID,
+        from: '2026-09-10',
+        to: '2026-09-10',
+      });
+
+      expect(result.totalMinutes).toBe(90);
+      expect(result.totalTasks).toBe(2);
+      expect(result.buckets).toEqual([{ key: 'proj-1', label: 'Website', minutes: 90, taskCount: 2 }]);
+    });
+
+    it('buckets a task with no project as "No project"', async () => {
+      prisma.dailyReportTaskEntry.findMany.mockResolvedValue([
+        {
+          title: 'Task C',
+          startTime: '09:00',
+          endTime: '09:20',
+          output: null,
+          status: 'IN_PROGRESS',
+          projectId: null,
+          project: null,
+          dailyReport: { date: new Date('2026-09-10') },
+        },
+      ]);
+
+      const result = await service.getEmployeeTimeReport({
+        employeeId: EMPLOYEE_ID,
+        from: '2026-09-10',
+        to: '2026-09-10',
+      });
+
+      expect(result.buckets).toEqual([{ key: 'none', label: 'No project', minutes: 20, taskCount: 1 }]);
+    });
+
+    it('a task with no start/end contributes 0 minutes but still counts as a task (draft)', async () => {
+      prisma.dailyReportTaskEntry.findMany.mockResolvedValue([
+        {
+          title: 'Just a title so far',
+          startTime: null,
+          endTime: null,
+          output: null,
+          status: 'IN_PROGRESS',
+          projectId: 'proj-1',
+          project: { id: 'proj-1', name: 'Website' },
+          dailyReport: { date: new Date('2026-09-10') },
+        },
+      ]);
+
+      const result = await service.getEmployeeTimeReport({
+        employeeId: EMPLOYEE_ID,
+        from: '2026-09-10',
+        to: '2026-09-10',
+      });
+
+      expect(result.totalMinutes).toBe(0);
+      expect(result.totalTasks).toBe(1);
+      expect(result.buckets).toEqual([{ key: 'proj-1', label: 'Website', minutes: 0, taskCount: 1 }]);
+    });
+
+    it('queries with the given date range and scopes to the employee', async () => {
+      await service.getEmployeeTimeReport({ employeeId: EMPLOYEE_ID, from: '2026-09-01', to: '2026-09-07' });
+
+      expect(prisma.dailyReportTaskEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            dailyReport: {
+              employeeId: EMPLOYEE_ID,
+              date: { gte: new Date(Date.UTC(2026, 8, 1)), lte: new Date(Date.UTC(2026, 8, 7)) },
+            },
+          },
+        }),
+      );
+    });
+
+    it('fills every date in range in dailyTrend, even a day with no tasks', async () => {
+      prisma.dailyReportTaskEntry.findMany.mockResolvedValue([
+        {
+          title: 'Task A',
+          startTime: '09:00',
+          endTime: '09:30',
+          output: null,
+          status: 'IN_PROGRESS',
+          projectId: 'proj-1',
+          project: { id: 'proj-1', name: 'Website' },
+          dailyReport: { date: new Date('2026-09-01') },
+        },
+      ]);
+
+      const result = await service.getEmployeeTimeReport({
+        employeeId: EMPLOYEE_ID,
+        from: '2026-09-01',
+        to: '2026-09-03',
+      });
+
+      expect(result.dailyTrend).toEqual([
+        { date: '2026-09-01', minutes: 30 },
+        { date: '2026-09-02', minutes: 0 },
+        { date: '2026-09-03', minutes: 0 },
+      ]);
+    });
+
+    it('rejects "from" after "to"', async () => {
+      await expect(
+        service.getEmployeeTimeReport({ employeeId: EMPLOYEE_ID, from: '2026-09-10', to: '2026-09-01' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws when the employee does not exist', async () => {
+      prisma.employee.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getEmployeeTimeReport({ employeeId: 'missing', from: '2026-09-01', to: '2026-09-01' }),
+      ).rejects.toThrow('Employee not found');
+    });
+  });
+
+  describe('getProjectTimeReport', () => {
+    beforeEach(() => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1' });
+    });
+
+    it('buckets by employee instead of project', async () => {
+      prisma.dailyReportTaskEntry.findMany.mockResolvedValue([
+        {
+          title: 'Task A',
+          startTime: '09:00',
+          endTime: '10:00',
+          output: null,
+          status: 'COMPLETED',
+          dailyReport: {
+            date: new Date('2026-09-10'),
+            employee: { id: 'emp-ritika', firstName: 'Ritika', lastName: 'Sharma' },
+          },
+        },
+      ]);
+
+      const result = await service.getProjectTimeReport({ projectId: 'proj-1', from: '2026-09-10', to: '2026-09-10' });
+
+      expect(result.buckets).toEqual([{ key: 'emp-ritika', label: 'Ritika Sharma', minutes: 60, taskCount: 1 }]);
+    });
+
+    it('throws when the project does not exist', async () => {
+      prisma.project.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getProjectTimeReport({ projectId: 'missing', from: '2026-09-01', to: '2026-09-01' }),
+      ).rejects.toThrow('Project not found');
     });
   });
 });

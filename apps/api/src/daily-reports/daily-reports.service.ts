@@ -22,6 +22,10 @@ import type {
   GetDailyReportHistoryQueryDto,
   GetDailyReportQueryDto,
 } from './dto/get-daily-report-query.dto.js';
+import type {
+  GetEmployeeTimeReportQueryDto,
+  GetProjectTimeReportQueryDto,
+} from './dto/get-time-report-query.dto.js';
 
 const DEFAULT_HISTORY_DAYS = 45;
 const MAX_HISTORY_DAYS = 92;
@@ -38,6 +42,33 @@ export interface BlockerBreakdown {
   totalTasks: number;
   blockedTasks: number;
   byCategory: { category: BlockerCategory; count: number }[];
+}
+
+export interface TimeReportTaskRow {
+  date: string;
+  title: string;
+  minutes: number;
+  output: string | null;
+  status: DailyReportTaskStatus;
+  /** Whichever dimension isn't the one that was picked - project name for by-employee, employee name for by-project. */
+  otherDimension: string;
+}
+
+export interface TimeReportBucket {
+  key: string;
+  label: string;
+  minutes: number;
+  taskCount: number;
+}
+
+export interface TimeReport {
+  from: string;
+  to: string;
+  totalMinutes: number;
+  totalTasks: number;
+  buckets: TimeReportBucket[];
+  dailyTrend: { date: string; minutes: number }[];
+  tasks: TimeReportTaskRow[];
 }
 // How far back an employee can still create/edit their own report - a
 // fixed, simple window (not a configurable policy field, unlike the
@@ -305,6 +336,151 @@ export class DailyReportsService {
     const blockedTasks = byCategory.reduce((sum, g) => sum + g.count, 0);
 
     return { from: formatDateOnly(from), to: formatDateOnly(to), totalTasks, blockedTasks, byCategory };
+  }
+
+  /**
+   * Time reported per project for one employee, over a date range - this is
+   * self-reported *daily-report task time* (from a task's start/end),
+   * distinct from Attendance's clock-derived workedMinutes and not expected
+   * to reconcile with it. Includes tasks regardless of the parent
+   * DailyReport's status (PENDING/SUBMITTED/LATE) - simplest and most
+   * current, at the cost of same-day numbers shifting as a draft is edited.
+   * hr/admin-only at the controller (RequirePermissions override on the
+   * handler, not the class-level performance:manage manager also holds) -
+   * no team-scope check needed here for that reason.
+   */
+  async getEmployeeTimeReport(query: GetEmployeeTimeReportQueryDto): Promise<TimeReport> {
+    const from = parseDateOnly(query.from);
+    const to = parseDateOnly(query.to);
+    if (from > to) throw new BadRequestException('"from" must not be after "to"');
+    const spanDays = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+    if (spanDays > MAX_BREAKDOWN_DAYS) {
+      throw new BadRequestException(`Requested range spans ${spanDays} days; the maximum is ${MAX_BREAKDOWN_DAYS}`);
+    }
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: query.employeeId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    const rows = await this.prisma.dailyReportTaskEntry.findMany({
+      where: { dailyReport: { employeeId: query.employeeId, date: { gte: from, lte: to } } },
+      include: { project: true, dailyReport: { select: { date: true } } },
+    });
+
+    return this.buildTimeReport(from, to, rows, (row) => ({
+      key: row.projectId ?? 'none',
+      label: row.project?.name ?? 'No project',
+      otherDimension: row.project?.name ?? 'No project',
+    }));
+  }
+
+  /**
+   * Time reported per person for one project, over a date range - mirror of
+   * getEmployeeTimeReport with the roles of project/employee swapped. Same
+   * "self-reported task time, not attendance hours" and "includes drafts"
+   * caveats apply.
+   */
+  async getProjectTimeReport(query: GetProjectTimeReportQueryDto): Promise<TimeReport> {
+    const from = parseDateOnly(query.from);
+    const to = parseDateOnly(query.to);
+    if (from > to) throw new BadRequestException('"from" must not be after "to"');
+    const spanDays = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+    if (spanDays > MAX_BREAKDOWN_DAYS) {
+      throw new BadRequestException(`Requested range spans ${spanDays} days; the maximum is ${MAX_BREAKDOWN_DAYS}`);
+    }
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: query.projectId },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+
+    const rows = await this.prisma.dailyReportTaskEntry.findMany({
+      where: { projectId: query.projectId, dailyReport: { date: { gte: from, lte: to } } },
+      include: {
+        dailyReport: { select: { date: true, employee: { select: { id: true, firstName: true, lastName: true } } } },
+      },
+    });
+
+    return this.buildTimeReport(from, to, rows, (row) => {
+      const employeeName = `${row.dailyReport.employee.firstName} ${row.dailyReport.employee.lastName}`.trim();
+      return { key: row.dailyReport.employee.id, label: employeeName, otherDimension: employeeName };
+    });
+  }
+
+  /**
+   * Shared rollup: sums minutes in JS (the two source columns are "HH:mm"
+   * VARCHARs - Prisma can't aggregate them), keyed by whatever bucketOf()
+   * says (project for by-employee, employee for by-project). Same
+   * negative-diff-means-crossed-midnight rule as the frontend's
+   * minutesBetween (apps/web/src/lib/format.ts) - kept in sync deliberately
+   * since the two apps can't share code.
+   */
+  private buildTimeReport<
+    Row extends {
+      title: string;
+      startTime: string | null;
+      endTime: string | null;
+      output: string | null;
+      status: DailyReportTaskStatus;
+      dailyReport: { date: Date };
+    },
+  >(
+    from: Date,
+    to: Date,
+    rows: Row[],
+    bucketOf: (row: Row) => { key: string; label: string; otherDimension: string },
+  ): TimeReport {
+    const buckets = new Map<string, TimeReportBucket>();
+    const dailyTotals = new Map<string, number>();
+    const tasks: TimeReportTaskRow[] = [];
+    let totalMinutes = 0;
+
+    for (const row of rows) {
+      const minutes = this.minutesBetween(row.startTime, row.endTime) ?? 0;
+      const dateKey = formatDateOnly(row.dailyReport.date);
+      const { key, label, otherDimension } = bucketOf(row);
+
+      totalMinutes += minutes;
+      dailyTotals.set(dateKey, (dailyTotals.get(dateKey) ?? 0) + minutes);
+
+      const bucket = buckets.get(key) ?? { key, label, minutes: 0, taskCount: 0 };
+      bucket.minutes += minutes;
+      bucket.taskCount += 1;
+      buckets.set(key, bucket);
+
+      tasks.push({ date: dateKey, title: row.title, minutes, output: row.output, status: row.status, otherDimension });
+    }
+
+    const dailyTrend: { date: string; minutes: number }[] = [];
+    for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) {
+      const key = formatDateOnly(cursor);
+      dailyTrend.push({ date: key, minutes: dailyTotals.get(key) ?? 0 });
+    }
+
+    return {
+      from: formatDateOnly(from),
+      to: formatDateOnly(to),
+      totalMinutes,
+      totalTasks: rows.length,
+      buckets: [...buckets.values()].sort((a, b) => b.minutes - a.minutes),
+      dailyTrend,
+      tasks: tasks.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    };
+  }
+
+  /** Minutes between two "HH:mm" strings - null if either is missing, +24h if end < start (crossed midnight). Mirrors apps/web/src/lib/format.ts's minutesBetween. */
+  private minutesBetween(startTime: string | null, endTime: string | null): number | null {
+    if (!startTime || !endTime) return null;
+    const start = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(startTime);
+    const end = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(endTime);
+    if (!start || !end) return null;
+    const startMinutes = Number(start[1]) * 60 + Number(start[2]);
+    const endMinutes = Number(end[1]) * 60 + Number(end[2]);
+    const diff = endMinutes - startMinutes;
+    return diff >= 0 ? diff : diff + 24 * 60;
   }
 
   async getEmployeeReport(actor: AuthContext, employeeId: string, query: GetDailyReportQueryDto) {

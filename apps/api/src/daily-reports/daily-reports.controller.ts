@@ -13,6 +13,10 @@ import {
   GetDailyReportHistoryQueryDto,
   GetDailyReportQueryDto,
 } from './dto/get-daily-report-query.dto.js';
+import {
+  GetEmployeeTimeReportQueryDto,
+  GetProjectTimeReportQueryDto,
+} from './dto/get-time-report-query.dto.js';
 
 /**
  * Class-level performance:manage covers the team/employee/excuse routes
@@ -66,6 +70,25 @@ export class DailyReportsController {
   @Get('blockers')
   getBlockerBreakdown(@CurrentUser() actor: AuthContext, @Query() query: GetDailyReportHistoryQueryDto) {
     return this.dailyReportsService.getBlockerBreakdown(actor, query);
+  }
+
+  /**
+   * hr/admin-only, unlike the class-level performance:manage above (which
+   * manager also holds) - a manager pulling any employee's full time
+   * breakdown by hitting this directly isn't something performance:manage
+   * was ever meant to grant. See DailyReportsService.getEmployeeTimeReport.
+   */
+  @Get('analytics/by-employee')
+  @RequirePermissions('attendance:manage')
+  getEmployeeTimeReport(@Query() query: GetEmployeeTimeReportQueryDto) {
+    return this.dailyReportsService.getEmployeeTimeReport(query);
+  }
+
+  /** Same access rule as by-employee above. See DailyReportsService.getProjectTimeReport. */
+  @Get('analytics/by-project')
+  @RequirePermissions('attendance:manage')
+  getProjectTimeReport(@Query() query: GetProjectTimeReportQueryDto) {
+    return this.dailyReportsService.getProjectTimeReport(query);
   }
 
   @Get('employees/:employeeId')

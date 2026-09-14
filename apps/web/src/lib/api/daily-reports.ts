@@ -130,6 +130,45 @@ export function getBlockerBreakdown(from?: string, to?: string): Promise<Blocker
   return apiFetch<BlockerBreakdown>(`/daily-reports/blockers${qs ? `?${qs}` : ""}`);
 }
 
+export interface TimeReportTaskRow {
+  date: string;
+  title: string;
+  minutes: number;
+  output: string | null;
+  status: DailyReportTaskStatus;
+  /** Project name in by-employee mode, employee name in by-project mode. */
+  otherDimension: string;
+}
+
+export interface TimeReportBucket {
+  key: string;
+  label: string;
+  minutes: number;
+  taskCount: number;
+}
+
+export interface TimeReport {
+  from: string;
+  to: string;
+  totalMinutes: number;
+  totalTasks: number;
+  buckets: TimeReportBucket[];
+  dailyTrend: { date: string; minutes: number }[];
+  tasks: TimeReportTaskRow[];
+}
+
+/** hr/admin only - see DailyReportsService.getEmployeeTimeReport. Reported task time (from start/end on each task), not attendance clock hours. */
+export function getEmployeeTimeReport(employeeId: string, from: string, to: string): Promise<TimeReport> {
+  const params = new URLSearchParams({ employeeId, from, to });
+  return apiFetch<TimeReport>(`/daily-reports/analytics/by-employee?${params.toString()}`);
+}
+
+/** hr/admin only - see DailyReportsService.getProjectTimeReport. */
+export function getProjectTimeReport(projectId: string, from: string, to: string): Promise<TimeReport> {
+  const params = new URLSearchParams({ projectId, from, to });
+  return apiFetch<TimeReport>(`/daily-reports/analytics/by-project?${params.toString()}`);
+}
+
 const STATUS_LABELS: Record<DailyReportStatus, string> = {
   SUBMITTED: "Submitted",
   LATE: "Late",

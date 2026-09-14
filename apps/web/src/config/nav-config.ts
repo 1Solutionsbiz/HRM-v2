@@ -17,6 +17,7 @@ import {
   FolderKanban,
   BadgeIndianRupee,
   BarChart3,
+  LineChart,
   Building2,
   ShieldCheck,
   ScrollText,
@@ -90,6 +91,16 @@ export const navGroups: NavGroup[] = [
         // performance:manage (this page's permission) is granted to
         // manager/hr/admin in seed.ts, same as Leave approvals below.
         roles: ["manager", "hr", "admin"],
+      },
+      {
+        title: "Time Reports",
+        url: "/team/reports",
+        icon: LineChart,
+        color: "text-teal-500",
+        // The backend routes are handler-level attendance:manage (hr/admin
+        // only), not the class-level performance:manage above - a manager
+        // pulling any employee's full time breakdown wasn't the intent.
+        roles: ["hr", "admin"],
       },
       {
         title: "Leave approvals",
