@@ -23,7 +23,7 @@ export interface EmployeeListItem {
   dateOfJoining: string;
   dateOfExit: string | null;
   avatarUrl: string | null;
-  user: { email: string };
+  user: { email: string; isActive: boolean };
   department: { id: string; name: string } | null;
   designation: { id: string; title: string } | null;
   manager: EmployeeManagerRef | null;

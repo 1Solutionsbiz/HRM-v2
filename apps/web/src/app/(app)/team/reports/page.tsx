@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Calendar as CalendarIcon, Clock, ListTodo, X } from "lucide-react";
+import { BarChart3, Calendar as CalendarIcon, Clock, ListTodo, PieChart, X } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import {
   getEmployeeTimeReport,
@@ -27,7 +27,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TimeBreakdownChart, TimeTrendChart } from "./time-report-charts";
+import { TimeBreakdownChart, TimeBreakdownPieChart, TimeTrendChart } from "./time-report-charts";
 
 type Mode = "employee" | "project";
 
@@ -116,6 +116,8 @@ function taskColumns(otherDimensionLabel: string, totalMinutes: number): ColumnD
 }
 
 function ReportResult({ report, otherDimensionLabel }: { report: TimeReport; otherDimensionLabel: string }) {
+  const [chartType, setChartType] = React.useState<"bar" | "pie">("bar");
+
   if (report.totalTasks === 0) {
     return <EmptyState icon={ListTodo} title="No reported tasks in this range" />;
   }
@@ -134,8 +136,32 @@ function ReportResult({ report, otherDimensionLabel }: { report: TimeReport; oth
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardContent className="pt-6">
-            <p className="mb-3 text-sm font-semibold">{otherDimensionLabel} breakdown</p>
-            <TimeBreakdownChart data={report.buckets} />
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">{otherDimensionLabel} breakdown</p>
+              <div className="flex gap-1 rounded-lg border p-1">
+                <Button
+                  size="icon-sm"
+                  variant={chartType === "bar" ? "default" : "ghost"}
+                  aria-label="Bar chart"
+                  onClick={() => setChartType("bar")}
+                >
+                  <BarChart3 className="size-4" />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant={chartType === "pie" ? "default" : "ghost"}
+                  aria-label="Pie chart"
+                  onClick={() => setChartType("pie")}
+                >
+                  <PieChart className="size-4" />
+                </Button>
+              </div>
+            </div>
+            {chartType === "bar" ? (
+              <TimeBreakdownChart data={report.buckets} />
+            ) : (
+              <TimeBreakdownPieChart data={report.buckets} />
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -166,6 +192,13 @@ function ByEmployeeReport() {
   const [period, setPeriod] = React.useState<Period>("month");
   const [refDate, setRefDate] = React.useState(new Date());
   const { data: employees } = useAsync(getEmployees);
+  // Deactivated logins (e.g. Raman/Deepu) still have Employee.status
+  // ACTIVE, so the status filter alone isn't enough here - this picker
+  // shouldn't offer someone nobody can currently report on.
+  const activeEmployees = React.useMemo(
+    () => (employees ?? []).filter((e) => e.status === "ACTIVE" && e.user.isActive),
+    [employees],
+  );
 
   const { from, to } = React.useMemo(() => rangeForPeriod(period, refDate), [period, refDate]);
   const { data, loading, error, refetch } = useAsync(
@@ -178,7 +211,7 @@ function ByEmployeeReport() {
       <Card>
         <CardContent className="pt-6">
           <p className="mb-3 text-sm font-medium">Pick an employee</p>
-          <EmployeePicker employees={employees ?? []} onSelect={setEmployee} />
+          <EmployeePicker employees={activeEmployees} onSelect={setEmployee} />
         </CardContent>
       </Card>
     );

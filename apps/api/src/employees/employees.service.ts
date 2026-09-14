@@ -125,7 +125,7 @@ export class EmployeesService {
         dateOfJoining: true,
         dateOfExit: true,
         avatarUrl: true,
-        user: { select: { email: true } },
+        user: { select: { email: true, isActive: true } },
         department: { select: { id: true, name: true } },
         designation: { select: { id: true, title: true } },
         manager: { select: { id: true, firstName: true, lastName: true } },
