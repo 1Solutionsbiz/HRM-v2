@@ -86,8 +86,8 @@ export default function NotificationsPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        {!n.isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
-                        <p className="text-sm font-medium">{n.title}</p>
+                        {!n.isRead && <span className="bg-destructive size-1.5 shrink-0 rounded-full" />}
+                        <p className={`text-sm font-medium ${n.isRead ? "" : "text-destructive"}`}>{n.title}</p>
                       </div>
                       <p className="text-muted-foreground text-xs">{n.description}</p>
                     </div>

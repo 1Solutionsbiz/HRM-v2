@@ -13,9 +13,17 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { EmptyState } from "@/components/hrm/empty-state";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useAsync } from "@/lib/use-async";
 import { getNotifications, markNotificationRead, type AppNotification } from "@/lib/api/notifications";
-import { formatRelativeTime } from "@/lib/format";
+import { formatDate, formatRelativeTime } from "@/lib/format";
 import { getBreadcrumb } from "@/lib/page-title";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 
@@ -28,8 +36,16 @@ export function Topbar({ pathname }: TopbarProps) {
   const notifications = data ?? [];
   const unread = notifications.filter((n) => !n.isRead);
   const breadcrumb = getBreadcrumb(pathname);
+  // Clicking a notification in the popover opens this rather than
+  // navigating directly - a Link to the current route (e.g. an
+  // attendance reminder clicked while already on /attendance) is a
+  // silent no-op, which read as "nothing happens". A dialog always
+  // gives visible feedback, and still offers a real link through when
+  // there's somewhere useful to go.
+  const [selected, setSelected] = React.useState<AppNotification | null>(null);
 
   async function handleOpenNotification(n: AppNotification) {
+    setSelected(n);
     if (!n.isRead) {
       await markNotificationRead(n.id);
       refetch();
@@ -72,11 +88,11 @@ export function Topbar({ pathname }: TopbarProps) {
               className="relative"
               aria-label="Notifications"
             >
-              <Bell />
+              <Bell className={unread.length > 0 ? "text-destructive" : undefined} />
               {unread.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 flex size-2">
                   <span className="bg-destructive absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" />
-                  <Badge className="relative size-2 rounded-full p-0" />
+                  <Badge className="bg-destructive relative size-2 rounded-full p-0" />
                 </span>
               )}
             </Button>
@@ -101,18 +117,20 @@ export function Topbar({ pathname }: TopbarProps) {
               <ul className="max-h-72 divide-y overflow-y-auto">
                 {notifications.slice(0, 4).map((n) => (
                   <li key={n.id}>
-                    <Link
-                      href={n.linkUrl ?? "/notifications"}
+                    <button
+                      type="button"
                       onClick={() => handleOpenNotification(n)}
-                      className="hover:bg-accent block px-4 py-2.5"
+                      className="hover:bg-accent block w-full px-4 py-2.5 text-left"
                     >
                       <div className="flex items-center gap-2">
-                        {!n.isRead && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
-                        <p className="truncate text-sm font-medium">{n.title}</p>
+                        {!n.isRead && <span className="bg-destructive size-1.5 shrink-0 rounded-full" />}
+                        <p className={`truncate text-sm font-medium ${n.isRead ? "" : "text-destructive"}`}>
+                          {n.title}
+                        </p>
                       </div>
                       <p className="text-muted-foreground line-clamp-1 text-xs">{n.description}</p>
                       <p className="text-muted-foreground text-[10px]">{formatRelativeTime(n.createdAt)}</p>
-                    </Link>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -128,6 +146,29 @@ export function Topbar({ pathname }: TopbarProps) {
           </PopoverContent>
         </Popover>
       </div>
+
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent>
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selected.title}</DialogTitle>
+                <DialogDescription className="text-muted-foreground text-xs">
+                  {formatDate(selected.createdAt)} · {formatRelativeTime(selected.createdAt)}
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-foreground text-sm">{selected.description}</p>
+              {selected.linkUrl && (
+                <DialogFooter>
+                  <Button asChild size="sm" onClick={() => setSelected(null)}>
+                    <Link href={selected.linkUrl}>Open</Link>
+                  </Button>
+                </DialogFooter>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
