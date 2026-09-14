@@ -11,6 +11,8 @@ interface MailAttachment {
 
 interface SendMailInput {
   to: string;
+  /** Every other recipient (e.g. a company-wide announcement) - BCC so recipients don't see the full list. */
+  bcc?: string[];
   subject: string;
   html: string;
   text: string;
@@ -62,16 +64,16 @@ function statChip(label: string, value: string | number, color: { bg: string; te
 }
 
 /**
- * Shared header (logo) + footer (confidentiality notice) for the weekly
- * attendance emails - not used by sendPasswordResetEmail, which is a
- * different, unrelated email and out of scope for this branding pass.
- * The `format-detection` meta is what stops Apple/iOS Mail turning every
- * "10:25 am"-looking string in the table into a blue auto-linked "event" -
- * confirmed as the cause of the blue-underlined times in the original
- * report (a real screenshot showed it), not something any table styling
- * alone can fix.
+ * Shared header (logo) + footer (confidentiality notice) for every branded
+ * company email (weekly attendance x2, new-hire welcome) - not used by
+ * sendPasswordResetEmail, which is a different, unrelated email and was
+ * out of scope for the original branding pass. The `format-detection`
+ * meta is what stops Apple/iOS Mail turning every "10:25 am"-looking
+ * string into a blue auto-linked "event" - confirmed as the cause of the
+ * blue-underlined times in the original weekly attendance report (a real
+ * screenshot showed it), not something any table styling alone can fix.
  */
-function wrapAttendanceEmail(bodyHtml: string): string {
+function wrapCompanyEmail(bodyHtml: string): string {
   return `<!doctype html>
 <html>
 <head>
@@ -198,6 +200,7 @@ export class MailService {
       await this.transporter.sendMail({
         from: this.from,
         to: input.to,
+        bcc: input.bcc,
         subject: input.subject,
         html: input.html,
         text: input.text,
@@ -233,6 +236,7 @@ export class MailService {
             subject: input.subject,
             body: { contentType: 'HTML', content: input.html },
             toRecipients: [{ emailAddress: { address: input.to } }],
+            bccRecipients: input.bcc?.map((address) => ({ emailAddress: { address } })),
             attachments: input.attachments?.map((a) => ({
               '@odata.type': '#microsoft.graph.fileAttachment',
               name: a.filename,
@@ -383,7 +387,7 @@ export class MailService {
       to,
       subject: `Your weekly attendance summary (${input.weekLabel})`,
       text: `Your attendance for ${input.weekLabel}: ${input.totals.present} present, ${input.totals.late} late, ${input.totals.absent} absent, ${input.totals.onLeave} on leave. Total hours worked: ${input.totals.totalHours}.`,
-      html: wrapAttendanceEmail(bodyHtml),
+      html: wrapCompanyEmail(bodyHtml),
     });
   }
 
@@ -409,10 +413,61 @@ export class MailService {
       to,
       subject: `Weekly attendance — all employees (${input.weekLabel})`,
       text: `Attached: attendance for all ${input.employeeCount} active employees for ${input.weekLabel}, one row per employee.`,
-      html: wrapAttendanceEmail(bodyHtml),
+      html: wrapCompanyEmail(bodyHtml),
       attachments: [
         { filename: input.csvFilename, contentType: 'text/csv', contentBase64: input.csvBase64 },
       ],
+    });
+  }
+
+  /**
+   * One email, BCC'd to every active employee with an active login (see
+   * NewHireAnnouncementService - it builds that recipient list, this just
+   * sends to whatever it's given). Phone/personal email are optional on
+   * Employee and often genuinely absent for a brand-new hire - each row
+   * is only rendered when the value is present, never a blank/"—" line,
+   * same "never render undefined" discipline as the Employee Letters
+   * module.
+   */
+  async sendNewHireAnnouncement(
+    to: string[],
+    input: {
+      employeeName: string;
+      designation: string | null;
+      department: string | null;
+      workEmail: string;
+      phone: string | null;
+    },
+  ): Promise<void> {
+    if (to.length === 0) return;
+
+    const infoRow = (label: string, value: string | null) =>
+      value
+        ? `<tr><td style="padding:4px 12px 4px 0;font-size:13px;color:#6b7280;white-space:nowrap;">${label}</td><td style="padding:4px 0;font-size:13px;color:#111827;font-weight:600;">${value}</td></tr>`
+        : '';
+
+    const bodyHtml = `
+      <h2 style="margin:0 0 4px;font-size:19px;color:#111827;">Welcome to the team!</h2>
+      <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#374151;">
+        Please join us in welcoming <strong>${input.employeeName}</strong> to 1Solutions.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        ${infoRow('Designation', input.designation)}
+        ${infoRow('Department', input.department)}
+        ${infoRow('Email', input.workEmail)}
+        ${infoRow('Phone', input.phone)}
+      </table>
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#374151;">
+        Feel free to reach out and say hello!
+      </p>
+    `;
+
+    await this.send({
+      to: to[0],
+      subject: `Welcome ${input.employeeName} to the team!`,
+      text: `Please join us in welcoming ${input.employeeName} to 1Solutions. ${[input.designation, input.department].filter(Boolean).join(', ')} Email: ${input.workEmail}${input.phone ? ` Phone: ${input.phone}` : ''}`,
+      html: wrapCompanyEmail(bodyHtml),
+      bcc: to.slice(1),
     });
   }
 }

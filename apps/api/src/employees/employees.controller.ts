@@ -22,7 +22,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { EmployeesService } from './employees.service.js';
+import { NewHireAnnouncementService } from './new-hire-announcement.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
+import { SendWelcomeTestDto } from './dto/send-welcome-test.dto.js';
 import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import { UpsertMyBankDetailDto } from './dto/upsert-my-bank-detail.dto.js';
@@ -57,7 +59,10 @@ const AVATAR_CONTENT_TYPES: Record<string, string> = {
 @Controller('employees')
 @RequirePermissions('employee:manage')
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(
+    private readonly employeesService: EmployeesService,
+    private readonly newHireAnnouncementService: NewHireAnnouncementService,
+  ) {}
 
   @Get('me')
   @RequirePermissions()
@@ -273,6 +278,12 @@ export class EmployeesController {
   @Post()
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() actor: AuthContext) {
     return this.employeesService.create(dto, actor);
+  }
+
+  /** Sends a [TEST]-labelled preview to the caller — see NewHireAnnouncementService.sendTest. */
+  @Post('welcome-announcement/test')
+  sendWelcomeAnnouncementTest(@Body() dto: SendWelcomeTestDto, @CurrentUser() actor: AuthContext) {
+    return this.newHireAnnouncementService.sendTest(actor.email, dto.employeeId);
   }
 
   @Get()

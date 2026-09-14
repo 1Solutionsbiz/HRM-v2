@@ -356,6 +356,14 @@ model Employee {
   /// Employees" tab can always rely on.
   dateOfExit       DateTime?      @db.Date
 
+  /// Set the day NewHireAnnouncementService actually sends the
+  /// company-wide welcome email for this employee (their dateOfJoining,
+  /// not when the record was created) - makes the daily cron idempotent
+  /// against a redeploy landing on the exact scheduled minute, unlike the
+  /// looser reminder jobs (a missed/duplicated push nudge is a shrug; a
+  /// company-wide "welcome!" email going out twice is not).
+  welcomeEmailSentAt DateTime?
+
   /// Personal-details fields shown on the legacy HRM's profile page but
   /// absent from V2 until this addition (documented gap in
   /// database-design.md, closed on explicit request). All optional — none

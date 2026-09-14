@@ -5,6 +5,7 @@ import { EmployeesController } from './employees.controller.js';
 import { DepartmentsController } from './departments.controller.js';
 import { DesignationsController } from './designations.controller.js';
 import { EmployeesService } from './employees.service.js';
+import { NewHireAnnouncementService } from './new-hire-announcement.service.js';
 
 @Module({
   imports: [UsersModule, NotificationsModule],
@@ -13,6 +14,6 @@ import { EmployeesService } from './employees.service.js';
     DepartmentsController,
     DesignationsController,
   ],
-  providers: [EmployeesService],
+  providers: [EmployeesService, NewHireAnnouncementService],
 })
 export class EmployeesModule {}

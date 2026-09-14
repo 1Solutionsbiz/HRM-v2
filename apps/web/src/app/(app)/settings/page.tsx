@@ -5,8 +5,10 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Bell, BellOff, CheckCircle2, Download, KeyRound, Mail, Monitor, Moon, Share, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
+import { useAsync } from "@/lib/use-async";
 import { changePassword } from "@/lib/api/auth";
 import { sendTestWeeklyAttendanceReport } from "@/lib/api/reports";
+import { getEmployees, employeeFullName, sendWelcomeAnnouncementTest } from "@/lib/api/employees";
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useInstallPrompt } from "@/lib/use-install-prompt";
 import { usePushNotifications } from "@/lib/use-push-notifications";
@@ -15,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -61,6 +64,25 @@ export default function SettingsPage() {
       toast.error(err instanceof ApiError ? err.message : "Couldn't send the test email.");
     } finally {
       setSendingTestReport(false);
+    }
+  }
+
+  const NEWEST_HIRE = "__newest__";
+  const { data: employeesForWelcomeTest } = useAsync(getEmployees);
+  const [welcomeTestEmployeeId, setWelcomeTestEmployeeId] = React.useState(NEWEST_HIRE);
+  const [sendingWelcomeTest, setSendingWelcomeTest] = React.useState(false);
+
+  async function handleSendWelcomeTest() {
+    setSendingWelcomeTest(true);
+    try {
+      const result = await sendWelcomeAnnouncementTest(
+        welcomeTestEmployeeId === NEWEST_HIRE ? undefined : welcomeTestEmployeeId,
+      );
+      toast.success(`Sent to ${user.email} — previewing ${result.employeeName} (real send would reach ${result.recipientCount} people)`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send the test email.");
+    } finally {
+      setSendingWelcomeTest(false);
     }
   }
 
@@ -229,6 +251,39 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={handleSendTestReport} disabled={sendingTestReport}>
               <Mail />
               {sendingTestReport ? "Sending…" : "Send test email to myself"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageReports && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">New hire welcome email</CardTitle>
+            <CardDescription>
+              Preview the company-wide welcome email sent automatically on someone&apos;s actual joining date.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <Label>Preview using</Label>
+              <Select value={welcomeTestEmployeeId} onValueChange={setWelcomeTestEmployeeId}>
+                <SelectTrigger className="w-full sm:w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NEWEST_HIRE}>Most recently joined employee</SelectItem>
+                  {(employeesForWelcomeTest ?? []).map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {employeeFullName(e)} ({e.employeeCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" onClick={handleSendWelcomeTest} disabled={sendingWelcomeTest}>
+              <Mail />
+              {sendingWelcomeTest ? "Sending…" : "Send test email to myself"}
             </Button>
           </CardContent>
         </Card>
