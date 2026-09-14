@@ -30,13 +30,14 @@ describe('MissingCheckoutReminderService', () => {
   });
 
   describe('remindMissingCheckouts', () => {
-    it('queries only today, checked-in, still-no-checkout rows', async () => {
+    it('queries only today, checked-in, still-no-checkout rows for a currently-active employee with an active login', async () => {
       await service.remindMissingCheckouts();
       expect(prisma.attendanceDay.findMany).toHaveBeenCalledWith({
         where: {
           date: new Date(Date.UTC(2026, 8, 11)),
           firstCheckInAt: { not: null },
           lastCheckOutAt: null,
+          employee: { status: 'ACTIVE', user: { isActive: true } },
         },
         select: { employeeId: true },
       });

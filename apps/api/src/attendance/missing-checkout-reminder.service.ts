@@ -63,7 +63,16 @@ export class MissingCheckoutReminderService {
   private async findMissingCheckoutEmployeeIds(): Promise<string[]> {
     const today = toDateOnly(new Date());
     const days = await this.prisma.attendanceDay.findMany({
-      where: { date: today, firstCheckInAt: { not: null }, lastCheckOutAt: null },
+      where: {
+        date: today,
+        firstCheckInAt: { not: null },
+        lastCheckOutAt: null,
+        // A past employee or a deactivated login shouldn't still be
+        // getting nudged - in practice this row would rarely exist for
+        // either (they wouldn't be punching in), but it's a real filter,
+        // not a hypothetical one.
+        employee: { status: 'ACTIVE', user: { isActive: true } },
+      },
       select: { employeeId: true },
     });
     return days.map((d) => d.employeeId);
