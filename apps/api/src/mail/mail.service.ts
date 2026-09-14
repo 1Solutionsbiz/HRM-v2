@@ -446,50 +446,28 @@ export class MailService {
 
     const fullName = `${input.firstName} ${input.lastName}`.trim();
     const displayName = input.isTest ? `[TEST] ${fullName}` : fullName;
-    const initials =
-      `${input.firstName.charAt(0)}${input.lastName.charAt(0)}`.toUpperCase() || fullName.slice(0, 2).toUpperCase();
 
-    const infoChip = (label: string, value: string | null) =>
+    const infoRow = (label: string, value: string | null) =>
       value
-        ? `<tr>
-            <td style="padding:8px 12px;font-size:12px;color:#6b7280;white-space:nowrap;border-bottom:1px solid #e5e7eb;">${label}</td>
-            <td style="padding:8px 12px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">${value}</td>
-          </tr>`
+        ? `<tr><td style="padding:4px 12px 4px 0;font-size:13px;color:#6b7280;white-space:nowrap;">${label}</td><td style="padding:4px 0;font-size:13px;color:#111827;font-weight:600;">${value}</td></tr>`
         : '';
 
+    // Reverted to the plain layout on direct request (the banner+avatar
+    // redesign was a miss) - confetti/sparkle emoji are the only
+    // decoration added on top of it, nothing else.
     const bodyHtml = `
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
-        <tr>
-          <td style="background:#114171;border-radius:12px;padding:28px 24px;text-align:center;">
-            <div style="font-size:34px;line-height:1;margin:0 0 6px;">🎉</div>
-            <h1 style="margin:0;font-size:22px;color:#ffffff;font-weight:800;">Welcome to the team!</h1>
-          </td>
-        </tr>
+      <h2 style="margin:0 0 4px;font-size:19px;color:#111827;">🎉 Welcome to the team! ✨</h2>
+      <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#374151;">
+        Please join us in welcoming <strong>${displayName}</strong> to 1Solutions.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        ${infoRow('Designation', input.designation)}
+        ${infoRow('Department', input.department)}
+        ${infoRow('Email', input.workEmail)}
+        ${infoRow('Phone', input.phone)}
       </table>
-
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
-        <tr>
-          <td align="center">
-            <table role="presentation" cellpadding="0" cellspacing="0">
-              <tr>
-                <td width="64" style="width:64px;height:64px;background:#16a34a;border-radius:50%;text-align:center;vertical-align:middle;font-size:22px;font-weight:700;color:#ffffff;font-family:Arial,Helvetica,sans-serif;">${initials}</td>
-              </tr>
-            </table>
-            <p style="margin:12px 0 0;font-size:18px;font-weight:700;color:#111827;">${displayName}</p>
-            <p style="margin:2px 0 0;font-size:13px;color:#6b7280;">We're thrilled to have you on board!</p>
-          </td>
-        </tr>
-      </table>
-
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:10px;border-collapse:collapse;overflow:hidden;">
-        ${infoChip('Designation', input.designation)}
-        ${infoChip('Department', input.department)}
-        ${infoChip('Email', input.workEmail)}
-        ${infoChip('Phone', input.phone)}
-      </table>
-
-      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#374151;text-align:center;">
-        Feel free to reach out and say hello! 👋
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#374151;">
+        Feel free to reach out and say hello! 🎊
       </p>
     `;
 
