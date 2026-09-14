@@ -35,6 +35,8 @@ interface DataTableProps<TData, TValue> {
   emptyTitle?: string;
   emptyDescription?: string;
   pageSize?: number;
+  /** Renders every row on one page, no Previous/Next footer. */
+  hidePagination?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -45,6 +47,7 @@ export function DataTable<TData, TValue>({
   emptyTitle = "No results",
   emptyDescription = "Try adjusting your search or filters.",
   pageSize = 10,
+  hidePagination = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] =
@@ -60,7 +63,9 @@ export function DataTable<TData, TValue>({
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     state: { sorting, columnVisibility },
-    initialState: { pagination: { pageSize } },
+    initialState: {
+      pagination: { pageSize: hidePagination ? Number.MAX_SAFE_INTEGER : pageSize },
+    },
   });
 
   return (
@@ -124,32 +129,34 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex flex-col-reverse items-center justify-between gap-3 sm:flex-row">
-        <p className="text-muted-foreground text-xs">
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
-          {table.getPageCount() || 1}
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeft />
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-            <ChevronRight />
-          </Button>
+      {!hidePagination && (
+        <div className="flex flex-col-reverse items-center justify-between gap-3 sm:flex-row">
+          <p className="text-muted-foreground text-xs">
+            Page {table.getState().pagination.pageIndex + 1} of{" "}
+            {table.getPageCount() || 1}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <ChevronLeft />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+              <ChevronRight />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

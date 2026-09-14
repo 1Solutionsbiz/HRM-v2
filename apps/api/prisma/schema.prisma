@@ -1434,6 +1434,7 @@ enum AnnouncementCategory {
   POLICY
   EVENT
   GENERAL
+  NEW_HIRE
 }
 
 model Announcement {
@@ -1442,10 +1443,13 @@ model Announcement {
   body              String               @db.Text
   imageUrl          String?
   category          AnnouncementCategory
-  publishedByUserId String
+  /// Null for a system-generated post (e.g. the new-hire welcome feed item)
+  /// - there's no human publisher to attribute it to, same nullable-actor
+  /// reasoning as AuditLog.actorUserId above.
+  publishedByUserId String?
   publishedAt       DateTime             @default(now())
 
-  publishedByUser User               @relation("AnnouncementPublisher", fields: [publishedByUserId], references: [id])
+  publishedByUser User?              @relation("AnnouncementPublisher", fields: [publishedByUserId], references: [id])
   reads           AnnouncementRead[]
 
   @@map("announcements")

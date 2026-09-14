@@ -109,7 +109,7 @@ export default function AttendanceHistoryPage() {
               data={filtered}
               emptyTitle="No attendance records"
               emptyDescription="Nothing recorded for this month yet."
-              pageSize={15}
+              hidePagination
             />
           </AsyncSection>
         </CardContent>

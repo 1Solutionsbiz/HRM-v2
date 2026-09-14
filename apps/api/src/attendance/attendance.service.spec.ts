@@ -414,6 +414,30 @@ describe('AttendanceService', () => {
       expect(byDate['2026-08-04']).toBeUndefined();
     });
 
+    it('never renders a row for a strictly-future date, weekend included (regression: list used to skip ahead from today straight to the next weekend)', async () => {
+      // Today is Tue 2026-08-04. Range runs through the following weekend
+      // (Sat 08-08 / Sun 08-09), which is entirely in the future.
+      const result = await service.getHistoryForUser('user-1', {
+        from: '2026-08-04',
+        to: '2026-08-09',
+      });
+      const dates = result.map((day) => day.date);
+      expect(dates).toEqual([]); // today has no record either (not synthesized as absent)
+    });
+
+    it('still synthesizes WEEKEND for a past weekend even though a later date in the range is future', async () => {
+      const result = await service.getHistoryForUser('user-1', {
+        from: '2026-08-01', // past Saturday
+        to: '2026-08-09', // future Sunday
+      });
+      const byDate = Object.fromEntries(
+        result.map((day) => [day.date, day.status]),
+      );
+      expect(byDate['2026-08-01']).toBe('WEEKEND'); // past Saturday: rendered
+      expect(byDate['2026-08-08']).toBeUndefined(); // future Saturday: not rendered
+      expect(byDate['2026-08-09']).toBeUndefined(); // future Sunday: not rendered
+    });
+
     it('synthesizes HOLIDAY for a date present in the Holiday table', async () => {
       prisma.holiday.findMany.mockResolvedValue([
         { date: new Date('2026-08-03') },

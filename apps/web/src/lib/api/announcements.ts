@@ -1,6 +1,6 @@
 import { apiFetch, apiUpload } from "@/lib/api-client";
 
-export type AnnouncementCategory = "HOLIDAY" | "POLICY" | "EVENT" | "GENERAL";
+export type AnnouncementCategory = "HOLIDAY" | "POLICY" | "EVENT" | "GENERAL" | "NEW_HIRE";
 
 export interface Announcement {
   id: string;
@@ -8,7 +8,8 @@ export interface Announcement {
   body: string;
   imageUrl: string | null;
   category: AnnouncementCategory;
-  publishedByUserId: string;
+  /** Null for a system-generated post, e.g. the new-hire welcome feed item. */
+  publishedByUserId: string | null;
   publishedAt: string;
   read: boolean;
 }

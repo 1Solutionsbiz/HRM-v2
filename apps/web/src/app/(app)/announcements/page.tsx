@@ -51,6 +51,7 @@ const categoryTone: Record<AnnouncementCategory, "default" | "secondary" | "outl
   POLICY: "secondary",
   EVENT: "outline",
   GENERAL: "secondary",
+  NEW_HIRE: "default",
 };
 
 const EMPTY_COMPOSE_FORM = { title: "", body: "", category: "GENERAL" as AnnouncementCategory };

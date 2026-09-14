@@ -208,7 +208,7 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
               columns={columns}
               data={rows}
               emptyTitle="No attendance in this range"
-              pageSize={15}
+              hidePagination
             />
           </AsyncSection>
         </CardContent>

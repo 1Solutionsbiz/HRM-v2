@@ -438,6 +438,8 @@ export class MailService {
       department: string | null;
       workEmail: string;
       phone: string | null;
+      /** Absolute URL, e.g. Employee.avatarUrl - only rendered when set, never a placeholder/initials fallback. */
+      avatarUrl?: string | null;
       /** Prefixes the displayed name with "[TEST] " - kept out of the initials/avatar so a test send still looks right. */
       isTest?: boolean;
     },
@@ -453,9 +455,15 @@ export class MailService {
         : '';
 
     // Reverted to the plain layout on direct request (the banner+avatar
-    // redesign was a miss) - confetti/sparkle emoji are the only
-    // decoration added on top of it, nothing else.
+    // redesign was a miss) - confetti/sparkle emoji and, now, a small round
+    // photo (only when one exists) are the only decoration added on top of
+    // it, nothing else restructured.
+    const photoHtml = input.avatarUrl
+      ? `<img src="${input.avatarUrl}" alt="" width="72" height="72" style="display:block;margin:0 0 14px;width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #e5e7eb;" />`
+      : '';
+
     const bodyHtml = `
+      ${photoHtml}
       <h2 style="margin:0 0 4px;font-size:19px;color:#111827;">🎉 Welcome to the team! ✨</h2>
       <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#374151;">
         Please join us in welcoming <strong>${displayName}</strong> to 1Solutions.

@@ -266,12 +266,19 @@ export class AttendanceService {
       // first event). Synthesize the classification instead of leaving a
       // gap: this is the reason Holiday and AttendancePolicy.workingWeekdays
       // exist in the schema.
+      // Strictly-future dates never get a row, full stop — not even a
+      // Weekend/Holiday placeholder. Previously the weekend/holiday checks
+      // ran first, so a future Saturday still rendered as "Weekend" while a
+      // future Tuesday with no record was skipped — the list looked like it
+      // randomly jumped ahead (14th -> 19th) instead of just ending at today.
+      if (cursor.getTime() > today.getTime()) continue;
+
       const isoWeekday = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay();
       let status: AttendanceDayStatus;
       if (holidayDates.has(key)) status = 'HOLIDAY';
       else if (!workingWeekdays.has(isoWeekday)) status = 'WEEKEND';
       else if (cursor.getTime() >= today.getTime())
-        continue; // today/future with no record yet: not "absent"
+        continue; // today with no record yet: not "absent"
       else status = 'ABSENT';
 
       result.push({

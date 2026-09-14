@@ -16,6 +16,7 @@ const CATEGORY_LABEL: Record<AnnouncementCategory, string> = {
   POLICY: "Policy",
   EVENT: "Event",
   GENERAL: "General",
+  NEW_HIRE: "New Hire",
 };
 
 export function AnnouncementsFeedCard({ className }: { className?: string } = {}) {

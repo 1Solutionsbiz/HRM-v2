@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MailService } from '../mail/mail.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { addDays, toDateOnly } from '../common/date-only.js';
 
 const EMPLOYEE_INCLUDE = {
@@ -34,6 +35,7 @@ export class NewHireAnnouncementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   @Cron('0 11 * * *', { timeZone: 'Asia/Kolkata' })
@@ -83,25 +85,68 @@ export class NewHireAnnouncementService {
       firstName: string;
       lastName: string;
       phone: string | null;
+      avatarUrl: string | null;
       department: { name: string } | null;
       designation: { title: string } | null;
       user: { email: string };
     },
   ): Promise<string[]> {
     const recipients = await this.findAnnouncementRecipients(employee.id);
-    await this.mailService.sendNewHireAnnouncement(recipients, {
+    await this.mailService.sendNewHireAnnouncement(recipients.map((r) => r.email), {
       firstName: employee.firstName,
       lastName: employee.lastName,
       designation: employee.designation?.title ?? null,
       department: employee.department?.name ?? null,
       workEmail: employee.user.email,
       phone: employee.phone,
+      avatarUrl: employee.avatarUrl,
     });
     await this.prisma.employee.update({
       where: { id: employee.id },
       data: { welcomeEmailSentAt: new Date() },
     });
-    return recipients;
+    await this.postToFeed(employee, recipients.map((r) => r.userId));
+    return recipients.map((r) => r.email);
+  }
+
+  /**
+   * Same event, also as a feed post — so it shows up on the Announcements
+   * page (with the new hire's photo, if they have one) instead of only
+   * landing as an email. System-generated: publishedByUserId is left null
+   * (see the schema comment on Announcement.publishedByUserId).
+   */
+  private async postToFeed(
+    employee: {
+      firstName: string;
+      lastName: string;
+      avatarUrl: string | null;
+      department: { name: string } | null;
+      designation: { title: string } | null;
+    },
+    recipientUserIds: string[],
+  ): Promise<void> {
+    const fullName = `${employee.firstName} ${employee.lastName}`.trim();
+    const roleLine = [employee.designation?.title, employee.department?.name]
+      .filter(Boolean)
+      .join(', ');
+    const body = `Please join us in welcoming ${employee.firstName} to the team${roleLine ? ` as ${roleLine}` : ''}. Say hello! 🎉`;
+
+    const announcement = await this.prisma.announcement.create({
+      data: {
+        title: `Welcome ${fullName}!`,
+        body,
+        imageUrl: employee.avatarUrl,
+        category: 'NEW_HIRE',
+        publishedByUserId: null,
+      },
+    });
+
+    await this.notificationsService.createForUsers(recipientUserIds, {
+      type: 'ANNOUNCEMENT',
+      title: announcement.title,
+      description: body,
+      linkUrl: '/announcements',
+    });
   }
 
   /**
@@ -129,6 +174,7 @@ export class NewHireAnnouncementService {
       department: employee.department?.name ?? null,
       workEmail: employee.user.email,
       phone: employee.phone,
+      avatarUrl: employee.avatarUrl,
       isTest: true,
     });
 
@@ -136,11 +182,13 @@ export class NewHireAnnouncementService {
   }
 
   /** Every active employee with an active login, except the new hire being announced. */
-  private async findAnnouncementRecipients(excludeEmployeeId: string): Promise<string[]> {
+  private async findAnnouncementRecipients(
+    excludeEmployeeId: string,
+  ): Promise<{ userId: string; email: string }[]> {
     const employees = await this.prisma.employee.findMany({
       where: { status: 'ACTIVE', id: { not: excludeEmployeeId }, user: { isActive: true } },
-      select: { user: { select: { email: true } } },
+      select: { user: { select: { id: true, email: true } } },
     });
-    return employees.map((e) => e.user.email);
+    return employees.map((e) => ({ userId: e.user.id, email: e.user.email }));
   }
 }
