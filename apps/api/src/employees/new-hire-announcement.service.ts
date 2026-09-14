@@ -31,7 +31,8 @@ export class NewHireAnnouncementService {
     for (const employee of newHires) {
       const recipients = await this.findAnnouncementRecipients(employee.id);
       await this.mailService.sendNewHireAnnouncement(recipients, {
-        employeeName: `${employee.firstName} ${employee.lastName}`,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
         designation: employee.designation?.title ?? null,
         department: employee.department?.name ?? null,
         workEmail: employee.user.email,
@@ -66,11 +67,13 @@ export class NewHireAnnouncementService {
 
     const recipients = await this.findAnnouncementRecipients(employee.id);
     await this.mailService.sendNewHireAnnouncement([actorEmail], {
-      employeeName: `[TEST] ${employee.firstName} ${employee.lastName}`,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
       designation: employee.designation?.title ?? null,
       department: employee.department?.name ?? null,
       workEmail: employee.user.email,
       phone: employee.phone,
+      isTest: true,
     });
 
     return { employeeName: `${employee.firstName} ${employee.lastName}`, recipientCount: recipients.length };

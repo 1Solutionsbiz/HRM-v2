@@ -63,7 +63,8 @@ describe('NewHireAnnouncementService', () => {
       expect(mailService.sendNewHireAnnouncement).toHaveBeenCalledWith(
         ['atul@1solutions.biz', 'nikita@1solutions.biz'],
         {
-          employeeName: 'Ritika Sharma',
+          firstName: 'Ritika',
+          lastName: 'Sharma',
           designation: 'SEO Executive',
           department: 'Digital Marketing',
           workEmail: 'ritika@1solutions.biz',
@@ -108,7 +109,7 @@ describe('NewHireAnnouncementService', () => {
       });
       expect(mailService.sendNewHireAnnouncement).toHaveBeenCalledWith(
         ['atul@1solutions.biz'],
-        expect.objectContaining({ employeeName: '[TEST] Ritika Sharma' }),
+        expect.objectContaining({ firstName: 'Ritika', lastName: 'Sharma', isTest: true }),
       );
       expect(prisma.employee.update).not.toHaveBeenCalled();
       expect(result.employeeName).toBe('Ritika Sharma');
