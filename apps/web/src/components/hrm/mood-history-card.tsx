@@ -2,7 +2,7 @@
 
 import { Smile } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
-import { formatDate } from "@/lib/format";
+import { toDateOnlyString } from "@/lib/format";
 import { getMyMoodCheckIns, MOOD_OPTIONS } from "@/lib/api/mood-checkins";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -16,12 +16,13 @@ function moodOption(mood: string) {
 
 export function MoodHistoryCard({ className }: { className?: string } = {}) {
   const { data, loading, error, refetch } = useAsync(getMyMoodCheckIns);
-  const entries = (data ?? []).slice(0, 5);
+  const today = toDateOnlyString(new Date());
+  const entries = (data ?? []).filter((e) => e.date === today);
 
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">Your recent moods</CardTitle>
+        <CardTitle className="text-sm font-semibold">Your mood today</CardTitle>
       </CardHeader>
       <CardContent>
         <AsyncSection
@@ -31,36 +32,31 @@ export function MoodHistoryCard({ className }: { className?: string } = {}) {
           loadingFallback={<CardSkeleton lines={3} />}
         >
           {entries.length === 0 ? (
-            <EmptyState icon={Smile} title="No mood check-ins yet" />
+            <EmptyState icon={Smile} title="No mood logged today" />
           ) : (
-            <ul className="space-y-3">
-              {entries.map((entry) => {
-                const option = moodOption(entry.mood);
-                return (
-                  <li key={entry.id} className="flex items-start gap-3">
-                    <span className="text-2xl leading-none">{option?.emoji ?? "🙂"}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{option?.label ?? entry.mood}</p>
-                        <span className="text-muted-foreground text-xs">{formatDate(entry.date)}</span>
+            entries.map((entry) => {
+              const option = moodOption(entry.mood);
+              return (
+                <div key={entry.id} className="flex items-start gap-3">
+                  <span className="text-2xl leading-none">{option?.emoji ?? "🙂"}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{option?.label ?? entry.mood}</p>
+                    {entry.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {entry.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-[10px]">
+                            {tag}
+                          </Badge>
+                        ))}
                       </div>
-                      {entry.tags.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {entry.tags.map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-[10px]">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      {entry.comment && (
-                        <p className="text-muted-foreground mt-1 truncate text-xs">{entry.comment}</p>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                    )}
+                    {entry.comment && (
+                      <p className="text-muted-foreground mt-1 truncate text-xs">{entry.comment}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </AsyncSection>
       </CardContent>

@@ -138,7 +138,13 @@ export function ManagerDashboard({ firstName }: { firstName: string }) {
               icon={UserCheck}
               tone="success"
             />
-            <StatCard label="Pending approvals" value={String(pendingApprovals)} icon={ClipboardList} tone="warning" />
+            <StatCard
+              label="Pending approvals"
+              value={String(pendingApprovals)}
+              icon={ClipboardList}
+              tone="warning"
+              attention={pendingApprovals > 0}
+            />
             <StatCard label="Team size" value={String(team.data.reports.length)} icon={Users} tone="teal" />
             <StatCard label="On leave today" value={String(team.data.onLeaveToday)} icon={Clock} tone="violet" />
           </div>

@@ -19,6 +19,8 @@ interface StatCardProps {
   };
   description?: string;
   className?: string;
+  /** A pulsing dot on the icon badge, e.g. for "Pending approvals" > 0 - something needs a look, not just informational. */
+  attention?: boolean;
 }
 
 export function StatCard({
@@ -29,6 +31,7 @@ export function StatCard({
   trend,
   description,
   className,
+  attention = false,
 }: StatCardProps) {
   const trendIsGood = trend
     ? trend.direction === "up"
@@ -43,13 +46,21 @@ export function StatCard({
           {label}
         </CardTitle>
         {Icon && (
-          <div
-            className={cn(
-              "flex size-8 items-center justify-center rounded-md",
-              toneClasses[tone],
+          <div className="relative">
+            <div
+              className={cn(
+                "flex size-8 items-center justify-center rounded-md",
+                toneClasses[tone],
+              )}
+            >
+              <Icon className="size-4" />
+            </div>
+            {attention && (
+              <span className="absolute -top-1 -right-1 flex size-2.5">
+                <span className="bg-destructive absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" />
+                <span className="bg-destructive relative inline-flex size-2.5 rounded-full" />
+              </span>
             )}
-          >
-            <Icon className="size-4" />
           </div>
         )}
       </CardHeader>

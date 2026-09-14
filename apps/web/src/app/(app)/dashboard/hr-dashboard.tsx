@@ -190,6 +190,7 @@ export function HRDashboard({ firstName }: { firstName: string }) {
             value={String(pendingLeave.length + pendingExpense.length)}
             icon={Receipt}
             tone="orange"
+            attention={pendingLeave.length + pendingExpense.length > 0}
           />
         </div>
       </AsyncSection>

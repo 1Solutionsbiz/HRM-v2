@@ -99,7 +99,13 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard label="Total employees" value={String(activeEmployees.length)} icon={Users} tone="teal" />
           <StatCard label="Active roles" value={String(activeRoleCount)} icon={ShieldCheck} tone="violet" />
-          <StatCard label="Pending approvals" value={String(pendingApprovals)} icon={ClipboardList} tone="warning" />
+          <StatCard
+            label="Pending approvals"
+            value={String(pendingApprovals)}
+            icon={ClipboardList}
+            tone="warning"
+            attention={pendingApprovals > 0}
+          />
           <StatCard label="Departments" value={String((departments.data ?? []).length)} icon={Building2} tone="success" />
         </div>
       )}

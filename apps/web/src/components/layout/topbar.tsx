@@ -74,7 +74,10 @@ export function Topbar({ pathname }: TopbarProps) {
             >
               <Bell />
               {unread.length > 0 && (
-                <Badge className="absolute -top-0.5 -right-0.5 size-2 rounded-full p-0" />
+                <span className="absolute -top-0.5 -right-0.5 flex size-2">
+                  <span className="bg-destructive absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" />
+                  <Badge className="relative size-2 rounded-full p-0" />
+                </span>
               )}
             </Button>
           </PopoverTrigger>
