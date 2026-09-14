@@ -194,6 +194,44 @@ describe('LeaveService', () => {
       );
     });
 
+    /**
+     * Regression test for a real bug found on production data: a
+     * long-tenured employee's balance check summed EVERY active request
+     * she'd ever made against just the current year's allocation, so her
+     * Casual Leave stayed permanently blocked once her all-time approved
+     * days crossed one year's worth - regardless of how much of the
+     * current year's balance was actually left.
+     */
+    it('only counts the current year\'s committed days against the balance, not the employee\'s full history', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue({
+        allocatedDays: decimal(12),
+        carriedOverDays: decimal(0),
+      });
+      prisma.leaveRequest.findMany.mockImplementation(({ where }) => {
+        // Only the year-scoped (current-year) query should see this
+        // employee as having room left; an unscoped query covering her
+        // full history would see far more than the 12-day allocation.
+        if (where.startDate) return Promise.resolve([{ totalDays: decimal(8) }]); // 8 of 12 used this year
+        return Promise.resolve([
+          { totalDays: decimal(15) }, // last year
+          { totalDays: decimal(8) }, // this year
+        ]); // 23 all-time - would wrongly exceed 12 if not year-scoped
+      });
+      prisma.leaveRequest.create.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0042',
+        totalDays: decimal(1),
+      });
+
+      await expect(service.applyLeave('user-1', dto, actor)).resolves.toMatchObject({ code: 'LV-0042' });
+
+      const balanceCheckCall = prisma.leaveRequest.findMany.mock.calls.find(([args]) => args.where.startDate);
+      expect(balanceCheckCall).toBeDefined();
+      const [{ where }] = balanceCheckCall!;
+      expect(where.startDate.gte.getUTCFullYear()).toBe(2026);
+      expect(where.startDate.lt.getUTCFullYear()).toBe(2027);
+    });
+
     it('creates a request with a generated code on success', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(null);
       prisma.leaveRequest.create.mockResolvedValue({

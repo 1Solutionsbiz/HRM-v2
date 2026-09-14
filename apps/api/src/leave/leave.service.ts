@@ -722,6 +722,21 @@ export class LeaveService {
     requestedDays: number,
   ): Promise<void> {
     if (!leaveType.isPaid) return;
+    // `allocation` below is for one specific year, so the requests summed
+    // against it must be too - otherwise every request this employee has
+    // ever taken counts against a single year's balance, and a
+    // long-tenured employee's Casual Leave locks up permanently the
+    // moment their all-time approved-day count crosses one year's
+    // allocation, even with plenty of the CURRENT year's balance left.
+    // Confirmed as a real, live bug this way (not a guess): checked a
+    // real employee's production data and found exactly this - 23
+    // all-time approved Casual Leave days vs. a 12-day 2026 allocation,
+    // rejecting every new request regardless of her actual 2026 usage
+    // (8 of 12 days). getCommittedCasualLeaveDaysInMonth just below
+    // already scopes its own query by date range - this brings the
+    // year-level check in line with that.
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
     const [balance, activeRequests] = await Promise.all([
       this.prisma.leaveBalance.findUnique({
         where: {
@@ -737,6 +752,7 @@ export class LeaveService {
           employeeId,
           leaveTypeId: leaveType.id,
           status: { in: [...ACTIVE_REQUEST_STATUSES] },
+          startDate: { gte: yearStart, lt: yearEnd },
         },
       }),
     ]);
