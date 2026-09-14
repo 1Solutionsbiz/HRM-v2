@@ -278,7 +278,11 @@ function DailyReportForm({
             <CardContent className="space-y-4 pt-6">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Tasks</p>
-                <Button variant="outline" size="sm" onClick={addTask}>
+                <Button
+                  size="sm"
+                  onClick={addTask}
+                  className="bg-warning text-warning-foreground hover:bg-warning/90 focus-visible:ring-warning/40"
+                >
                   <Plus />
                   Add task
                 </Button>
@@ -290,10 +294,10 @@ function DailyReportForm({
                     <p className="text-muted-foreground text-xs font-medium">Task {index + 1}</p>
                     <div className="flex items-center gap-1">
                       <Button
-                        variant="outline"
                         size="sm"
                         onClick={() => handleSaveTaskDraft(task.key)}
                         disabled={savingKey !== null}
+                        className="bg-success text-success-foreground hover:bg-success/90 focus-visible:ring-success/40"
                       >
                         {savingKey === task.key ? "Saving…" : "Save"}
                       </Button>
