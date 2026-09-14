@@ -3,12 +3,12 @@
 import * as React from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { Bell, BellOff, CheckCircle2, Download, KeyRound, Mail, Monitor, Moon, Share, Sun } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Download, KeyRound, Mail, Megaphone, Monitor, Moon, Share, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { useAsync } from "@/lib/use-async";
 import { changePassword } from "@/lib/api/auth";
 import { sendTestWeeklyAttendanceReport } from "@/lib/api/reports";
-import { getEmployees, employeeFullName, sendWelcomeAnnouncementTest } from "@/lib/api/employees";
+import { getEmployees, employeeFullName, sendWelcomeAnnouncementTest, sendWelcomeAnnouncementNow } from "@/lib/api/employees";
 import { useAuthenticatedUser } from "@/lib/auth-context";
 import { useInstallPrompt } from "@/lib/use-install-prompt";
 import { usePushNotifications } from "@/lib/use-push-notifications";
@@ -31,6 +31,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -83,6 +84,17 @@ export default function SettingsPage() {
       toast.error(err instanceof ApiError ? err.message : "Couldn't send the test email.");
     } finally {
       setSendingWelcomeTest(false);
+    }
+  }
+
+  const [sendNowConfirmOpen, setSendNowConfirmOpen] = React.useState(false);
+
+  async function handleSendWelcomeNow() {
+    try {
+      const result = await sendWelcomeAnnouncementNow(welcomeTestEmployeeId);
+      toast.success(`Sent the real announcement for ${result.employeeName} to ${result.recipientCount} people`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send the announcement.");
     }
   }
 
@@ -281,13 +293,47 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline" onClick={handleSendWelcomeTest} disabled={sendingWelcomeTest}>
-              <Mail />
-              {sendingWelcomeTest ? "Sending…" : "Send test email to myself"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleSendWelcomeTest} disabled={sendingWelcomeTest}>
+                <Mail />
+                {sendingWelcomeTest ? "Sending…" : "Send test email to myself"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSendNowConfirmOpen(true)}
+                disabled={welcomeTestEmployeeId === NEWEST_HIRE}
+              >
+                <Megaphone />
+                Send real announcement now
+              </Button>
+            </div>
+            {welcomeTestEmployeeId === NEWEST_HIRE && (
+              <p className="text-muted-foreground text-xs">
+                Pick a specific person above to send the real, company-wide announcement — it&apos;s only automatic
+                otherwise, on their joining date.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={sendNowConfirmOpen}
+        onOpenChange={setSendNowConfirmOpen}
+        title="Send the real welcome announcement?"
+        description={
+          welcomeTestEmployeeId !== NEWEST_HIRE
+            ? `This emails every other active employee with an active login — not a test. ${
+                employeesForWelcomeTest?.find((e) => e.id === welcomeTestEmployeeId)
+                  ? `For ${employeeFullName(employeesForWelcomeTest.find((e) => e.id === welcomeTestEmployeeId)!)}. `
+                  : ""
+              }This can't be undone, and can't be re-sent once done.`
+            : ""
+        }
+        confirmLabel="Send to everyone"
+        variant="destructive"
+        onConfirm={handleSendWelcomeNow}
+      />
 
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent>

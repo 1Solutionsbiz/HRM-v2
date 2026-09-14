@@ -162,9 +162,14 @@ export function createEmployee(payload: CreateEmployeePayload): Promise<CreateEm
   return apiFetch<CreateEmployeeResult>("/employees", { method: "POST", body: payload });
 }
 
-/** Sends a [TEST]-labelled preview of the new-hire welcome announcement to the caller; the real send is a daily cron on dateOfJoining. */
+/** Sends a [TEST]-labelled preview of the new-hire welcome announcement to the caller; the real send is a daily cron on/soon after dateOfJoining. */
 export function sendWelcomeAnnouncementTest(employeeId?: string): Promise<{ employeeName: string; recipientCount: number }> {
   return apiFetch("/employees/welcome-announcement/test", { method: "POST", body: employeeId ? { employeeId } : {} });
+}
+
+/** Fires the real, company-wide welcome announcement right now — for someone the daily catch-up cron already missed. Refuses to re-send if already announced. */
+export function sendWelcomeAnnouncementNow(employeeId: string): Promise<{ employeeName: string; recipientCount: number }> {
+  return apiFetch("/employees/welcome-announcement/send", { method: "POST", body: { employeeId } });
 }
 
 export interface UpcomingBirthday {

@@ -25,6 +25,7 @@ import { EmployeesService } from './employees.service.js';
 import { NewHireAnnouncementService } from './new-hire-announcement.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import { SendWelcomeTestDto } from './dto/send-welcome-test.dto.js';
+import { SendWelcomeNowDto } from './dto/send-welcome-now.dto.js';
 import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import { UpsertBankDetailDto } from './dto/upsert-bank-detail.dto.js';
 import { UpsertMyBankDetailDto } from './dto/upsert-my-bank-detail.dto.js';
@@ -284,6 +285,12 @@ export class EmployeesController {
   @Post('welcome-announcement/test')
   sendWelcomeAnnouncementTest(@Body() dto: SendWelcomeTestDto, @CurrentUser() actor: AuthContext) {
     return this.newHireAnnouncementService.sendTest(actor.email, dto.employeeId);
+  }
+
+  /** Fires the real, company-wide announcement right now — see NewHireAnnouncementService.sendNow. */
+  @Post('welcome-announcement/send')
+  sendWelcomeAnnouncementNow(@Body() dto: SendWelcomeNowDto) {
+    return this.newHireAnnouncementService.sendNow(dto.employeeId);
   }
 
   @Get()

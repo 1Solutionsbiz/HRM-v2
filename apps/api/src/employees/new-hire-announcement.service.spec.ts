@@ -18,6 +18,8 @@ const ritika = {
   firstName: 'Ritika',
   lastName: 'Sharma',
   phone: '9876543210',
+  status: 'ACTIVE',
+  welcomeEmailSentAt: null,
   department: { name: 'Digital Marketing' },
   designation: { title: 'SEO Executive' },
   user: { email: 'ritika@1solutions.biz' },
@@ -42,10 +44,14 @@ describe('NewHireAnnouncementService', () => {
   });
 
   describe('announceTodaysNewHires', () => {
-    it('queries active, joining-today, not-yet-announced employees', async () => {
+    it('queries active, not-yet-announced employees who joined within the last 7 days (a catch-up window, not just an exact-today match)', async () => {
       await service.announceTodaysNewHires();
       expect(prisma.employee.findMany).toHaveBeenNthCalledWith(1, {
-        where: { status: 'ACTIVE', dateOfJoining: new Date(Date.UTC(2026, 8, 14)), welcomeEmailSentAt: null },
+        where: {
+          status: 'ACTIVE',
+          dateOfJoining: { gte: new Date(Date.UTC(2026, 8, 7)), lte: new Date(Date.UTC(2026, 8, 14)) },
+          welcomeEmailSentAt: null,
+        },
         include: { department: true, designation: true, user: { select: { email: true } } },
       });
     });
@@ -131,6 +137,44 @@ describe('NewHireAnnouncementService', () => {
     it('throws when there is no employee to preview at all', async () => {
       prisma.employee.findFirst.mockResolvedValue(null);
       await expect(service.sendTest('atul@1solutions.biz')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('sendNow', () => {
+    it('sends the real announcement to every real recipient and marks it sent', async () => {
+      prisma.employee.findUnique.mockResolvedValue(ritika);
+      prisma.employee.findMany.mockResolvedValue([{ user: { email: 'atul@1solutions.biz' } }]);
+
+      const result = await service.sendNow('emp-ritika');
+
+      expect(mailService.sendNewHireAnnouncement).toHaveBeenCalledWith(
+        ['atul@1solutions.biz'],
+        expect.objectContaining({ firstName: 'Ritika', lastName: 'Sharma' }),
+      );
+      // Unlike sendTest, no isTest flag and a real recipient list, not just the caller.
+      expect(mailService.sendNewHireAnnouncement.mock.calls[0][1].isTest).toBeUndefined();
+      expect(prisma.employee.update).toHaveBeenCalledWith({
+        where: { id: 'emp-ritika' },
+        data: { welcomeEmailSentAt: expect.any(Date) },
+      });
+      expect(result).toEqual({ employeeName: 'Ritika Sharma', recipientCount: 1 });
+    });
+
+    it('refuses to re-send once welcomeEmailSentAt is already set', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ ...ritika, welcomeEmailSentAt: new Date('2026-09-01') });
+      await expect(service.sendNow('emp-ritika')).rejects.toThrow(/already announced/);
+      expect(mailService.sendNewHireAnnouncement).not.toHaveBeenCalled();
+    });
+
+    it('refuses to announce someone who is not currently active', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ ...ritika, status: 'INACTIVE' });
+      await expect(service.sendNow('emp-ritika')).rejects.toThrow(/currently active/);
+      expect(mailService.sendNewHireAnnouncement).not.toHaveBeenCalled();
+    });
+
+    it('throws when the employee does not exist', async () => {
+      prisma.employee.findUnique.mockResolvedValue(null);
+      await expect(service.sendNow('missing')).rejects.toThrow(NotFoundException);
     });
   });
 });
