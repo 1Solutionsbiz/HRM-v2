@@ -353,30 +353,32 @@ function DailyReportForm({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>Start time *</Label>
-                      <Input
-                        type="time"
-                        value={task.startTime}
-                        onChange={(e) => updateTask(task.key, { startTime: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>End time *</Label>
-                      <Input
-                        type="time"
-                        value={task.endTime}
-                        onChange={(e) => updateTask(task.key, { endTime: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label>Total time</Label>
-                      <p className="text-muted-foreground text-sm">
-                        {(() => {
-                          const total = minutesBetween(task.startTime, task.endTime);
-                          return total != null ? formatMinutes(total) : "—";
-                        })()}
-                      </p>
+                    <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label>Start time *</Label>
+                        <Input
+                          type="time"
+                          value={task.startTime}
+                          onChange={(e) => updateTask(task.key, { startTime: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>End time *</Label>
+                        <Input
+                          type="time"
+                          value={task.endTime}
+                          onChange={(e) => updateTask(task.key, { endTime: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Total time</Label>
+                        <p className="text-muted-foreground flex h-8 items-center text-sm">
+                          {(() => {
+                            const total = minutesBetween(task.startTime, task.endTime);
+                            return total != null ? formatMinutes(total) : "—";
+                          })()}
+                        </p>
+                      </div>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label>Output / deliverable *</Label>
