@@ -169,6 +169,18 @@ class EnvironmentVariables {
   @IsString()
   @MinLength(1)
   VAPID_SUBJECT: string = 'mailto:hr@1solutions.biz';
+
+  /**
+   * Shared secret for the external-cron trigger routes (see CronAuthGuard) -
+   * an external scheduler (cron-job.org) calls these on a schedule since
+   * in-process @Cron timers proved unreliable on this host. Optional so a
+   * fresh environment doesn't fail to boot before this is provisioned;
+   * CronAuthGuard just refuses every request until it's set.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(32, { message: 'CRON_SECRET must be at least 32 characters long' })
+  CRON_SECRET?: string;
 }
 
 export function validateEnv(

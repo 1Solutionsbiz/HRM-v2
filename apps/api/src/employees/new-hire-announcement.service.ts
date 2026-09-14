@@ -8,7 +8,7 @@ import { addDays, toDateOnly } from '../common/date-only.js';
 const EMPLOYEE_INCLUDE = {
   department: true,
   designation: true,
-  user: { select: { email: true } },
+  user: { select: { email: true, isActive: true } },
 } as const;
 
 /** How far back the daily catch-up looks for a still-unannounced recent hire - see announceTodaysNewHires. */
@@ -43,7 +43,12 @@ export class NewHireAnnouncementService {
     const today = toDateOnly(new Date());
     const windowStart = addDays(today, -CATCH_UP_WINDOW_DAYS);
     const newHires = await this.prisma.employee.findMany({
-      where: { status: 'ACTIVE', dateOfJoining: { gte: windowStart, lte: today }, welcomeEmailSentAt: null },
+      where: {
+        status: 'ACTIVE',
+        user: { isActive: true },
+        dateOfJoining: { gte: windowStart, lte: today },
+        welcomeEmailSentAt: null,
+      },
       include: EMPLOYEE_INCLUDE,
     });
 
@@ -68,6 +73,9 @@ export class NewHireAnnouncementService {
     if (!employee) throw new NotFoundException('Employee not found');
     if (employee.status !== 'ACTIVE') {
       throw new BadRequestException('Can only announce a currently active employee');
+    }
+    if (!employee.user.isActive) {
+      throw new BadRequestException('Cannot announce an employee whose login has been deactivated');
     }
     if (employee.welcomeEmailSentAt) {
       throw new BadRequestException(
@@ -160,7 +168,7 @@ export class NewHireAnnouncementService {
     const employee = employeeId
       ? await this.prisma.employee.findUnique({ where: { id: employeeId }, include: EMPLOYEE_INCLUDE })
       : await this.prisma.employee.findFirst({
-          where: { status: 'ACTIVE' },
+          where: { status: 'ACTIVE', user: { isActive: true } },
           orderBy: { dateOfJoining: 'desc' },
           include: EMPLOYEE_INCLUDE,
         });

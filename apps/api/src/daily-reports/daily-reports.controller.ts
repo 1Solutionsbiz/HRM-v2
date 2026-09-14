@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
+import { CronAuthGuard } from '../common/guards/cron-auth.guard.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { DailyReportsService } from './daily-reports.service.js';
 import { DailyReportRemindersService } from './daily-report-reminders.service.js';
@@ -89,5 +91,14 @@ export class DailyReportsController {
   @RequirePermissions('company:manage')
   sendTestReminder(@CurrentUser() actor: AuthContext) {
     return this.dailyReportRemindersService.sendTest(actor.userId);
+  }
+
+  /** External-scheduler trigger (see CronAuthGuard) — runs the same job as the every-15-min @Cron. */
+  @Post('cron/reminders')
+  @Public()
+  @RequirePermissions()
+  @UseGuards(CronAuthGuard)
+  runReminderCron() {
+    return this.dailyReportRemindersService.checkAndNotify();
   }
 }

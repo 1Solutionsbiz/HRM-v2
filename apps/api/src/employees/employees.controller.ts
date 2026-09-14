@@ -12,6 +12,7 @@ import {
   Req,
   Res,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -20,6 +21,7 @@ import type { Request, Response } from 'express';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
+import { CronAuthGuard } from '../common/guards/cron-auth.guard.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { EmployeesService } from './employees.service.js';
 import { NewHireAnnouncementService } from './new-hire-announcement.service.js';
@@ -291,6 +293,15 @@ export class EmployeesController {
   @Post('welcome-announcement/send')
   sendWelcomeAnnouncementNow(@Body() dto: SendWelcomeNowDto) {
     return this.newHireAnnouncementService.sendNow(dto.employeeId);
+  }
+
+  /** External-scheduler trigger (see CronAuthGuard) — runs the same job as the 11 AM @Cron. */
+  @Post('cron/new-hire-announcements')
+  @Public()
+  @RequirePermissions()
+  @UseGuards(CronAuthGuard)
+  runNewHireAnnouncementCron() {
+    return this.newHireAnnouncementService.announceTodaysNewHires();
   }
 
   @Get()

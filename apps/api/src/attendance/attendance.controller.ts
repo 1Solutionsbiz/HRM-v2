@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
+import { CronAuthGuard } from '../common/guards/cron-auth.guard.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { AttendanceService } from './attendance.service.js';
 import { MissingCheckoutReminderService } from './missing-checkout-reminder.service.js';
@@ -92,5 +94,13 @@ export class AttendanceController {
   @RequirePermissions('attendance:manage')
   sendMissingCheckoutReminderTest(@CurrentUser() actor: AuthContext) {
     return this.missingCheckoutReminderService.sendTest(actor.userId);
+  }
+
+  /** External-scheduler trigger (see CronAuthGuard) — runs the same job as the 9 PM @Cron. */
+  @Post('cron/missing-checkout-reminders')
+  @Public()
+  @UseGuards(CronAuthGuard)
+  runMissingCheckoutReminderCron() {
+    return this.missingCheckoutReminderService.remindMissingCheckouts();
   }
 }

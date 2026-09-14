@@ -26,7 +26,7 @@ const ritika = {
   welcomeEmailSentAt: null,
   department: { name: 'Digital Marketing' },
   designation: { title: 'SEO Executive' },
-  user: { email: 'ritika@1solutions.biz' },
+  user: { email: 'ritika@1solutions.biz', isActive: true },
 };
 
 describe('NewHireAnnouncementService', () => {
@@ -55,10 +55,11 @@ describe('NewHireAnnouncementService', () => {
       expect(prisma.employee.findMany).toHaveBeenNthCalledWith(1, {
         where: {
           status: 'ACTIVE',
+          user: { isActive: true },
           dateOfJoining: { gte: new Date(Date.UTC(2026, 8, 7)), lte: new Date(Date.UTC(2026, 8, 14)) },
           welcomeEmailSentAt: null,
         },
-        include: { department: true, designation: true, user: { select: { email: true } } },
+        include: { department: true, designation: true, user: { select: { email: true, isActive: true } } },
       });
     });
 
@@ -140,7 +141,7 @@ describe('NewHireAnnouncementService', () => {
 
       expect(prisma.employee.findUnique).toHaveBeenCalledWith({
         where: { id: 'emp-ritika' },
-        include: { department: true, designation: true, user: { select: { email: true } } },
+        include: { department: true, designation: true, user: { select: { email: true, isActive: true } } },
       });
       expect(mailService.sendNewHireAnnouncement).toHaveBeenCalledWith(
         ['atul@1solutions.biz'],
@@ -160,9 +161,9 @@ describe('NewHireAnnouncementService', () => {
       await service.sendTest('atul@1solutions.biz');
 
       expect(prisma.employee.findFirst).toHaveBeenCalledWith({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', user: { isActive: true } },
         orderBy: { dateOfJoining: 'desc' },
-        include: { department: true, designation: true, user: { select: { email: true } } },
+        include: { department: true, designation: true, user: { select: { email: true, isActive: true } } },
       });
     });
 
@@ -206,6 +207,13 @@ describe('NewHireAnnouncementService', () => {
       prisma.employee.findUnique.mockResolvedValue({ ...ritika, status: 'INACTIVE' });
       await expect(service.sendNow('emp-ritika')).rejects.toThrow(/currently active/);
       expect(mailService.sendNewHireAnnouncement).not.toHaveBeenCalled();
+    });
+
+    it('refuses to announce someone whose login has been deactivated (regression: Deepu/Raman were deactivated the same day they were due to be welcomed)', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ ...ritika, user: { ...ritika.user, isActive: false } });
+      await expect(service.sendNow('emp-ritika')).rejects.toThrow(/deactivated/);
+      expect(mailService.sendNewHireAnnouncement).not.toHaveBeenCalled();
+      expect(prisma.announcement.create).not.toHaveBeenCalled();
     });
 
     it('throws when the employee does not exist', async () => {
