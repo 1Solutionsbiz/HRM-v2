@@ -256,8 +256,6 @@ export class FakePrismaService {
       title: string;
       projectOrClient: string | null;
       status: string;
-      expectedMinutes: number | null;
-      actualMinutes: number | null;
       output: string | null;
       blockerCategory: string | null;
       blockerNote: string | null;

@@ -139,13 +139,13 @@ describe('DailyReportsService', () => {
     });
   });
 
-  describe('upsertMyReport', () => {
+  describe('submitMyReport', () => {
     it('rejects a future date', async () => {
       prisma.companySettings.findUniqueOrThrow.mockResolvedValue(OFF_SETTINGS);
       const future = new Date();
       future.setDate(future.getDate() + 5);
       await expect(
-        service.upsertMyReport(USER_ID, {
+        service.submitMyReport(USER_ID, {
           date: future.toISOString().slice(0, 10),
           summary: 'x',
           tomorrowPlan: 'x',
@@ -157,7 +157,7 @@ describe('DailyReportsService', () => {
     it('rejects a date older than the self-edit window', async () => {
       prisma.companySettings.findUniqueOrThrow.mockResolvedValue(OFF_SETTINGS);
       await expect(
-        service.upsertMyReport(USER_ID, {
+        service.submitMyReport(USER_ID, {
           date: '2020-01-01',
           summary: 'x',
           tomorrowPlan: 'x',
@@ -176,7 +176,7 @@ describe('DailyReportsService', () => {
       today.setHours(10, 0, 0, 0);
       vi.setSystemTime(today);
 
-      await service.upsertMyReport(USER_ID, { summary: 'x', tomorrowPlan: 'x', tasks: [] });
+      await service.submitMyReport(USER_ID, { summary: 'x', tomorrowPlan: 'x', tasks: [] });
 
       expect(prisma.dailyReport.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: expect.objectContaining({ status: 'SUBMITTED' }) }),
@@ -190,7 +190,7 @@ describe('DailyReportsService', () => {
       today.setHours(20, 0, 0, 0); // local wall-clock, well past 18:00 + 30min
       vi.setSystemTime(today);
 
-      await service.upsertMyReport(USER_ID, { summary: 'x', tomorrowPlan: 'x', tasks: [] });
+      await service.submitMyReport(USER_ID, { summary: 'x', tomorrowPlan: 'x', tasks: [] });
 
       expect(prisma.dailyReport.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: expect.objectContaining({ status: 'LATE' }) }),
@@ -199,7 +199,7 @@ describe('DailyReportsService', () => {
 
     it('replaces task entries wholesale rather than diffing', async () => {
       prisma.companySettings.findUniqueOrThrow.mockResolvedValue(OFF_SETTINGS);
-      await service.upsertMyReport(USER_ID, {
+      await service.submitMyReport(USER_ID, {
         summary: 'x',
         tomorrowPlan: 'x',
         tasks: [
@@ -209,8 +209,6 @@ describe('DailyReportsService', () => {
             projectId: 'proj-1',
             startTime: '09:00',
             endTime: '10:00',
-            expectedMinutes: 60,
-            actualMinutes: 60,
             output: 'Fixed',
           },
         ],
@@ -218,6 +216,64 @@ describe('DailyReportsService', () => {
       expect(prisma.dailyReportTaskEntry.deleteMany).toHaveBeenCalledWith({ where: { dailyReportId: 'dr-1' } });
       expect(prisma.dailyReportTaskEntry.createMany).toHaveBeenCalledWith({
         data: [expect.objectContaining({ title: 'Fix bug', status: 'COMPLETED', sortOrder: 0 })],
+      });
+    });
+  });
+
+  describe('saveDraft', () => {
+    beforeEach(() => {
+      // computeReport (called at the end of saveDraft to return the fresh
+      // state) needs this regardless of what the draft itself touches.
+      prisma.companySettings.findUniqueOrThrow.mockResolvedValue(OFF_SETTINGS);
+    });
+
+    it('rejects a future date, same window rule as submit', async () => {
+      const future = new Date();
+      future.setDate(future.getDate() + 5);
+      await expect(
+        service.saveDraft(USER_ID, { date: future.toISOString().slice(0, 10) }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts an entirely empty draft (no summary, no tasks)', async () => {
+      await expect(service.saveDraft(USER_ID, {})).resolves.toBeDefined();
+      expect(prisma.dailyReport.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ status: 'PENDING' }) }),
+      );
+    });
+
+    it('creates a fresh row as PENDING with no submittedAt', async () => {
+      await service.saveDraft(USER_ID, { summary: 'wip', tasks: [{ title: 'Draft task' }] });
+      expect(prisma.dailyReport.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ status: 'PENDING', summary: 'wip' }),
+        }),
+      );
+      const createArg = prisma.dailyReport.upsert.mock.calls[0][0].create;
+      expect(createArg.submittedAt).toBeUndefined();
+    });
+
+    it('never touches status/submittedAt/excuse fields on the update path (cannot downgrade an already-submitted report)', async () => {
+      await service.saveDraft(USER_ID, { summary: 'edited after submit' });
+      const updateArg = prisma.dailyReport.upsert.mock.calls[0][0].update;
+      expect(updateArg).not.toHaveProperty('status');
+      expect(updateArg).not.toHaveProperty('submittedAt');
+      expect(updateArg).not.toHaveProperty('excusedByUserId');
+    });
+
+    it('accepts a task with only a title - every other field optional', async () => {
+      await service.saveDraft(USER_ID, { tasks: [{ title: 'Just a title so far' }] });
+      expect(prisma.dailyReportTaskEntry.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            title: 'Just a title so far',
+            projectId: null,
+            status: 'IN_PROGRESS',
+            startTime: null,
+            endTime: null,
+            output: null,
+          }),
+        ],
       });
     });
   });

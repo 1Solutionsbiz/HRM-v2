@@ -6,7 +6,8 @@ import { CronAuthGuard } from '../common/guards/cron-auth.guard.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { DailyReportsService } from './daily-reports.service.js';
 import { DailyReportRemindersService } from './daily-report-reminders.service.js';
-import { UpsertDailyReportDto } from './dto/upsert-daily-report.dto.js';
+import { SubmitDailyReportDto } from './dto/submit-daily-report.dto.js';
+import { SaveDailyReportDraftDto } from './dto/save-daily-report-draft.dto.js';
 import { ExcuseDailyReportDto } from './dto/excuse-daily-report.dto.js';
 import {
   GetDailyReportHistoryQueryDto,
@@ -41,10 +42,18 @@ export class DailyReportsController {
     return this.dailyReportsService.getMyHistory(actor.userId, query);
   }
 
+  /** Saves progress without submitting - see DailyReportsService.saveDraft. */
   @Put('me')
   @RequirePermissions()
-  upsertMine(@CurrentUser() actor: AuthContext, @Body() dto: UpsertDailyReportDto) {
-    return this.dailyReportsService.upsertMyReport(actor.userId, dto);
+  saveDraft(@CurrentUser() actor: AuthContext, @Body() dto: SaveDailyReportDraftDto) {
+    return this.dailyReportsService.saveDraft(actor.userId, dto);
+  }
+
+  /** The final submission - see DailyReportsService.submitMyReport. */
+  @Post('me/submit')
+  @RequirePermissions()
+  submitMine(@CurrentUser() actor: AuthContext, @Body() dto: SubmitDailyReportDto) {
+    return this.dailyReportsService.submitMyReport(actor.userId, dto);
   }
 
   /** Manager: own direct reports only. HR/admin: everyone — see DailyReportsService.resolveTeamScope. */

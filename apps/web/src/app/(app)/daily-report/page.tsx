@@ -7,7 +7,8 @@ import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
   getMyDailyReport,
-  upsertMyDailyReport,
+  saveDailyReportDraft,
+  submitMyDailyReport,
   formatDailyReportStatus,
   BLOCKER_CATEGORY_OPTIONS,
   type DailyReport,
@@ -15,7 +16,7 @@ import {
   type BlockerCategory,
 } from "@/lib/api/daily-reports";
 import { getProjects, type Project } from "@/lib/api/projects";
-import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
+import { formatDate, formatTime, formatMinutes, minutesBetween, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { StatusBadge } from "@/components/hrm/status-badge";
@@ -42,8 +43,6 @@ interface TaskDraft {
   status: DailyReportTaskStatus;
   startTime: string;
   endTime: string;
-  expectedMinutes: string;
-  actualMinutes: string;
   output: string;
   blockerCategory: BlockerCategory | "";
   blockerNote: string;
@@ -57,8 +56,6 @@ function emptyTask(): TaskDraft {
     status: "IN_PROGRESS",
     startTime: "",
     endTime: "",
-    expectedMinutes: "",
-    actualMinutes: "",
     output: "",
     blockerCategory: "",
     blockerNote: "",
@@ -74,8 +71,6 @@ function toTaskDrafts(report: DailyReport): TaskDraft[] {
         status: t.status,
         startTime: t.startTime ?? "",
         endTime: t.endTime ?? "",
-        expectedMinutes: t.expectedMinutes != null ? String(t.expectedMinutes) : "",
-        actualMinutes: t.actualMinutes != null ? String(t.actualMinutes) : "",
         output: t.output ?? "",
         blockerCategory: t.blockerCategory ?? "",
         blockerNote: t.blockerNote ?? "",
@@ -138,7 +133,8 @@ function DailyReportForm({
   const [blockers, setBlockers] = React.useState(report.blockers ?? "");
   const [tomorrowPlan, setTomorrowPlan] = React.useState(report.tomorrowPlan ?? "");
   const [tasks, setTasks] = React.useState<TaskDraft[]>(() => toTaskDrafts(report));
-  const [saving, setSaving] = React.useState(false);
+  const [savingKey, setSavingKey] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
   function updateTask(key: string, patch: Partial<TaskDraft>) {
     setTasks((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -152,7 +148,50 @@ function DailyReportForm({
     setTasks((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== key) : rows));
   }
 
-  async function handleSave() {
+  /**
+   * Saves everything filled in so far as a draft - no field requirements
+   * beyond the task being saved needing a title, so this can be used
+   * mid-way through filling the form out and revisited later. Sends the
+   * whole current form state (every task with a title, not just the one
+   * whose Save button was clicked), since the backend replaces the task
+   * list wholesale - see DailyReportsService.saveDraft.
+   */
+  async function handleSaveTaskDraft(taskKey: string) {
+    const target = tasks.find((t) => t.key === taskKey);
+    if (!target?.title.trim()) {
+      toast.error("Enter a title for this task before saving.");
+      return;
+    }
+    const draftTasks = tasks.filter((t) => t.title.trim());
+
+    setSavingKey(taskKey);
+    try {
+      await saveDailyReportDraft({
+        date: report.date,
+        summary: summary.trim() || undefined,
+        blockers: blockers.trim() || undefined,
+        tomorrowPlan: tomorrowPlan.trim() || undefined,
+        tasks: draftTasks.map((t) => ({
+          title: t.title.trim(),
+          projectId: t.projectId || undefined,
+          status: t.status,
+          startTime: t.startTime || undefined,
+          endTime: t.endTime || undefined,
+          output: t.output.trim() || undefined,
+          blockerCategory: t.blockerCategory || undefined,
+          blockerNote: t.blockerNote.trim() || undefined,
+        })),
+      });
+      toast.success("Task saved");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't save this task. Please try again.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function handleSubmit() {
     const validTasks = tasks
       .map((t, index) => ({ t, index }))
       .filter(({ t }) => t.title.trim());
@@ -165,8 +204,6 @@ function DailyReportForm({
       if (!t.projectId) return toast.error(`${label}: select a project.`);
       if (!t.startTime) return toast.error(`${label}: enter a start time.`);
       if (!t.endTime) return toast.error(`${label}: enter an end time.`);
-      if (!t.expectedMinutes) return toast.error(`${label}: enter expected time.`);
-      if (!t.actualMinutes) return toast.error(`${label}: enter actual time.`);
       if (!t.output.trim()) return toast.error(`${label}: enter the output / deliverable.`);
       if (t.status === "BLOCKED") {
         if (!t.blockerCategory) return toast.error(`${label}: select a blocker reason.`);
@@ -176,9 +213,9 @@ function DailyReportForm({
     if (!summary.trim()) return toast.error("Add an overall summary.");
     if (!tomorrowPlan.trim()) return toast.error("Add tomorrow's plan.");
 
-    setSaving(true);
+    setSubmitting(true);
     try {
-      await upsertMyDailyReport({
+      await submitMyDailyReport({
         date: report.date,
         summary: summary.trim(),
         blockers: blockers.trim() || undefined,
@@ -189,19 +226,17 @@ function DailyReportForm({
           status: t.status,
           startTime: t.startTime,
           endTime: t.endTime,
-          expectedMinutes: Number(t.expectedMinutes),
-          actualMinutes: Number(t.actualMinutes),
           output: t.output.trim(),
           blockerCategory: t.blockerCategory || undefined,
           blockerNote: t.blockerNote.trim() || undefined,
         })),
       });
-      toast.success("Daily report saved");
+      toast.success("Daily report submitted");
       onSaved();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't save your report. Please try again.");
+      toast.error(err instanceof ApiError ? err.message : "Couldn't submit your report. Please try again.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   }
 
@@ -253,11 +288,21 @@ function DailyReportForm({
                 <div key={task.key} className="space-y-3 rounded-lg border p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-muted-foreground text-xs font-medium">Task {index + 1}</p>
-                    {tasks.length > 1 && (
-                      <Button variant="ghost" size="icon-sm" aria-label="Remove task" onClick={() => removeTask(task.key)}>
-                        <Trash2 className="size-4" />
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSaveTaskDraft(task.key)}
+                        disabled={savingKey !== null}
+                      >
+                        {savingKey === task.key ? "Saving…" : "Save"}
                       </Button>
-                    )}
+                      {tasks.length > 1 && (
+                        <Button variant="ghost" size="icon-sm" aria-label="Remove task" onClick={() => removeTask(task.key)}>
+                          <Trash2 className="size-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5 sm:col-span-2">
@@ -324,23 +369,14 @@ function DailyReportForm({
                         onChange={(e) => updateTask(task.key, { endTime: e.target.value })}
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>Expected time (minutes) *</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={task.expectedMinutes}
-                        onChange={(e) => updateTask(task.key, { expectedMinutes: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Actual time (minutes) *</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={task.actualMinutes}
-                        onChange={(e) => updateTask(task.key, { actualMinutes: e.target.value })}
-                      />
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>Total time</Label>
+                      <p className="text-muted-foreground text-sm">
+                        {(() => {
+                          const total = minutesBetween(task.startTime, task.endTime);
+                          return total != null ? formatMinutes(total) : "—";
+                        })()}
+                      </p>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label>Output / deliverable *</Label>
@@ -403,8 +439,8 @@ function DailyReportForm({
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save report"}
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? "Submitting…" : "Submit Report"}
             </Button>
           </div>
         </>

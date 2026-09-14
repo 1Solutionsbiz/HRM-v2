@@ -22,8 +22,6 @@ export interface DailyReportTaskEntry {
   status: DailyReportTaskStatus;
   startTime: string | null;
   endTime: string | null;
-  expectedMinutes: number | null;
-  actualMinutes: number | null;
   output: string | null;
   blockerCategory: BlockerCategory | null;
   blockerNote: string | null;
@@ -47,15 +45,13 @@ export interface DailyReportTaskEntryInput {
   status: DailyReportTaskStatus;
   startTime: string;
   endTime: string;
-  expectedMinutes: number;
-  actualMinutes: number;
   output: string;
   // Required only when status is BLOCKED - see the DTO's matching ValidateIf.
   blockerCategory?: BlockerCategory;
   blockerNote?: string;
 }
 
-export interface UpsertDailyReportPayload {
+export interface SubmitDailyReportPayload {
   date?: string;
   summary: string;
   blockers?: string;
@@ -63,12 +59,38 @@ export interface UpsertDailyReportPayload {
   tasks: DailyReportTaskEntryInput[];
 }
 
+/** Every field optional, including tasks itself - see DailyReportTaskEntryDraftDto on the backend. */
+export interface DailyReportTaskEntryDraftInput {
+  title: string;
+  projectId?: string;
+  status?: DailyReportTaskStatus;
+  startTime?: string;
+  endTime?: string;
+  output?: string;
+  blockerCategory?: BlockerCategory;
+  blockerNote?: string;
+}
+
+export interface SaveDailyReportDraftPayload {
+  date?: string;
+  summary?: string;
+  blockers?: string;
+  tomorrowPlan?: string;
+  tasks?: DailyReportTaskEntryDraftInput[];
+}
+
 export function getMyDailyReport(date?: string): Promise<DailyReport> {
   return apiFetch<DailyReport>(`/daily-reports/me${date ? `?date=${date}` : ""}`);
 }
 
-export function upsertMyDailyReport(payload: UpsertDailyReportPayload): Promise<DailyReport> {
+/** Saves progress without submitting - status/submittedAt are left untouched. */
+export function saveDailyReportDraft(payload: SaveDailyReportDraftPayload): Promise<DailyReport> {
   return apiFetch<DailyReport>("/daily-reports/me", { method: "PUT", body: payload });
+}
+
+/** The final submission - full validation, sets status + submittedAt. */
+export function submitMyDailyReport(payload: SubmitDailyReportPayload): Promise<DailyReport> {
+  return apiFetch<DailyReport>("/daily-reports/me/submit", { method: "POST", body: payload });
 }
 
 export interface TeamDailyReportRow {

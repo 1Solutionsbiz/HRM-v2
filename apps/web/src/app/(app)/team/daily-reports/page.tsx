@@ -15,7 +15,7 @@ import {
   type TeamDailyReportRow,
 } from "@/lib/api/daily-reports";
 import { employeeFullName } from "@/lib/api/employees";
-import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
+import { formatDate, formatTime, formatMinutes, minutesBetween, toDateOnlyString } from "@/lib/format";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
@@ -135,9 +135,13 @@ function ReportDetailDialog({ row, onClose }: { row: TeamDailyReportRow; onClose
                       <StatusBadge status={t.status.replace("_", " ")} />
                     </div>
                     {t.project && <p className="text-muted-foreground text-xs">{t.project.name}</p>}
-                    {(t.expectedMinutes != null || t.actualMinutes != null) && (
+                    {(t.startTime || t.endTime) && (
                       <p className="text-muted-foreground text-xs">
-                        Expected {t.expectedMinutes ?? "—"}m · Actual {t.actualMinutes ?? "—"}m
+                        {t.startTime ?? "—"}–{t.endTime ?? "—"}
+                        {(() => {
+                          const total = minutesBetween(t.startTime, t.endTime);
+                          return total != null ? ` · Total ${formatMinutes(total)}` : "";
+                        })()}
                       </p>
                     )}
                     {t.output && <p className="mt-1">{t.output}</p>}

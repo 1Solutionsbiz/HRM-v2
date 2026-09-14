@@ -8,12 +8,15 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { addDays, formatDateOnly, parseDateOnly, toDateOnly } from '../common/date-only.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import type {
   DailyReportTemplate,
   DailyReportStatus,
+  DailyReportTaskStatus,
   BlockerCategory,
 } from '../generated/prisma/enums.js';
-import type { UpsertDailyReportDto } from './dto/upsert-daily-report.dto.js';
+import type { SubmitDailyReportDto } from './dto/submit-daily-report.dto.js';
+import type { SaveDailyReportDraftDto } from './dto/save-daily-report-draft.dto.js';
 import type { ExcuseDailyReportDto } from './dto/excuse-daily-report.dto.js';
 import type {
   GetDailyReportHistoryQueryDto,
@@ -59,8 +62,6 @@ export interface ReportComputation {
     status: string;
     startTime: string | null;
     endTime: string | null;
-    expectedMinutes: number | null;
-    actualMinutes: number | null;
     output: string | null;
     blockerCategory: string | null;
     blockerNote: string | null;
@@ -97,21 +98,16 @@ export class DailyReportsService {
     return this.computeHistory(employeeId, query);
   }
 
-  async upsertMyReport(userId: string, dto: UpsertDailyReportDto) {
+  /**
+   * The final submission - strict validation (see SubmitDailyReportDto),
+   * sets status (SUBMITTED/LATE) and submittedAt. See saveDraft for the
+   * "still working on it" counterpart this is paired with.
+   */
+  async submitMyReport(userId: string, dto: SubmitDailyReportDto) {
     const employeeId = await this.requireEmployeeId(userId);
-    const date = dto.date ? parseDateOnly(dto.date) : this.today();
+    const date = this.resolveEditableDate(dto.date);
 
     const today = this.today();
-    const daysOld = Math.round((today.getTime() - date.getTime()) / 86_400_000);
-    if (daysOld < 0) {
-      throw new BadRequestException('Cannot submit a report for a future date');
-    }
-    if (daysOld > EDITABLE_WINDOW_DAYS) {
-      throw new BadRequestException(
-        `This date is outside the ${EDITABLE_WINDOW_DAYS + 1}-day window employees can self-edit — ask HR to review it`,
-      );
-    }
-
     const settings = await this.prisma.companySettings.findUniqueOrThrow({
       where: { id: 'singleton' },
     });
@@ -143,33 +139,106 @@ export class DailyReportsService {
         },
       });
 
-      // Simplest correct way to keep task entries in sync with a client-
-      // submitted list (adds/removes/reorders all included) - report volume
-      // here is one row per employee per day, capped at 30 tasks, so a
-      // delete-then-recreate is cheap and avoids diffing logic that isn't
-      // worth the complexity for this size of data.
-      await tx.dailyReportTaskEntry.deleteMany({ where: { dailyReportId: report.id } });
-      if (dto.tasks.length > 0) {
-        await tx.dailyReportTaskEntry.createMany({
-          data: dto.tasks.map((task, index) => ({
-            dailyReportId: report.id,
-            title: task.title,
-            projectId: task.projectId,
-            status: task.status,
-            startTime: task.startTime,
-            endTime: task.endTime,
-            expectedMinutes: task.expectedMinutes,
-            actualMinutes: task.actualMinutes,
-            output: task.output,
-            blockerCategory: task.blockerCategory,
-            blockerNote: task.blockerNote,
-            sortOrder: index,
-          })),
-        });
-      }
+      await this.replaceTasks(tx, report.id, dto.tasks);
     });
 
     return this.computeReport(employeeId, date);
+  }
+
+  /**
+   * Saves progress without submitting - lenient validation (see
+   * SaveDailyReportDraftDto), and deliberately never touches
+   * status/submittedAt/excuse fields on an existing row, so saving a draft
+   * can never downgrade an already-submitted or -excused report. A fresh
+   * row (nothing saved yet today) is created as PENDING with no
+   * submittedAt. Called both by each task's own "Save" action and could be
+   * called as a whole-form autosave - either way it's the same "persist
+   * whatever's filled in so far" operation.
+   */
+  async saveDraft(userId: string, dto: SaveDailyReportDraftDto) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const date = this.resolveEditableDate(dto.date);
+
+    await this.prisma.$transaction(async (tx) => {
+      const report = await tx.dailyReport.upsert({
+        where: { employeeId_date: { employeeId, date } },
+        create: {
+          employeeId,
+          date,
+          status: 'PENDING',
+          summary: dto.summary,
+          blockers: dto.blockers,
+          tomorrowPlan: dto.tomorrowPlan,
+        },
+        update: {
+          summary: dto.summary ?? null,
+          blockers: dto.blockers ?? null,
+          tomorrowPlan: dto.tomorrowPlan ?? null,
+        },
+      });
+
+      await this.replaceTasks(tx, report.id, dto.tasks ?? []);
+    });
+
+    return this.computeReport(employeeId, date);
+  }
+
+  /**
+   * Simplest correct way to keep task entries in sync with a client-
+   * submitted list (adds/removes/reorders all included) - report volume
+   * here is one row per employee per day, capped at 30 tasks, so a
+   * delete-then-recreate is cheap and avoids diffing logic that isn't
+   * worth the complexity for this size of data. Shared by submit and
+   * saveDraft - a draft task's optional fields just come through as
+   * undefined/null, which the schema already allows.
+   */
+  private async replaceTasks(
+    tx: Prisma.TransactionClient,
+    dailyReportId: string,
+    tasks: {
+      title: string;
+      projectId?: string;
+      status?: DailyReportTaskStatus;
+      startTime?: string;
+      endTime?: string;
+      output?: string;
+      blockerCategory?: BlockerCategory;
+      blockerNote?: string;
+    }[],
+  ): Promise<void> {
+    await tx.dailyReportTaskEntry.deleteMany({ where: { dailyReportId } });
+    if (tasks.length > 0) {
+      await tx.dailyReportTaskEntry.createMany({
+        data: tasks.map((task, index) => ({
+          dailyReportId,
+          title: task.title,
+          projectId: task.projectId ?? null,
+          status: task.status ?? 'IN_PROGRESS',
+          startTime: task.startTime ?? null,
+          endTime: task.endTime ?? null,
+          output: task.output ?? null,
+          blockerCategory: task.blockerCategory ?? null,
+          blockerNote: task.blockerNote ?? null,
+          sortOrder: index,
+        })),
+      });
+    }
+  }
+
+  /** Shared future/self-edit-window check for both submit and saveDraft. */
+  private resolveEditableDate(dateStr?: string): Date {
+    const date = dateStr ? parseDateOnly(dateStr) : this.today();
+    const today = this.today();
+    const daysOld = Math.round((today.getTime() - date.getTime()) / 86_400_000);
+    if (daysOld < 0) {
+      throw new BadRequestException('Cannot save a report for a future date');
+    }
+    if (daysOld > EDITABLE_WINDOW_DAYS) {
+      throw new BadRequestException(
+        `This date is outside the ${EDITABLE_WINDOW_DAYS + 1}-day window employees can self-edit — ask HR to review it`,
+      );
+    }
+    return date;
   }
 
   // ---------------------------------------------------------------------

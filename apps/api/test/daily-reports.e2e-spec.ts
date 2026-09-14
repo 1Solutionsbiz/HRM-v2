@@ -97,7 +97,7 @@ describe('Daily Reports (e2e)', () => {
       .expect(200);
 
     await request(app.getHttpServer())
-      .put('/daily-reports/me')
+      .post('/daily-reports/me/submit')
       .set('Authorization', `Bearer ${token}`)
       .send({
         summary: 'Worked on onboarding docs',
@@ -109,13 +109,11 @@ describe('Daily Reports (e2e)', () => {
             projectId: 'proj-1',
             startTime: '09:00',
             endTime: '10:00',
-            expectedMinutes: 60,
-            actualMinutes: 60,
             output: 'README drafted',
           },
         ],
       })
-      .expect(200);
+      .expect(201);
   });
 
   it('rejects a submission missing a required field', async () => {
@@ -123,7 +121,7 @@ describe('Daily Reports (e2e)', () => {
     const token = await loginAs('worker@example.com');
 
     await request(app.getHttpServer())
-      .put('/daily-reports/me')
+      .post('/daily-reports/me/submit')
       .set('Authorization', `Bearer ${token}`)
       .send({
         summary: 'Worked on onboarding docs',
@@ -135,8 +133,6 @@ describe('Daily Reports (e2e)', () => {
             projectId: 'proj-1',
             startTime: '09:00',
             endTime: '10:00',
-            expectedMinutes: 60,
-            actualMinutes: 60,
             output: 'README drafted',
           },
         ],
@@ -153,14 +149,12 @@ describe('Daily Reports (e2e)', () => {
       projectId: 'proj-1',
       startTime: '09:00',
       endTime: '10:00',
-      expectedMinutes: 60,
-      actualMinutes: 60,
       output: 'README drafted',
     };
 
     // BLOCKED without blockerCategory/blockerNote is rejected.
     await request(app.getHttpServer())
-      .put('/daily-reports/me')
+      .post('/daily-reports/me/submit')
       .set('Authorization', `Bearer ${token}`)
       .send({
         summary: 'x',
@@ -171,18 +165,18 @@ describe('Daily Reports (e2e)', () => {
 
     // A non-BLOCKED task never needs blockerCategory/blockerNote.
     await request(app.getHttpServer())
-      .put('/daily-reports/me')
+      .post('/daily-reports/me/submit')
       .set('Authorization', `Bearer ${token}`)
       .send({
         summary: 'x',
         tomorrowPlan: 'x',
         tasks: [{ ...baseTask, status: 'IN_PROGRESS' }],
       })
-      .expect(200);
+      .expect(201);
 
     // BLOCKED with both fields present succeeds.
     await request(app.getHttpServer())
-      .put('/daily-reports/me')
+      .post('/daily-reports/me/submit')
       .set('Authorization', `Bearer ${token}`)
       .send({
         summary: 'x',
@@ -196,7 +190,31 @@ describe('Daily Reports (e2e)', () => {
           },
         ],
       })
+      .expect(201);
+  });
+
+  it('PUT /daily-reports/me saves a draft with no field requirements beyond a task title, and never sets submittedAt', async () => {
+    await makeUserAndEmployee({ userId: 'u-worker', email: 'worker@example.com', employeeCode: 'EXP-1', firstName: 'Worker' });
+    const token = await loginAs('worker@example.com');
+
+    // Entirely empty draft - no summary, no tomorrowPlan, no tasks.
+    await request(app.getHttpServer())
+      .put('/daily-reports/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
       .expect(200);
+
+    // A task with only a title, nothing else.
+    const res = await request(app.getHttpServer())
+      .put('/daily-reports/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ tasks: [{ title: 'Just a title so far' }] })
+      .expect(200);
+
+    expect(res.body.status).toBe('PENDING');
+    expect(res.body.submittedAt).toBeNull();
+    expect(res.body.tasks).toHaveLength(1);
+    expect(res.body.tasks[0].title).toBe('Just a title so far');
   });
 
   it('an employee cannot view another employee\'s report (403)', async () => {

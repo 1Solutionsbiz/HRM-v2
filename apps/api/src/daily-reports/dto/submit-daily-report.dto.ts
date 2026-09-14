@@ -11,7 +11,8 @@ import {
 } from 'class-validator';
 import { DailyReportTaskEntryDto } from './daily-report-task-entry.dto.js';
 
-export class UpsertDailyReportDto {
+/** The final, strict submission - see SaveDailyReportDraftDto for the lenient shape saveDraft accepts. */
+export class SubmitDailyReportDto {
   /** Defaults to today when omitted - see DailyReportsService's editable-window check for what dates this actually accepts. */
   @IsOptional()
   @IsDateString()

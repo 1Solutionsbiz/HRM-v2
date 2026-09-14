@@ -1,11 +1,8 @@
 import {
   IsEnum,
-  IsInt,
   IsString,
   Matches,
-  Max,
   MaxLength,
-  Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -32,18 +29,6 @@ export class DailyReportTaskEntryDto {
 
   @Matches(TIME_OF_DAY_PATTERN, { message: 'endTime must be in HH:mm format' })
   endTime!: string;
-
-  // Minutes, not hours - avoids float rounding on something that drives
-  // time-variance math later, same reasoning as AttendanceDay.workedMinutes.
-  @IsInt()
-  @Min(0)
-  @Max(24 * 60)
-  expectedMinutes!: number;
-
-  @IsInt()
-  @Min(0)
-  @Max(24 * 60)
-  actualMinutes!: number;
 
   @IsString()
   @MinLength(1)

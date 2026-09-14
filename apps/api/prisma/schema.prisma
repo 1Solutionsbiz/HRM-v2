@@ -1362,14 +1362,10 @@ model DailyReportTaskEntry {
   projectId       String?
   status          DailyReportTaskStatus @default(IN_PROGRESS)
   // "HH:mm" clock time, not a Date - there's no date-of-day context worth
-  // attaching (the report's own date already covers that), and duration
-  // math is already covered by expected/actualMinutes below. Purely
-  // informational, same reasoning as why format.ts avoids Date for
-  // date-only values.
+  // attaching (the report's own date already covers that). Total time is
+  // derived from these two on read (frontend/report display), not stored.
   startTime       String?
   endTime         String?
-  expectedMinutes Int?
-  actualMinutes   Int?
   output          String?               @db.Text
   blockerCategory BlockerCategory?
   blockerNote     String?               @db.Text
