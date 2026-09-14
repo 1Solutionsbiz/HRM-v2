@@ -2,12 +2,16 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Calendar as CalendarIcon, CheckCircle2, Clock, UserX, X } from "lucide-react";
+import { toast } from "sonner";
+import { AlarmClock, Calendar as CalendarIcon, CheckCircle2, Clock, UserX, X } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
+import { ApiError } from "@/lib/api-client";
 import {
   getCompanyAttendance,
   getEmployeeAttendanceHistory,
+  recordAttendanceCorrection,
   type AttendanceHistoryDay,
+  type CompanyAttendanceRow,
 } from "@/lib/api/attendance";
 import { getEmployees, titleCase, type EmployeeListItem } from "@/lib/api/employees";
 import { formatDate, formatTime, toDateOnlyString } from "@/lib/format";
@@ -17,12 +21,16 @@ import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { EmployeePicker } from "@/components/hrm/employee-picker";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -218,6 +226,7 @@ function TeamRosterView({
 }) {
   const [date, setDate] = React.useState<Date>(new Date());
   const dateStr = toDateOnlyString(date);
+  const [filter, setFilter] = React.useState<"all" | "missing">("all");
 
   const { data, loading, error, refetch } = useAsync(() => getCompanyAttendance(dateStr), [dateStr]);
 
@@ -226,10 +235,51 @@ function TeamRosterView({
   const late = rows.filter((r) => r.status === "LATE").length;
   const absent = rows.filter((r) => r.status === "ABSENT").length;
   const onLeave = rows.filter((r) => r.status === "ON_LEAVE").length;
+  const missingCheckoutRows = rows.filter((r) => r.firstCheckInAt && !r.lastCheckOutAt);
+  const visibleRows = filter === "missing" ? missingCheckoutRows : rows;
+
+  const [correctionTarget, setCorrectionTarget] = React.useState<CompanyAttendanceRow | null>(null);
+  const [correctionTime, setCorrectionTime] = React.useState("");
+  const [correctionNote, setCorrectionNote] = React.useState("");
+
+  function openCorrection(row: CompanyAttendanceRow) {
+    setCorrectionTarget(row);
+    // Pre-fill the date being reviewed - the admin only has to pick the time.
+    setCorrectionTime(`${dateStr}T18:00`);
+    setCorrectionNote("");
+  }
+
+  async function handleRecordCheckout() {
+    if (!correctionTarget || !correctionTime) return;
+    try {
+      await recordAttendanceCorrection(correctionTarget.employeeId, {
+        occurredAt: new Date(correctionTime).toISOString(),
+        note: correctionNote.trim() || undefined,
+      });
+      toast.success(`Check-out recorded for ${correctionTarget.firstName} ${correctionTarget.lastName}`);
+      setCorrectionTarget(null);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't record the check-out.");
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1 rounded-lg border p-1">
+          <Button size="sm" variant={filter === "all" ? "default" : "ghost"} onClick={() => setFilter("all")}>
+            All
+          </Button>
+          <Button
+            size="sm"
+            variant={filter === "missing" ? "default" : "ghost"}
+            onClick={() => setFilter("missing")}
+          >
+            Missing checkout
+            {missingCheckoutRows.length > 0 && ` (${missingCheckoutRows.length})`}
+          </Button>
+        </div>
         <DatePicker value={date} onChange={(d) => d && setDate(d)} />
       </div>
 
@@ -278,12 +328,16 @@ function TeamRosterView({
             onRetry={refetch}
             loadingFallback={<TableSkeleton rows={8} columns={5} />}
           >
-            {rows.length === 0 ? (
-              <EmptyState icon={Clock} title="No active employees" />
+            {visibleRows.length === 0 ? (
+              <EmptyState
+                icon={filter === "missing" ? CheckCircle2 : Clock}
+                title={filter === "missing" ? "Nobody is missing a checkout" : "No active employees"}
+              />
             ) : (
               <ul className="divide-y">
-                {rows.map((r) => {
+                {visibleRows.map((r) => {
                   const employee = employees.find((e) => e.id === r.employeeId);
+                  const missingCheckout = !!r.firstCheckInAt && !r.lastCheckOutAt;
                   return (
                     <li key={r.employeeId} className="flex items-center gap-3 py-3">
                       <button
@@ -311,6 +365,17 @@ function TeamRosterView({
                         {r.workedMinutes != null && ` · ${(r.workedMinutes / 60).toFixed(1)}h`}
                       </div>
                       <StatusBadge status={titleCase(r.status)} className="shrink-0" />
+                      {missingCheckout && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Record check-out time"
+                          className="shrink-0"
+                          onClick={() => openCorrection(r)}
+                        >
+                          <AlarmClock className="size-3.5" />
+                        </Button>
+                      )}
                     </li>
                   );
                 })}
@@ -319,6 +384,42 @@ function TeamRosterView({
           </AsyncSection>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!correctionTarget}
+        onOpenChange={(open) => !open && setCorrectionTarget(null)}
+        title="Record check-out time"
+        description={
+          correctionTarget
+            ? `${correctionTarget.firstName} ${correctionTarget.lastName} checked in at ${correctionTarget.firstCheckInAt ? formatTime(correctionTarget.firstCheckInAt) : "—"} on ${formatDate(dateStr, { weekday: "short", day: "numeric", month: "short" })} with no check-out recorded. Enter the actual time they left.`
+            : ""
+        }
+        confirmLabel="Save"
+        confirmDisabled={!correctionTime}
+        onConfirm={handleRecordCheckout}
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="correction-time">Check-out time</Label>
+            <Input
+              id="correction-time"
+              type="datetime-local"
+              value={correctionTime}
+              onChange={(e) => setCorrectionTime(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="correction-note">Note (optional)</Label>
+            <Textarea
+              id="correction-note"
+              rows={2}
+              placeholder="e.g. confirmed with employee"
+              value={correctionNote}
+              onChange={(e) => setCorrectionNote(e.target.value)}
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator.js';
 import type { AuthContext } from '../common/auth-context.js';
 import { AttendanceService } from './attendance.service.js';
+import { MissingCheckoutReminderService } from './missing-checkout-reminder.service.js';
 import { GetHistoryQueryDto } from './dto/get-history-query.dto.js';
 import { RecordCorrectionDto } from './dto/record-correction.dto.js';
 import { PunchLocationDto } from './dto/punch-location.dto.js';
@@ -17,7 +18,10 @@ function requestMeta(request: Request): {
 
 @Controller('attendance')
 export class AttendanceController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(
+    private readonly attendanceService: AttendanceService,
+    private readonly missingCheckoutReminderService: MissingCheckoutReminderService,
+  ) {}
 
   @Post('check-in')
   checkIn(
@@ -81,5 +85,12 @@ export class AttendanceController {
     @CurrentUser() actor: AuthContext,
   ) {
     return this.attendanceService.recordCorrection(employeeId, dto, actor);
+  }
+
+  /** Sends a [TEST]-labelled preview to the caller — see MissingCheckoutReminderService.sendTest. */
+  @Post('missing-checkout-reminders/test')
+  @RequirePermissions('attendance:manage')
+  sendMissingCheckoutReminderTest(@CurrentUser() actor: AuthContext) {
+    return this.missingCheckoutReminderService.sendTest(actor.userId);
   }
 }

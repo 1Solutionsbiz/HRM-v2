@@ -102,3 +102,14 @@ export function getEmployeeAttendanceHistory(
   const qs = search.toString();
   return apiFetch<AttendanceHistoryDay[]>(`/attendance/employees/${employeeId}/history${qs ? `?${qs}` : ""}`);
 }
+
+/** HR/admin manual correction — today only supports backfilling a missing check-out (see AttendanceService.recordCorrection). */
+export function recordAttendanceCorrection(
+  employeeId: string,
+  input: { occurredAt: string; note?: string },
+): Promise<TodayAttendance> {
+  return apiFetch<TodayAttendance>(`/attendance/employees/${employeeId}/corrections`, {
+    method: "POST",
+    body: { type: "CHECK_OUT", occurredAt: input.occurredAt, note: input.note },
+  });
+}
