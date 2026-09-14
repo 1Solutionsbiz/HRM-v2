@@ -35,6 +35,26 @@ export function useAttendancePunch() {
     load();
   }, [load]);
 
+  // Refetch whenever the app comes back to the foreground - without this,
+  // a PWA left open overnight (backgrounded, not closed) keeps showing
+  // yesterday's punch state after midnight, since nothing ever re-fetches
+  // on its own. Caught live: "checked out 6:15 PM" still showing at
+  // 12:39 PM the next day, with no button to check in for the new day,
+  // because the stale state matched neither NOT_CHECKED_IN nor
+  // CHECKED_IN. Both listeners, not just one - visibilitychange doesn't
+  // reliably fire in every mobile PWA context, focus does.
+  React.useEffect(() => {
+    function onForeground() {
+      if (document.visibilityState === "visible") load();
+    }
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", load);
+    return () => {
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", load);
+    };
+  }, [load]);
+
   React.useEffect(() => {
     if (attendance?.punchState !== "CHECKED_IN") return;
     const id = setInterval(() => setNow(Date.now()), 30_000);

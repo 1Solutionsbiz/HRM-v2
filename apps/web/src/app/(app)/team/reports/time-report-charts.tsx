@@ -1,12 +1,10 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart";
 import { formatDateShort, formatMinutes } from "@/lib/format";
@@ -21,27 +19,33 @@ const ENTITY_COLORS = [
   "var(--chart-5)",
 ];
 
-function buildBreakdownConfig(data: TimeReportBucket[]): ChartConfig {
+function withColorAndPercent(data: TimeReportBucket[]) {
+  const total = data.reduce((sum, b) => sum + b.minutes, 0);
+  return data.map((b, i) => ({
+    key: b.key,
+    label: b.label,
+    minutes: b.minutes,
+    percent: total > 0 ? Math.round((b.minutes / total) * 100) : 0,
+    fill: ENTITY_COLORS[i % ENTITY_COLORS.length],
+  }));
+}
+
+function buildBreakdownConfig(data: ReturnType<typeof withColorAndPercent>): ChartConfig {
   const config: ChartConfig = {};
-  data.forEach((b, i) => {
-    config[b.key] = { label: b.label, color: ENTITY_COLORS[i % ENTITY_COLORS.length] };
+  data.forEach((d) => {
+    config[d.key] = { label: d.label, color: d.fill };
   });
   return config;
 }
 
-/** Horizontal bar, one row per project (by-employee mode) or per person (by-project mode) - each bar its own color from the design system's chart palette. */
+/** Horizontal bar, one row per project (by-employee mode) or per person (by-project mode) - each bar its own color, with a "name · X%" label at the end. */
 export function TimeBreakdownChart({ data }: { data: TimeReportBucket[] }) {
-  const chartData = data.map((b, i) => ({
-    key: b.key,
-    label: b.label,
-    minutes: b.minutes,
-    fill: ENTITY_COLORS[i % ENTITY_COLORS.length],
-  }));
+  const chartData = withColorAndPercent(data);
   const height = Math.max(160, chartData.length * 36 + 40);
 
   return (
-    <ChartContainer config={buildBreakdownConfig(data)} className="aspect-auto w-full" style={{ height }}>
-      <BarChart data={chartData} layout="vertical" margin={{ left: 16 }}>
+    <ChartContainer config={buildBreakdownConfig(chartData)} className="aspect-auto w-full" style={{ height }}>
+      <BarChart data={chartData} layout="vertical" margin={{ left: 16, right: 44 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" />
         <XAxis type="number" tickLine={false} axisLine={false} hide />
         <YAxis
@@ -57,33 +61,50 @@ export function TimeBreakdownChart({ data }: { data: TimeReportBucket[] }) {
           {chartData.map((d) => (
             <Cell key={d.key} fill={d.fill} />
           ))}
+          <LabelList
+            dataKey="percent"
+            position="right"
+            className="fill-foreground text-xs"
+            formatter={(value: unknown) => (value == null ? "" : `${String(value)}%`)}
+          />
         </Bar>
       </BarChart>
     </ChartContainer>
   );
 }
 
-/** Same data as TimeBreakdownChart, as a pie instead - same per-entity colors, with a legend since color now carries identity. */
+/** Same data as TimeBreakdownChart, as a pie instead - same per-entity colors, with a "name · X%" legend below (built manually rather than recharts' auto legend, which can't be keyed by this shape). */
 export function TimeBreakdownPieChart({ data }: { data: TimeReportBucket[] }) {
-  const chartData = data.map((b, i) => ({
-    key: b.key,
-    label: b.label,
-    minutes: b.minutes,
-    fill: ENTITY_COLORS[i % ENTITY_COLORS.length],
-  }));
+  const chartData = withColorAndPercent(data);
 
   return (
-    <ChartContainer config={buildBreakdownConfig(data)} className="aspect-auto h-72 w-full">
-      <PieChart>
-        <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatMinutes(Number(value))} />} />
-        <Pie data={chartData} dataKey="minutes" nameKey="label" innerRadius={50} outerRadius={90}>
-          {chartData.map((d) => (
-            <Cell key={d.key} fill={d.fill} />
-          ))}
-        </Pie>
-        <ChartLegend content={<ChartLegendContent nameKey="label" />} />
-      </PieChart>
-    </ChartContainer>
+    <div className="space-y-3">
+      <ChartContainer config={buildBreakdownConfig(chartData)} className="aspect-auto h-64 w-full">
+        <PieChart>
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                formatter={(value, _name, item) => `${formatMinutes(Number(value))} (${item.payload.percent}%)`}
+              />
+            }
+          />
+          <Pie data={chartData} dataKey="minutes" nameKey="label" innerRadius={50} outerRadius={90}>
+            {chartData.map((d) => (
+              <Cell key={d.key} fill={d.fill} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ChartContainer>
+      <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1.5">
+        {chartData.map((d) => (
+          <li key={d.key} className="flex items-center gap-1.5 text-xs">
+            <span className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: d.fill }} />
+            <span className="font-medium">{d.label}</span>
+            <span className="text-muted-foreground">{d.percent}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
