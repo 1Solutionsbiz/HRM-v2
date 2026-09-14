@@ -8,6 +8,8 @@ import {
   ATTENDANCE_BUCKET_TONE,
 } from "@/lib/attendance-status";
 import { StatusBadge } from "@/components/hrm/status-badge";
+import { RaiseTicketDialog } from "@/components/hrm/raise-ticket-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -55,6 +57,24 @@ export function AttendanceDayDetailSheet({ date, record, policy, onOpenChange }:
   const bucket = status ? toAttendanceBucket(status) : null;
   const worked = hoursLabel(record?.workedMinutes);
   const hasPunches = !!(record?.firstCheckInAt || record?.lastCheckOutAt);
+
+  // A day worth flagging to HR: either no punch was recorded at all on a
+  // day that should have one, or one side of the punch (usually the
+  // checkout) is missing - never on a weekend/holiday/leave day, where
+  // there's genuinely nothing to report.
+  const missingPunch =
+    bucket !== null &&
+    bucket !== "WEEKEND" &&
+    bucket !== "HOLIDAY" &&
+    bucket !== "LEAVE" &&
+    (bucket === "ABSENT" || (hasPunches && (!record?.firstCheckInAt || !record?.lastCheckOutAt)));
+
+  const formattedDate = formatDate(date, { day: "numeric", month: "short", year: "numeric" });
+  const missingWhat = !record?.firstCheckInAt && !record?.lastCheckOutAt
+    ? "no check-in or check-out was recorded"
+    : !record?.firstCheckInAt
+      ? "the check-in wasn't recorded"
+      : "the check-out wasn't recorded";
 
   return (
     <Sheet open onOpenChange={onOpenChange}>
@@ -106,6 +126,22 @@ export function AttendanceDayDetailSheet({ date, record, policy, onOpenChange }:
 
           {!record && (
             <p className="text-muted-foreground text-sm">No attendance record exists for this day.</p>
+          )}
+
+          {missingPunch && (
+            <RaiseTicketDialog
+              onCreated={() => {}}
+              initial={{
+                category: "MISPUNCH",
+                title: `Mispunch on ${formattedDate}`,
+                description: `On ${formattedDate}, ${missingWhat}. Please correct my attendance for this day.`,
+              }}
+              trigger={
+                <Button variant="outline" size="sm" className="w-full">
+                  Report this to HR
+                </Button>
+              }
+            />
           )}
         </div>
       </SheetContent>

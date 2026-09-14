@@ -38,21 +38,23 @@ const PRIORITY_OPTIONS = Object.entries(TICKET_PRIORITY_LABEL) as [TicketPriorit
 interface RaiseTicketDialogProps {
   onCreated: () => void;
   trigger: React.ReactNode;
+  /** Pre-fills the form, e.g. for a shortcut from a specific attendance day - still fully editable before submitting. */
+  initial?: { category?: TicketCategory; title?: string; description?: string };
 }
 
-export function RaiseTicketDialog({ onCreated, trigger }: RaiseTicketDialogProps) {
+export function RaiseTicketDialog({ onCreated, trigger, initial }: RaiseTicketDialogProps) {
   const [open, setOpen] = React.useState(false);
-  const [category, setCategory] = React.useState<TicketCategory | "">("");
-  const [title, setTitle] = React.useState("");
-  const [description, setDescription] = React.useState("");
+  const [category, setCategory] = React.useState<TicketCategory | "">(initial?.category ?? "");
+  const [title, setTitle] = React.useState(initial?.title ?? "");
+  const [description, setDescription] = React.useState(initial?.description ?? "");
   const [priority, setPriority] = React.useState<TicketPriority>("MEDIUM");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   function reset() {
-    setCategory("");
-    setTitle("");
-    setDescription("");
+    setCategory(initial?.category ?? "");
+    setTitle(initial?.title ?? "");
+    setDescription(initial?.description ?? "");
     setPriority("MEDIUM");
     setError(null);
   }
