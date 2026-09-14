@@ -10,6 +10,7 @@ import {
   getCompanyAttendance,
   getEmployeeAttendanceHistory,
   recordAttendanceCorrection,
+  sendMissingCheckoutReminderTest,
   type AttendanceHistoryDay,
   type CompanyAttendanceRow,
 } from "@/lib/api/attendance";
@@ -209,6 +210,21 @@ function TeamRosterView({
   const [correctionTarget, setCorrectionTarget] = React.useState<CompanyAttendanceRow | null>(null);
   const [correctionTime, setCorrectionTime] = React.useState("");
   const [correctionNote, setCorrectionNote] = React.useState("");
+  const [sendingTestReminder, setSendingTestReminder] = React.useState(false);
+
+  async function handleSendTestReminder() {
+    setSendingTestReminder(true);
+    try {
+      const result = await sendMissingCheckoutReminderTest();
+      toast.success(
+        `Test reminder sent to you. ${result.missingCheckoutCount} employee(s) currently have a missing checkout.`,
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send the test reminder.");
+    } finally {
+      setSendingTestReminder(false);
+    }
+  }
 
   function openCorrection(row: CompanyAttendanceRow) {
     setCorrectionTarget(row);
@@ -248,7 +264,12 @@ function TeamRosterView({
             {missingCheckoutRows.length > 0 && ` (${missingCheckoutRows.length})`}
           </Button>
         </div>
-        <DatePicker value={date} onChange={(d) => d && setDate(d)} />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleSendTestReminder} disabled={sendingTestReminder}>
+            {sendingTestReminder ? "Sending…" : "Send test reminder"}
+          </Button>
+          <DatePicker value={date} onChange={(d) => d && setDate(d)} />
+        </div>
       </div>
 
       <AsyncSection

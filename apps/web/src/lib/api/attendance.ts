@@ -113,3 +113,10 @@ export function recordAttendanceCorrection(
     body: { type: "CHECK_OUT", occurredAt: input.occurredAt, note: input.note },
   });
 }
+
+/** Sends a [TEST]-labelled preview of the missing-checkout reminder to the caller only — never the real employees. See MissingCheckoutReminderService.sendTest. */
+export function sendMissingCheckoutReminderTest(): Promise<{ missingCheckoutCount: number }> {
+  return apiFetch<{ missingCheckoutCount: number }>("/attendance/missing-checkout-reminders/test", {
+    method: "POST",
+  });
+}
