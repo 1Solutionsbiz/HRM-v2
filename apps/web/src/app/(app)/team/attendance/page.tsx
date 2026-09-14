@@ -264,8 +264,14 @@ function TeamRosterView({
             {missingCheckoutRows.length > 0 && ` (${missingCheckoutRows.length})`}
           </Button>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleSendTestReminder} disabled={sendingTestReminder}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSendTestReminder}
+            disabled={sendingTestReminder}
+            className="w-full sm:w-auto"
+          >
             {sendingTestReminder ? "Sending…" : "Send test reminder"}
           </Button>
           <DatePicker value={date} onChange={(d) => d && setDate(d)} />
