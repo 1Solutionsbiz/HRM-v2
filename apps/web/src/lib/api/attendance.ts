@@ -103,14 +103,23 @@ export function getEmployeeAttendanceHistory(
   return apiFetch<AttendanceHistoryDay[]>(`/attendance/employees/${employeeId}/history${qs ? `?${qs}` : ""}`);
 }
 
-/** HR/admin manual correction — today only supports backfilling a missing check-out (see AttendanceService.recordCorrection). */
+export type AttendanceCorrectionType = "CHECK_IN" | "CHECK_OUT" | "BREAK_START" | "BREAK_END";
+
+/**
+ * HR/admin manual correction. Adds a new event that supersedes the
+ * existing one of the same type for that day (by insertion order, not by
+ * occurredAt) — see AttendanceService.recordCorrection/recomputeDay. The
+ * response is a raw AttendanceDay row, not the `today`-shaped object this
+ * used to be typed as, so callers should refetch the roster/history rather
+ * than merge the response.
+ */
 export function recordAttendanceCorrection(
   employeeId: string,
-  input: { occurredAt: string; note?: string },
-): Promise<TodayAttendance> {
-  return apiFetch<TodayAttendance>(`/attendance/employees/${employeeId}/corrections`, {
+  input: { type: AttendanceCorrectionType; occurredAt: string; note?: string },
+): Promise<unknown> {
+  return apiFetch<unknown>(`/attendance/employees/${employeeId}/corrections`, {
     method: "POST",
-    body: { type: "CHECK_OUT", occurredAt: input.occurredAt, note: input.note },
+    body: { type: input.type, occurredAt: input.occurredAt, note: input.note },
   });
 }
 

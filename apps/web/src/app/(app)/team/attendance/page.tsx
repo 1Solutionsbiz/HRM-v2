@@ -3,13 +3,12 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { AlarmClock, Calendar as CalendarIcon, CheckCircle2, Clock, UserX, X } from "lucide-react";
+import { AlarmClock, Calendar as CalendarIcon, CheckCircle2, Clock, Pencil, UserX, X } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
   getCompanyAttendance,
   getEmployeeAttendanceHistory,
-  recordAttendanceCorrection,
   sendMissingCheckoutReminderTest,
   type AttendanceHistoryDay,
   type CompanyAttendanceRow,
@@ -23,16 +22,16 @@ import { StatusBadge } from "@/components/hrm/status-badge";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmptyState } from "@/components/hrm/empty-state";
 import { EmployeePicker } from "@/components/hrm/employee-picker";
-import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
+import {
+  AttendanceCorrectionDialog,
+  type AttendanceCorrectionTarget,
+} from "@/components/hrm/attendance-correction-dialog";
 import { StatGridSkeleton, TableSkeleton } from "@/components/hrm/loading-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -47,6 +46,8 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
     () => getEmployeeAttendanceHistory(employee.id, { from, to }),
     [employee.id, from, to],
   );
+
+  const [editTarget, setEditTarget] = React.useState<AttendanceCorrectionTarget | null>(null);
 
   const columns: ColumnDef<AttendanceHistoryDay>[] = [
     {
@@ -74,6 +75,29 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => <StatusBadge status={titleCase(row.original.status)} />,
+    },
+    {
+      id: "edit",
+      header: "",
+      cell: ({ row }) => (
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label="Edit attendance"
+          onClick={() =>
+            setEditTarget({
+              employeeId: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              date: row.original.date,
+              firstCheckInAt: row.original.firstCheckInAt,
+              lastCheckOutAt: row.original.lastCheckOutAt,
+            })
+          }
+        >
+          <Pencil className="size-3.5" />
+        </Button>
+      ),
     },
   ];
 
@@ -182,6 +206,16 @@ function EmployeeHistoryView({ employee, onClear }: { employee: EmployeeListItem
           </AsyncSection>
         </CardContent>
       </Card>
+
+      <AttendanceCorrectionDialog
+        key={editTarget ? `${editTarget.employeeId}-${editTarget.date}` : "none"}
+        target={editTarget}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+        onSaved={() => {
+          setEditTarget(null);
+          refetch();
+        }}
+      />
     </div>
   );
 }
@@ -207,9 +241,7 @@ function TeamRosterView({
   const missingCheckoutRows = rows.filter((r) => r.firstCheckInAt && !r.lastCheckOutAt);
   const visibleRows = filter === "missing" ? missingCheckoutRows : rows;
 
-  const [correctionTarget, setCorrectionTarget] = React.useState<CompanyAttendanceRow | null>(null);
-  const [correctionTime, setCorrectionTime] = React.useState("");
-  const [correctionNote, setCorrectionNote] = React.useState("");
+  const [editTarget, setEditTarget] = React.useState<AttendanceCorrectionTarget | null>(null);
   const [sendingTestReminder, setSendingTestReminder] = React.useState(false);
 
   async function handleSendTestReminder() {
@@ -226,26 +258,15 @@ function TeamRosterView({
     }
   }
 
-  function openCorrection(row: CompanyAttendanceRow) {
-    setCorrectionTarget(row);
-    // Pre-fill the date being reviewed - the admin only has to pick the time.
-    setCorrectionTime(`${dateStr}T18:00`);
-    setCorrectionNote("");
-  }
-
-  async function handleRecordCheckout() {
-    if (!correctionTarget || !correctionTime) return;
-    try {
-      await recordAttendanceCorrection(correctionTarget.employeeId, {
-        occurredAt: new Date(correctionTime).toISOString(),
-        note: correctionNote.trim() || undefined,
-      });
-      toast.success(`Check-out recorded for ${correctionTarget.firstName} ${correctionTarget.lastName}`);
-      setCorrectionTarget(null);
-      refetch();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't record the check-out.");
-    }
+  function openEdit(row: CompanyAttendanceRow) {
+    setEditTarget({
+      employeeId: row.employeeId,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      date: dateStr,
+      firstCheckInAt: row.firstCheckInAt,
+      lastCheckOutAt: row.lastCheckOutAt,
+    });
   }
 
   return (
@@ -360,17 +381,15 @@ function TeamRosterView({
                         {r.workedMinutes != null && ` · ${(r.workedMinutes / 60).toFixed(1)}h`}
                       </div>
                       <StatusBadge status={titleCase(r.status)} className="shrink-0" />
-                      {missingCheckout && (
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Record check-out time"
-                          className="shrink-0"
-                          onClick={() => openCorrection(r)}
-                        >
-                          <AlarmClock className="size-3.5" />
-                        </Button>
-                      )}
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={missingCheckout ? "Record check-out time" : "Edit attendance"}
+                        className="shrink-0"
+                        onClick={() => openEdit(r)}
+                      >
+                        {missingCheckout ? <AlarmClock className="size-3.5" /> : <Pencil className="size-3.5" />}
+                      </Button>
                     </li>
                   );
                 })}
@@ -380,41 +399,15 @@ function TeamRosterView({
         </CardContent>
       </Card>
 
-      <ConfirmDialog
-        open={!!correctionTarget}
-        onOpenChange={(open) => !open && setCorrectionTarget(null)}
-        title="Record check-out time"
-        description={
-          correctionTarget
-            ? `${correctionTarget.firstName} ${correctionTarget.lastName} checked in at ${correctionTarget.firstCheckInAt ? formatTime(correctionTarget.firstCheckInAt) : "—"} on ${formatDate(dateStr, { weekday: "short", day: "numeric", month: "short" })} with no check-out recorded. Enter the actual time they left.`
-            : ""
-        }
-        confirmLabel="Save"
-        confirmDisabled={!correctionTime}
-        onConfirm={handleRecordCheckout}
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="correction-time">Check-out time</Label>
-            <Input
-              id="correction-time"
-              type="datetime-local"
-              value={correctionTime}
-              onChange={(e) => setCorrectionTime(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="correction-note">Note (optional)</Label>
-            <Textarea
-              id="correction-note"
-              rows={2}
-              placeholder="e.g. confirmed with employee"
-              value={correctionNote}
-              onChange={(e) => setCorrectionNote(e.target.value)}
-            />
-          </div>
-        </div>
-      </ConfirmDialog>
+      <AttendanceCorrectionDialog
+        key={editTarget ? `${editTarget.employeeId}-${editTarget.date}` : "none"}
+        target={editTarget}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+        onSaved={() => {
+          setEditTarget(null);
+          refetch();
+        }}
+      />
     </div>
   );
 }
