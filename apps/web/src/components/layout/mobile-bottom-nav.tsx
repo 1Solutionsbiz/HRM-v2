@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { getMobilePrimaryNav, navGroups } from "@/config/nav-config";
 import { useAuthenticatedUser } from "@/lib/auth-context";
+import { useUnreadAnnouncementsCount } from "@/lib/use-unread-announcements";
 import { toneClasses, cardToneClasses, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import {
@@ -29,6 +30,7 @@ export function MobileBottomNav() {
   const { role } = useAuthenticatedUser();
   const [moreOpen, setMoreOpen] = React.useState(false);
   const mobilePrimaryNav = getMobilePrimaryNav(role);
+  const unreadAnnouncements = useUnreadAnnouncementsCount();
 
   return (
     <nav className="bg-primary border-primary-foreground/10 fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch border-t md:hidden">
@@ -83,10 +85,15 @@ export function MobileBottomNav() {
                           <Link
                             href={item.url}
                             className={cn(
-                              "flex flex-col items-center gap-1.5 rounded-lg p-3 text-center text-xs font-medium",
+                              "relative flex flex-col items-center gap-1.5 rounded-lg p-3 text-center text-xs font-medium",
                               cardToneClasses[tone],
                             )}
                           >
+                            {item.url === "/announcements" && unreadAnnouncements > 0 && (
+                              <span className="bg-destructive text-destructive-foreground absolute top-1 right-1 animate-pulse rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase">
+                                New
+                              </span>
+                            )}
                             <div
                               className={cn(
                                 "flex size-9 items-center justify-center rounded-full",

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navGroups } from "@/config/nav-config";
 import { useAuthenticatedUser } from "@/lib/auth-context";
+import { useUnreadAnnouncementsCount } from "@/lib/use-unread-announcements";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +28,7 @@ export function AppSidebar() {
   // navigating, same as the bottom-nav "More" sheet does via SheetClose.
   const { isMobile, setOpenMobile } = useSidebar();
   const closeOnMobile = () => isMobile && setOpenMobile(false);
+  const unreadAnnouncements = useUnreadAnnouncementsCount();
 
   return (
     <Sidebar collapsible="icon">
@@ -88,6 +90,11 @@ export function AppSidebar() {
                           <Link href={item.url} onClick={closeOnMobile}>
                             <item.icon className={item.color} />
                             <span>{item.title}</span>
+                            {item.url === "/announcements" && unreadAnnouncements > 0 && (
+                              <strong className="text-destructive group-data-[collapsible=icon]:hidden ml-auto animate-pulse text-[10px] font-bold tracking-wide uppercase">
+                                New
+                              </strong>
+                            )}
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
