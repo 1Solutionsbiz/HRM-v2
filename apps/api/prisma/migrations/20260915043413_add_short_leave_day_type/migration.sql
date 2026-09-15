@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `leave_requests` MODIFY `dayType` ENUM('FULL_DAY', 'HALF_DAY', 'SHORT_LEAVE') NOT NULL DEFAULT 'FULL_DAY';

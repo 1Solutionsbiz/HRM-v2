@@ -74,7 +74,7 @@ describe('LeaveService', () => {
   });
 
   describe('getBalancesForUser', () => {
-    it('synthesizes a balance from LeaveType.defaultAnnualDays when no row exists', async () => {
+    it('prepends a synthetic "Monthly" free-budget row, then synthesizes from LeaveType.defaultAnnualDays when no balance row exists', async () => {
       prisma.leaveType.findMany.mockResolvedValue([
         {
           id: 'lt-1',
@@ -84,10 +84,21 @@ describe('LeaveService', () => {
         },
       ]);
       prisma.leaveBalance.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.findMany.mockResolvedValue([]); // nothing committed this month
 
       const result = await service.getBalancesForUser('user-1');
 
       expect(result).toEqual([
+        {
+          leaveTypeId: 'monthly-budget',
+          leaveTypeKey: 'monthly-budget',
+          leaveTypeName: 'Monthly',
+          year: new Date().getFullYear(),
+          allocatedDays: 1,
+          carriedOverDays: 0,
+          usedDays: 0,
+          remainingDays: 1,
+        },
         {
           leaveTypeId: 'lt-1',
           leaveTypeKey: 'casual',
@@ -118,57 +129,60 @@ describe('LeaveService', () => {
           usedDays: decimal(4),
         },
       ]);
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
 
       const result = await service.getBalancesForUser('user-1');
-      expect(result[0]).toMatchObject({
+      expect(result[1]).toMatchObject({
         allocatedDays: 12,
         carriedOverDays: 2,
         usedDays: 4,
         remainingDays: 10,
       });
     });
+
+    it('reflects already-committed requests this month in the Monthly row', async () => {
+      prisma.leaveType.findMany.mockResolvedValue([]);
+      prisma.leaveBalance.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { dayType: 'HALF_DAY' },
+      ]);
+
+      const result = await service.getBalancesForUser('user-1');
+      expect(result[0]).toMatchObject({
+        leaveTypeKey: 'monthly-budget',
+        usedDays: 0.5,
+        remainingDays: 0.5,
+      });
+    });
   });
 
   describe('applyLeave', () => {
     const dto = {
-      leaveTypeId: 'lt-1',
       startDate: '2026-09-14',
       endDate: '2026-09-14',
       reason: 'Family function',
     };
 
     beforeEach(() => {
-      prisma.leaveType.findUnique.mockResolvedValue({
-        id: 'lt-1',
-        key: 'earned',
-        isActive: true,
-        isPaid: true,
-        defaultAnnualDays: decimal(12),
+      prisma.leaveType.findUniqueOrThrow.mockImplementation(({ where }: { where: { key: string } }) => {
+        if (where.key === 'casual-leave-1-day') {
+          return Promise.resolve({ id: 'lt-casual', key: 'casual-leave-1-day', name: 'Casual Leave' });
+        }
+        return Promise.resolve({ id: 'lt-lop', key: 'loss-of-pay', name: 'Loss of Pay' });
+      });
+      prisma.leaveRequest.findMany.mockResolvedValue([]); // nothing committed this month by default
+      prisma.leaveRequest.create.mockResolvedValue({
+        id: 'lr-1',
+        code: 'LV-0042',
+        totalDays: decimal(1),
       });
     });
 
-    it('rejects an inactive or unknown leave type', async () => {
-      prisma.leaveType.findUnique.mockResolvedValue(null);
-      await expect(service.applyLeave('user-1', dto, actor)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('rejects startDate after endDate', async () => {
+    it('rejects a multi-day (non-single-day) request', async () => {
       await expect(
         service.applyLeave(
           'user-1',
-          { ...dto, startDate: '2026-09-20', endDate: '2026-09-10' },
-          actor,
-        ),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('rejects a half-day request spanning more than one date', async () => {
-      await expect(
-        service.applyLeave(
-          'user-1',
-          { ...dto, dayType: 'HALF_DAY', endDate: '2026-09-15' },
+          { ...dto, startDate: '2026-09-14', endDate: '2026-09-15' },
           actor,
         ),
       ).rejects.toThrow(BadRequestException);
@@ -184,152 +198,80 @@ describe('LeaveService', () => {
       );
     });
 
-    it('rejects a request that would exceed the available balance', async () => {
-      prisma.leaveBalance.findUnique.mockResolvedValue(null);
-      prisma.leaveRequest.findMany.mockResolvedValue([
-        { totalDays: decimal(12) },
-      ]); // already fully committed
-      await expect(service.applyLeave('user-1', dto, actor)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    /**
-     * Regression test for a real bug found on production data: a
-     * long-tenured employee's balance check summed EVERY active request
-     * she'd ever made against just the current year's allocation, so her
-     * Casual Leave stayed permanently blocked once her all-time approved
-     * days crossed one year's worth - regardless of how much of the
-     * current year's balance was actually left.
-     */
-    it('only counts the current year\'s committed days against the balance, not the employee\'s full history', async () => {
-      prisma.leaveBalance.findUnique.mockResolvedValue({
-        allocatedDays: decimal(12),
-        carriedOverDays: decimal(0),
-      });
-      prisma.leaveRequest.findMany.mockImplementation(({ where }) => {
-        // Only the year-scoped (current-year) query should see this
-        // employee as having room left; an unscoped query covering her
-        // full history would see far more than the 12-day allocation.
-        if (where.startDate) return Promise.resolve([{ totalDays: decimal(8) }]); // 8 of 12 used this year
-        return Promise.resolve([
-          { totalDays: decimal(15) }, // last year
-          { totalDays: decimal(8) }, // this year
-        ]); // 23 all-time - would wrongly exceed 12 if not year-scoped
-      });
-      prisma.leaveRequest.create.mockResolvedValue({
-        id: 'lr-1',
-        code: 'LV-0042',
-        totalDays: decimal(1),
-      });
-
-      await expect(service.applyLeave('user-1', dto, actor)).resolves.toMatchObject({ code: 'LV-0042' });
-
-      const balanceCheckCall = prisma.leaveRequest.findMany.mock.calls.find(([args]) => args.where.startDate);
-      expect(balanceCheckCall).toBeDefined();
-      const [{ where }] = balanceCheckCall!;
-      expect(where.startDate.gte.getUTCFullYear()).toBe(2026);
-      expect(where.startDate.lt.getUTCFullYear()).toBe(2027);
-    });
-
-    it('creates a request with a generated code on success', async () => {
-      prisma.leaveBalance.findUnique.mockResolvedValue(null);
-      prisma.leaveRequest.create.mockResolvedValue({
-        id: 'lr-1',
-        code: 'LV-0042',
-        totalDays: decimal(1),
-      });
-
+    it('creates a full-day request as Casual Leave (free) when nothing else is committed this month', async () => {
       const result = await service.applyLeave('user-1', dto, actor);
 
       expect(sequenceService.next).toHaveBeenCalledWith('leaveRequestCode');
       expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ code: 'LV-0042', totalDays: 1 }),
+          data: expect.objectContaining({
+            code: 'LV-0042',
+            leaveTypeId: 'lt-casual',
+            dayType: 'FULL_DAY',
+            totalDays: 1,
+          }),
         }),
-      );
-      expect(result.code).toBe('LV-0042');
-    });
-
-    it('auto-converts a Casual Leave request to Loss of Pay past the monthly cap', async () => {
-      prisma.leaveType.findUnique.mockResolvedValue({
-        id: 'lt-casual',
-        key: 'casual-leave-1-day',
-        isActive: true,
-        isPaid: true,
-        defaultAnnualDays: decimal(12),
-      });
-      prisma.leaveType.findUniqueOrThrow.mockResolvedValue({
-        id: 'lt-lop',
-        key: 'loss-of-pay',
-        name: 'Loss of Pay',
-        isPaid: false,
-        defaultAnnualDays: decimal(0),
-      });
-      // Already 1 Casual Leave day committed this month (the monthly cap).
-      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(1) }]);
-      prisma.leaveBalance.findUnique.mockResolvedValue(null);
-      prisma.leaveRequest.create.mockResolvedValue({
-        id: 'lr-1',
-        code: 'LV-0042',
-        totalDays: decimal(1),
-      });
-
-      const result = await service.applyLeave('user-1', dto, actor);
-
-      expect(prisma.leaveType.findUniqueOrThrow).toHaveBeenCalledWith({
-        where: { key: 'loss-of-pay' },
-      });
-      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ leaveTypeId: 'lt-lop' }) }),
-      );
-      expect(result.autoConvertedToLossOfPay).toBe(true);
-    });
-
-    it('keeps a Casual Leave request as-is within the monthly cap', async () => {
-      prisma.leaveType.findUnique.mockResolvedValue({
-        id: 'lt-casual',
-        key: 'casual-leave-1-day',
-        isActive: true,
-        isPaid: true,
-        defaultAnnualDays: decimal(12),
-      });
-      prisma.leaveRequest.findMany.mockResolvedValue([]); // nothing committed yet this month
-      prisma.leaveBalance.findUnique.mockResolvedValue(null);
-      prisma.leaveRequest.create.mockResolvedValue({
-        id: 'lr-1',
-        code: 'LV-0042',
-        totalDays: decimal(1),
-      });
-
-      const result = await service.applyLeave('user-1', dto, actor);
-
-      expect(prisma.leaveType.findUniqueOrThrow).not.toHaveBeenCalled();
-      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ leaveTypeId: 'lt-casual' }) }),
       );
       expect(result.autoConvertedToLossOfPay).toBe(false);
     });
 
-    it('does not cap an unpaid leave type against an annual balance', async () => {
-      prisma.leaveType.findUnique.mockResolvedValue({
-        id: 'lt-lop',
-        key: 'loss-of-pay',
-        isActive: true,
-        isPaid: false,
-        defaultAnnualDays: decimal(0),
-      });
-      prisma.leaveBalance.findUnique.mockResolvedValue(null);
-      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(50) }]); // already "over" a 0-day allocation
-      prisma.leaveRequest.create.mockResolvedValue({
-        id: 'lr-1',
-        code: 'LV-0042',
-        totalDays: decimal(1),
-      });
+    it('assigns Loss of Pay once the monthly free budget is exhausted by an already-committed request', async () => {
+      // A full day already committed this month uses up the entire budget.
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY' },
+      ]);
 
       const result = await service.applyLeave('user-1', dto, actor);
 
-      expect(result.code).toBe('LV-0042');
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ leaveTypeId: 'lt-lop', totalDays: 1 }),
+        }),
+      );
+      expect(result.autoConvertedToLossOfPay).toBe(true);
+    });
+
+    it('a pending (not yet approved) request already counts toward the monthly budget', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-pending', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY' },
+      ]);
+      // The query itself is scoped to PENDING+APPROVED - assert it was called that way.
+      await service.applyLeave('user-1', dto, actor);
+
+      const call = prisma.leaveRequest.findMany.mock.calls[0][0];
+      expect(call.where.status.in).toEqual(['PENDING', 'APPROVED']);
+    });
+
+    it('stores totalDays as the deduction weight for the chosen duration, not the budget weight', async () => {
+      // Exhaust the budget first so this Short Leave request gets charged.
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY' },
+      ]);
+
+      await service.applyLeave('user-1', { ...dto, dayType: 'SHORT_LEAVE' }, actor);
+
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dayType: 'SHORT_LEAVE', totalDays: 0.25 }),
+        }),
+      );
+    });
+
+    it('2 half days in the same month are both free (within the shared budget)', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'HALF_DAY' },
+      ]);
+
+      const result = await service.applyLeave(
+        'user-1',
+        { ...dto, dayType: 'HALF_DAY' },
+        actor,
+      );
+
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ leaveTypeId: 'lt-casual' }) }),
+      );
+      expect(result.autoConvertedToLossOfPay).toBe(false);
     });
   });
 

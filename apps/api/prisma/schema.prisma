@@ -727,6 +727,7 @@ model AttendancePolicy {
 enum LeaveDayType {
   FULL_DAY
   HALF_DAY
+  SHORT_LEAVE
 }
 
 enum HalfDayPeriod {

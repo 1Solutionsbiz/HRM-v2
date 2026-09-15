@@ -16,24 +16,26 @@ import type { Decimal } from '../generated/prisma/internal/prismaNamespace.js';
 import type { ApplyLeaveDto } from './dto/apply-leave.dto.js';
 import type { DecideLeaveRequestDto } from './dto/decide-leave-request.dto.js';
 import type { RevokeLeaveRequestDto } from './dto/revoke-leave-request.dto.js';
+import {
+  BUDGET_WEIGHT,
+  DEDUCTION_TOTAL_DAYS,
+  MONTHLY_FREE_BUDGET,
+  classifyByMonthlyBudget,
+} from './leave-budget.util.js';
 
 const ACTIVE_REQUEST_STATUSES = ['PENDING', 'APPROVED'] as const;
 
-// Company policy (verbal, 2026-09-09 — not yet its own schema field): only
-// 1 Casual Leave day is drawn from balance per calendar month, and it does
-// not carry forward. A request that would exceed that in a given month is
-// recorded as Loss of Pay instead, not rejected — see applyLeave's handling
-// below. Scoped to this one leave type; every other type keeps the existing
-// annual-balance check untouched.
+// Company policy (2026-09-15, not yet its own schema field): every leave
+// request is single-day, chosen by duration (Full/Half/Short) rather than
+// a picked type. Each calendar month gives 1 free full-day-equivalent,
+// consumed at BUDGET_WEIGHT per duration; once that's exhausted the new
+// request is auto-recorded as Loss of Pay instead of the free type
+// (Casual Leave), charged at DEDUCTION_TOTAL_DAYS - see leave-budget.util.ts
+// for why that's a deliberately different fraction than BUDGET_WEIGHT for
+// Short Leave. Supersedes the older Casual-Leave-only monthly cap this
+// generalizes from.
 const CASUAL_LEAVE_KEY = 'casual-leave-1-day';
-const CASUAL_LEAVE_MONTHLY_CAP_DAYS = 1;
 const LOSS_OF_PAY_KEY = 'loss-of-pay';
-
-function daysBetweenInclusive(start: Date, end: Date): number {
-  return (
-    Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-  );
-}
 
 @Injectable()
 export class LeaveService {
@@ -65,11 +67,15 @@ export class LeaveService {
   async getBalancesForEmployee(employeeId: string) {
     const year = new Date().getFullYear();
 
-    const [leaveTypes, balances] = await Promise.all([
+    const [leaveTypes, balances, committedThisMonth] = await Promise.all([
       this.prisma.leaveType.findMany({ where: { isActive: true } }),
       this.prisma.leaveBalance.findMany({ where: { employeeId, year } }),
+      this.getCurrentMonthCommittedBudget(employeeId),
     ]);
-    return this.toBalanceRows(leaveTypes, balances, year);
+    return [
+      this.buildMonthlyBudgetRow(committedThisMonth),
+      ...this.toBalanceRows(leaveTypes, balances, year),
+    ];
   }
 
   /**
@@ -108,6 +114,10 @@ export class LeaveService {
       balancesByEmployee.set(balance.employeeId, list);
     }
 
+    const committedByEmployee = await this.getCurrentMonthCommittedBudgetByEmployee(
+      employees.map((e) => e.id),
+    );
+
     return employees.map((employee) => ({
       employeeId: employee.id,
       employeeCode: employee.employeeCode,
@@ -116,11 +126,14 @@ export class LeaveService {
       avatarUrl: employee.avatarUrl,
       department: employee.department,
       designation: employee.designation,
-      balances: this.toBalanceRows(
-        leaveTypes,
-        balancesByEmployee.get(employee.id) ?? [],
-        year,
-      ),
+      balances: [
+        this.buildMonthlyBudgetRow(committedByEmployee.get(employee.id) ?? 0),
+        ...this.toBalanceRows(
+          leaveTypes,
+          balancesByEmployee.get(employee.id) ?? [],
+          year,
+        ),
+      ],
     }));
   }
 
@@ -139,7 +152,7 @@ export class LeaveService {
     const yearStart = new Date(Date.UTC(year, 0, 1));
     const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
 
-    const [leaveTypes, balances, requests] = await Promise.all([
+    const [leaveTypes, balances, requests, committedThisMonth] = await Promise.all([
       this.prisma.leaveType.findMany({ where: { isActive: true } }),
       this.prisma.leaveBalance.findMany({ where: { employeeId, year } }),
       this.prisma.leaveRequest.findMany({
@@ -150,6 +163,7 @@ export class LeaveService {
         },
         orderBy: { startDate: 'asc' },
       }),
+      this.getCurrentMonthCommittedBudget(employeeId),
     ]);
 
     const balanceRows = this.toBalanceRows(leaveTypes, balances, year);
@@ -163,7 +177,7 @@ export class LeaveService {
     const now = new Date();
     const lastMonth = year === now.getUTCFullYear() ? now.getUTCMonth() + 1 : 12;
 
-    return balanceRows.map((row) => {
+    const typeMonthRows = balanceRows.map((row) => {
       const typeRequests = requestsByType.get(row.leaveTypeId) ?? [];
       const totalDays = row.allocatedDays + row.carriedOverDays;
       let cumulativeUsed = 0;
@@ -200,6 +214,97 @@ export class LeaveService {
 
       return { ...row, months };
     });
+
+    // The Monthly free-budget row resets every month by construction - each
+    // month's requests are summed independently via BUDGET_WEIGHT (not
+    // cumulatively across the year, unlike the per-type rows above).
+    const monthlyBudgetMonths = Array.from({ length: lastMonth }, (_, i) => {
+      const month = i + 1;
+      const monthRequests = requests.filter(
+        (r) => r.startDate.getUTCMonth() + 1 === month,
+      );
+      let cumulativeBudget = 0;
+      const requestsWithBalance = monthRequests.map((r) => {
+        cumulativeBudget += BUDGET_WEIGHT[r.dayType];
+        return {
+          id: r.id,
+          startDate: r.startDate,
+          endDate: r.endDate,
+          totalDays: r.totalDays.toNumber(),
+          reason: r.reason,
+          dayType: r.dayType,
+          balanceAfter: MONTHLY_FREE_BUDGET - cumulativeBudget,
+        };
+      });
+      return {
+        month,
+        leavesTaken: requestsWithBalance.reduce((sum, r) => sum + r.totalDays, 0),
+        balance: MONTHLY_FREE_BUDGET - cumulativeBudget,
+        requests: requestsWithBalance,
+      };
+    });
+    const monthlyBudgetRow = {
+      ...this.buildMonthlyBudgetRow(committedThisMonth),
+      months: monthlyBudgetMonths,
+    };
+
+    return [monthlyBudgetRow, ...typeMonthRows];
+  }
+
+  /**
+   * A synthetic balance row for the monthly free-leave budget - not backed
+   * by any LeaveType/LeaveBalance row. `committedThisMonth` is the sum of
+   * BUDGET_WEIGHT over this employee's PENDING+APPROVED requests in the
+   * current calendar month (see getCurrentMonthCommittedBudget).
+   */
+  private buildMonthlyBudgetRow(committedThisMonth: number) {
+    return {
+      leaveTypeId: 'monthly-budget',
+      leaveTypeKey: 'monthly-budget',
+      leaveTypeName: 'Monthly',
+      year: new Date().getFullYear(),
+      allocatedDays: MONTHLY_FREE_BUDGET,
+      carriedOverDays: 0,
+      usedDays: committedThisMonth,
+      remainingDays: Math.max(0, MONTHLY_FREE_BUDGET - committedThisMonth),
+    };
+  }
+
+  private async getCurrentMonthCommittedBudget(employeeId: string): Promise<number> {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        employeeId,
+        status: { in: [...ACTIVE_REQUEST_STATUSES] },
+        startDate: { gte: monthStart, lte: monthEnd },
+      },
+      select: { dayType: true },
+    });
+    return requests.reduce((sum, r) => sum + BUDGET_WEIGHT[r.dayType], 0);
+  }
+
+  /** Batched version of getCurrentMonthCommittedBudget for a whole roster - one query instead of N. */
+  private async getCurrentMonthCommittedBudgetByEmployee(
+    employeeIds: string[],
+  ): Promise<Map<string, number>> {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        status: { in: [...ACTIVE_REQUEST_STATUSES] },
+        startDate: { gte: monthStart, lte: monthEnd },
+      },
+      select: { employeeId: true, dayType: true },
+    });
+    const byEmployee = new Map<string, number>();
+    for (const r of requests) {
+      byEmployee.set(r.employeeId, (byEmployee.get(r.employeeId) ?? 0) + BUDGET_WEIGHT[r.dayType]);
+    }
+    return byEmployee;
   }
 
   // A LeaveBalance row is only created for real on first approval (see
@@ -253,59 +358,45 @@ export class LeaveService {
   async applyLeave(userId: string, dto: ApplyLeaveDto, actor: AuthContext) {
     const employeeId = await this.requireEmployeeId(userId);
 
-    const leaveType = await this.prisma.leaveType.findUnique({
-      where: { id: dto.leaveTypeId },
-    });
-    if (!leaveType || !leaveType.isActive) {
-      throw new BadRequestException(
-        'leaveTypeId does not reference an active leave type',
-      );
-    }
-
     const startDate = parseDateOnly(dto.startDate);
     const endDate = parseDateOnly(dto.endDate);
-    if (startDate > endDate)
-      throw new BadRequestException('startDate must not be after endDate');
-
-    const dayType = dto.dayType ?? LeaveDayType.FULL_DAY;
-    if (
-      dayType === LeaveDayType.HALF_DAY &&
-      startDate.getTime() !== endDate.getTime()
-    ) {
-      throw new BadRequestException(
-        'A half-day leave request must have the same startDate and endDate',
-      );
+    if (startDate.getTime() !== endDate.getTime()) {
+      throw new BadRequestException('Leave requests are single-day only');
     }
-    const totalDays =
-      dayType === LeaveDayType.HALF_DAY
-        ? 0.5
-        : daysBetweenInclusive(startDate, endDate);
+    const dayType = dto.dayType ?? LeaveDayType.FULL_DAY;
 
     await this.assertNoOverlap(employeeId, startDate, endDate);
 
-    let effectiveLeaveType = leaveType;
-    let autoConvertedToLossOfPay = false;
-    if (leaveType.key === CASUAL_LEAVE_KEY) {
-      const monthCommittedDays = await this.getCommittedCasualLeaveDaysInMonth(
-        employeeId,
-        leaveType.id,
-        startDate.getFullYear(),
-        startDate.getMonth(),
-      );
-      if (monthCommittedDays + totalDays > CASUAL_LEAVE_MONTHLY_CAP_DAYS) {
-        effectiveLeaveType = await this.prisma.leaveType.findUniqueOrThrow({
-          where: { key: LOSS_OF_PAY_KEY },
-        });
-        autoConvertedToLossOfPay = true;
-      }
-    }
-
-    await this.assertWithinBalance(
-      employeeId,
-      effectiveLeaveType,
-      startDate.getFullYear(),
-      totalDays,
+    const monthStart = new Date(
+      Date.UTC(startDate.getFullYear(), startDate.getMonth(), 1),
     );
+    const monthEnd = new Date(
+      Date.UTC(startDate.getFullYear(), startDate.getMonth() + 1, 0),
+    );
+    const existingThisMonth = await this.prisma.leaveRequest.findMany({
+      where: {
+        employeeId,
+        status: { in: [...ACTIVE_REQUEST_STATUSES] },
+        startDate: { gte: monthStart, lte: monthEnd },
+      },
+      select: { id: true, startDate: true, dayType: true },
+    });
+    const classification = classifyByMonthlyBudget([
+      ...existingThisMonth.map((r) => ({
+        key: r.id,
+        startDate: r.startDate,
+        dayType: r.dayType,
+      })),
+      { key: 'NEW', startDate, dayType },
+    ]);
+    const isFree = classification.get('NEW')!;
+
+    const [casualLeaveType, lossOfPayType] = await Promise.all([
+      this.prisma.leaveType.findUniqueOrThrow({ where: { key: CASUAL_LEAVE_KEY } }),
+      this.prisma.leaveType.findUniqueOrThrow({ where: { key: LOSS_OF_PAY_KEY } }),
+    ]);
+    const effectiveLeaveType = isFree ? casualLeaveType : lossOfPayType;
+    const totalDays = DEDUCTION_TOTAL_DAYS[dayType];
 
     const sequence = await this.sequenceService.next('leaveRequestCode');
     const code = `LV-${String(sequence).padStart(4, '0')}`;
@@ -330,33 +421,15 @@ export class LeaveService {
       actorEmail: actor.email,
       targetType: 'LeaveRequest',
       targetId: request.id,
-      description: autoConvertedToLossOfPay
-        ? `Applied for ${leaveType.name}: ${dto.startDate} to ${dto.endDate} (${totalDays} day(s)) — recorded as ${effectiveLeaveType.name} instead, exceeds the 1-day/month Casual Leave allowance`
-        : `Applied for ${leaveType.name}: ${dto.startDate} to ${dto.endDate} (${totalDays} day(s))`,
+      description: isFree
+        ? `Applied for ${dayType} leave on ${dto.startDate} — within the monthly free allowance, recorded as ${effectiveLeaveType.name}`
+        : `Applied for ${dayType} leave on ${dto.startDate} — exceeds the monthly free allowance, recorded as ${effectiveLeaveType.name} (${totalDays} day(s) deducted)`,
     });
 
-    return { ...this.serializeRequest(request), autoConvertedToLossOfPay };
-  }
-
-  /** Sums PENDING/APPROVED Casual Leave days for this employee within one calendar month — the monthly-cap check's input. */
-  private async getCommittedCasualLeaveDaysInMonth(
-    employeeId: string,
-    leaveTypeId: string,
-    year: number,
-    monthIndex: number,
-  ): Promise<number> {
-    const monthStart = new Date(Date.UTC(year, monthIndex, 1));
-    const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 0));
-    const requests = await this.prisma.leaveRequest.findMany({
-      where: {
-        employeeId,
-        leaveTypeId,
-        status: { in: [...ACTIVE_REQUEST_STATUSES] },
-        startDate: { lte: monthEnd },
-        endDate: { gte: monthStart },
-      },
-    });
-    return requests.reduce((sum, r) => sum + r.totalDays.toNumber(), 0);
+    return {
+      ...this.serializeRequest(request),
+      autoConvertedToLossOfPay: !isFree,
+    };
   }
 
   /**
@@ -695,80 +768,6 @@ export class LeaveService {
     if (overlapping) {
       throw new ConflictException(
         `This overlaps an existing ${overlapping.status.toLowerCase()} leave request`,
-      );
-    }
-  }
-
-  /**
-   * Available = (persisted allocation, or LeaveType.defaultAnnualDays if no
-   * balance row exists yet) minus every PENDING/APPROVED request's days —
-   * computed live from LeaveRequest rows, not from LeaveBalance.usedDays
-   * (which only updates on approval, see recordApprovedUsage). This is
-   * deliberate: it prevents double-booking across multiple pending
-   * requests without needing to reserve/release a counter at submission
-   * time.
-   *
-   * Unpaid leave types (isPaid: false, e.g. Loss of Pay) are exempt — an
-   * unpaid day has no balance to exhaust by definition. Without this,
-   * Loss of Pay's own defaultAnnualDays: 0 made every LOP request
-   * unconditionally fail this check (0 remaining before the first day) -
-   * a pre-existing bug, fixed here since applyLeave's Casual Leave
-   * monthly-cap handling now routes real requests through this type.
-   */
-  private async assertWithinBalance(
-    employeeId: string,
-    leaveType: { id: string; defaultAnnualDays: { toNumber(): number }; isPaid: boolean },
-    year: number,
-    requestedDays: number,
-  ): Promise<void> {
-    if (!leaveType.isPaid) return;
-    // `allocation` below is for one specific year, so the requests summed
-    // against it must be too - otherwise every request this employee has
-    // ever taken counts against a single year's balance, and a
-    // long-tenured employee's Casual Leave locks up permanently the
-    // moment their all-time approved-day count crosses one year's
-    // allocation, even with plenty of the CURRENT year's balance left.
-    // Confirmed as a real, live bug this way (not a guess): checked a
-    // real employee's production data and found exactly this - 23
-    // all-time approved Casual Leave days vs. a 12-day 2026 allocation,
-    // rejecting every new request regardless of her actual 2026 usage
-    // (8 of 12 days). getCommittedCasualLeaveDaysInMonth just below
-    // already scopes its own query by date range - this brings the
-    // year-level check in line with that.
-    const yearStart = new Date(Date.UTC(year, 0, 1));
-    const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
-    const [balance, activeRequests] = await Promise.all([
-      this.prisma.leaveBalance.findUnique({
-        where: {
-          employeeId_leaveTypeId_year: {
-            employeeId,
-            leaveTypeId: leaveType.id,
-            year,
-          },
-        },
-      }),
-      this.prisma.leaveRequest.findMany({
-        where: {
-          employeeId,
-          leaveTypeId: leaveType.id,
-          status: { in: [...ACTIVE_REQUEST_STATUSES] },
-          startDate: { gte: yearStart, lt: yearEnd },
-        },
-      }),
-    ]);
-
-    const allocation = balance
-      ? balance.allocatedDays.toNumber() + balance.carriedOverDays.toNumber()
-      : leaveType.defaultAnnualDays.toNumber();
-    const committedDays = activeRequests.reduce(
-      (sum, request) => sum + request.totalDays.toNumber(),
-      0,
-    );
-
-    if (committedDays + requestedDays > allocation) {
-      const remaining = allocation - committedDays;
-      throw new BadRequestException(
-        `This request exceeds the available balance (${Math.max(0, remaining)} day(s) remaining)`,
       );
     }
   }

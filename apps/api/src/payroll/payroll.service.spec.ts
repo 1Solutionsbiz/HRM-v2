@@ -537,8 +537,11 @@ describe('PayrollService', () => {
       prisma.salaryStructure.findUnique.mockResolvedValue({ currentAmount: decimal(30000) });
     });
 
-    it("nets ₹29,000 for a 30-day month with 2 days' leave taken (1 free, 1 chargeable)", async () => {
-      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(2) }]);
+    it("nets ₹29,000 for a 30-day month with 2 approved full days (1 free, 1 chargeable)", async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-1', startDate: new Date('2026-09-05'), dayType: 'FULL_DAY', totalDays: decimal(1) },
+        { id: 'lr-2', startDate: new Date('2026-09-12'), dayType: 'FULL_DAY', totalDays: decimal(1) },
+      ]);
 
       const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
 
@@ -550,8 +553,11 @@ describe('PayrollService', () => {
       expect(result.totalDeductions).toBe(1000);
     });
 
-    it("nets ₹29,032.26 for a 31-day month with the same 2 days' leave (rate rounded before multiplying)", async () => {
-      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(2) }]);
+    it("nets ₹29,032.26 for a 31-day month with the same 2 full days (rate rounded before multiplying)", async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-1', startDate: new Date('2026-10-05'), dayType: 'FULL_DAY', totalDays: decimal(1) },
+        { id: 'lr-2', startDate: new Date('2026-10-12'), dayType: 'FULL_DAY', totalDays: decimal(1) },
+      ]);
 
       const result = await service.getPayslipCalculationPreview('emp-1', 10, 2026);
 
@@ -560,6 +566,34 @@ describe('PayrollService', () => {
       expect(result.chargeableLeaveDays).toBe(1);
       expect(result.leaveDeductionAmount).toBe(967.74);
       expect(30000 - result.totalDeductions).toBeCloseTo(29032.26, 2);
+    });
+
+    it('3 approved short leaves in a month all fall within the free budget and produce zero deduction', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-1', startDate: new Date('2026-09-02'), dayType: 'SHORT_LEAVE', totalDays: decimal(0.25) },
+        { id: 'lr-2', startDate: new Date('2026-09-09'), dayType: 'SHORT_LEAVE', totalDays: decimal(0.25) },
+        { id: 'lr-3', startDate: new Date('2026-09-16'), dayType: 'SHORT_LEAVE', totalDays: decimal(0.25) },
+      ]);
+
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+
+      expect(result.chargeableLeaveDays).toBe(0);
+      expect(result.leaveDeductionAmount).toBe(0);
+    });
+
+    it('re-derives the budget from dayType over approved rows, independent of what LeaveService stamped as leaveTypeId at apply time', async () => {
+      // Only one APPROVED full-day request this month - the request that
+      // would have exhausted the budget earlier was rejected/cancelled and
+      // never reached APPROVED, so this one must be classified free even if
+      // it happened to be stamped Loss of Pay when it was still pending.
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-1', startDate: new Date('2026-09-20'), dayType: 'FULL_DAY', totalDays: decimal(1) },
+      ]);
+
+      const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
+
+      expect(result.chargeableLeaveDays).toBe(0);
+      expect(result.leaveDeductionAmount).toBe(0);
     });
 
     it('handles a 28-day February', async () => {
@@ -590,7 +624,9 @@ describe('PayrollService', () => {
     });
 
     it('has zero deductions with no lates, no absences, and leave within the free allowance', async () => {
-      prisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: decimal(1) }]);
+      prisma.leaveRequest.findMany.mockResolvedValue([
+        { id: 'lr-1', startDate: new Date('2026-09-05'), dayType: 'FULL_DAY', totalDays: decimal(1) },
+      ]);
       const result = await service.getPayslipCalculationPreview('emp-1', 9, 2026);
       expect(result.totalDeductions).toBe(0);
     });

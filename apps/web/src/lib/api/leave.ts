@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type LeaveDayType = "FULL_DAY" | "HALF_DAY";
+export type LeaveDayType = "FULL_DAY" | "HALF_DAY" | "SHORT_LEAVE";
 export type HalfDayPeriod = "MORNING" | "AFTERNOON";
 export type LeaveRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
@@ -108,7 +108,6 @@ export function getMyLeaveRequests(): Promise<LeaveRequest[]> {
 }
 
 export interface ApplyLeavePayload {
-  leaveTypeId: string;
   startDate: string;
   endDate: string;
   dayType?: LeaveDayType;
@@ -117,7 +116,7 @@ export interface ApplyLeavePayload {
 }
 
 export interface ApplyLeaveResult extends LeaveRequest {
-  /** True when this was submitted as Casual Leave but exceeded the 1-day/month allowance, so it was recorded as Loss of Pay instead. */
+  /** True when this exceeded the monthly free-leave budget, so it was recorded as Loss of Pay (salary deduction) instead of Casual Leave. */
   autoConvertedToLossOfPay: boolean;
 }
 

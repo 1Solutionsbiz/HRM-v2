@@ -34,7 +34,10 @@ export function EmployeeLeaveHistorySheet({
     [employeeId],
   );
 
-  const ledgers = data ?? [];
+  // The "Monthly" row is a different lens on the same requests already
+  // counted under their real type (Casual Leave / Loss of Pay), not a
+  // separate bucket - summing it in here would double-count every request.
+  const ledgers = (data ?? []).filter((l) => l.leaveTypeKey !== "monthly-budget");
   const currentBalance = ledgers.reduce((sum, l) => sum + l.remainingDays, 0);
   const monthCount = Math.max(0, ...ledgers.map((l) => l.months.length));
   const months: LeaveMonthTableMonth[] = Array.from({ length: monthCount }, (_, i) => {

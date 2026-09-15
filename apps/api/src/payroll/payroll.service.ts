@@ -13,6 +13,10 @@ import { sumAmounts } from '../common/money.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { ReviseSalaryDto } from './dto/revise-salary.dto.js';
 import type { CreatePayslipDto } from './dto/create-payslip.dto.js';
+import {
+  DEDUCTION_TOTAL_DAYS,
+  classifyByMonthlyBudget,
+} from '../leave/leave-budget.util.js';
 
 type DecimalLike = { toNumber(): number };
 
@@ -179,17 +183,24 @@ export class PayrollService {
   /**
    * Suggests, never applies, a full deduction breakdown for a period —
    * same "HR reviews every line item" rule as the rest of this module (see
-   * CreatePayslipDto). Policy, stated directly by ops (2026-09-08):
+   * CreatePayslipDto). Policy, stated directly by the user (2026-09-15,
+   * superseding the flat "first 1 day free" rule ops gave 2026-09-08):
    * - Late fine: any day with `lateMinutes > 0` (the grace period itself
    *   lives on `AttendancePolicy.graceMinutes`, currently 5 min — this
    *   method doesn't re-decide lateness, it just counts days already
    *   flagged by attendance recompute) costs a flat ₹100.
-   * - Leave: the first 1 day of APPROVED leave taken in the period is
-   *   free; every day beyond that is deducted at the per-day rate. This is
-   *   a flat monthly allowance independent of the employee's real
-   *   per-leave-type balance (which can separately go negative) —
-   *   deliberately not the same thing, confirmed with ops rather than
-   *   inferred.
+   * - Leave: each calendar month gives 1 free full-day-equivalent,
+   *   consumed by APPROVED leave requests in date order at BUDGET_WEIGHT
+   *   per duration (Full Day 1, Half Day 0.5, Short Leave ⅓ — see
+   *   leave-budget.util.ts). Requests beyond that are deducted at
+   *   DEDUCTION_TOTAL_DAYS per day (which for Short Leave is a
+   *   deliberately different fraction, ¼, than its budget weight).
+   *   Re-derived here from `dayType` over approved rows only, not read
+   *   from `leaveTypeId` — a request LeaveService stamped Loss of Pay at
+   *   apply time (because an earlier *pending* request had used the
+   *   budget) must not stay stamped that way if that earlier request is
+   *   later rejected or cancelled, so this always recomputes from
+   *   scratch rather than trusting the apply-time classification.
    * - Absent: an ABSENT day (no attendance, no approved leave covering it)
    *   costs a full day at the per-day rate, same as an unpaid leave day.
    * - Per-day rate = monthly salary ÷ the actual number of days in that
@@ -208,7 +219,6 @@ export class PayrollService {
     await this.requireEmployee(employeeId);
 
     const LATE_FINE_PER_DAY = 100;
-    const FREE_LEAVE_DAYS = 1;
 
     const structure = await this.prisma.salaryStructure.findUnique({
       where: { employeeId },
@@ -234,14 +244,21 @@ export class PayrollService {
           status: 'APPROVED',
           startDate: { gte: start, lt: end },
         },
-        select: { totalDays: true },
+        select: { id: true, startDate: true, dayType: true, totalDays: true },
       }),
     ]);
 
     const leaveDaysTaken = sumAmounts(
       leaveRequests.map((r) => r.totalDays.toNumber()),
     );
-    const chargeableLeaveDays = Math.max(0, leaveDaysTaken - FREE_LEAVE_DAYS);
+    const classification = classifyByMonthlyBudget(
+      leaveRequests.map((r) => ({ key: r.id, startDate: r.startDate, dayType: r.dayType })),
+    );
+    const chargeableLeaveDays = sumAmounts(
+      leaveRequests
+        .filter((r) => !classification.get(r.id))
+        .map((r) => DEDUCTION_TOTAL_DAYS[r.dayType]),
+    );
 
     const lateFineAmount = lateDays * LATE_FINE_PER_DAY;
     const leaveDeductionAmount = sumAmounts([chargeableLeaveDays * perDayRate]);

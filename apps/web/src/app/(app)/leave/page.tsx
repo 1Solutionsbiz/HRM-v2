@@ -81,15 +81,15 @@ export default function LeavePage() {
         error={balances.error}
         onRetry={balances.refetch}
         loadingFallback={
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
-            <CardSkeleton lines={2} />
-            <CardSkeleton lines={2} />
-            <CardSkeleton lines={2} />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <CardSkeleton key={i} lines={2} />
+            ))}
           </div>
         }
       >
         {balances.data && (
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
             {balances.data.map((b, i) => {
               const total = b.allocatedDays + b.carriedOverDays;
               const tone = BALANCE_TONE_CYCLE[i % BALANCE_TONE_CYCLE.length]!;

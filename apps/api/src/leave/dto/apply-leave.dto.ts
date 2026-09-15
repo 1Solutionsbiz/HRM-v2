@@ -8,9 +8,6 @@ import {
 import { HalfDayPeriod, LeaveDayType } from '../../generated/prisma/enums.js';
 
 export class ApplyLeaveDto {
-  @IsString()
-  leaveTypeId!: string;
-
   @IsDateString()
   startDate!: string;
 
