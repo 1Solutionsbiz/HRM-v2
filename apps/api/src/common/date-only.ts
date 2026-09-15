@@ -41,6 +41,31 @@ export function toDateOnly(date: Date): Date {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
+const timeOfDayFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: COMPANY_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * Minutes since local midnight, in the company's timezone, for a real
+ * instant - the wall-clock-hour sibling of `toDateOnly`. Same rationale:
+ * `.getHours()`/`.getMinutes()` read the HOST's timezone, which is not
+ * guaranteed to be Asia/Kolkata (confirmed false in production - see
+ * toDateOnly's own comment). Found live via AttendanceService's
+ * computeLateMinutes: a 2026-09-10 17:58 IST check-in (12:28 UTC) was
+ * scored against a UTC host as if "12:28" were the wall-clock time,
+ * silently UNDER-counting lateness by ~5.5h worth of minutes for anyone
+ * arriving after ~14:35 IST.
+ */
+export function minutesOfDayInCompanyTimeZone(date: Date): number {
+  const parts = timeOfDayFormatter.formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === 'hour')!.value);
+  const minute = Number(parts.find((p) => p.type === 'minute')!.value);
+  return hour * 60 + minute;
+}
+
 export function parseDateOnly(value: string): Date {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day));

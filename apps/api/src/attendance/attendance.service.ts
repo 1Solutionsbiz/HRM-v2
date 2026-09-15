@@ -12,6 +12,7 @@ import type { AuthContext } from '../common/auth-context.js';
 import {
   addDays,
   formatDateOnly,
+  minutesOfDayInCompanyTimeZone,
   parseDateOnly,
   toDateOnly,
 } from '../common/date-only.js';
@@ -597,19 +598,21 @@ export class AttendanceService {
   }
 
   /**
-   * `getHours()` (local) vs `getUTCHours()` (UTC) here is deliberate, not a
-   * typo: `checkInAt` is a real timestamp, so its wall-clock reading needs
-   * local getters (assuming host tz = company tz, see the module-level
-   * comment). `standardStartTime` is a MySQL `TIME` column, which Prisma
-   * always represents anchored at the Unix epoch in UTC regardless of host
-   * timezone — so it needs UTC getters no matter where this runs.
+   * `checkInAt` is a real timestamp, so its wall-clock reading is resolved
+   * via `minutesOfDayInCompanyTimeZone` (explicit Asia/Kolkata, immune to
+   * host timezone) — this used to read the HOST's local getters on the
+   * assumption host tz = company tz, which was false in production (the
+   * host runs UTC) and silently under-counted lateness for any check-in
+   * after ~14:35 IST. See that helper's own comment for the incident.
+   * `standardStartTime` is a MySQL `TIME` column, which Prisma always
+   * represents anchored at the Unix epoch in UTC regardless of host
+   * timezone — so it still needs UTC getters, unrelated to the bug above.
    */
   private computeLateMinutes(
     checkInAt: Date,
     policy: { standardStartTime: Date; graceMinutes: number },
   ): number {
-    const checkInMinutesOfDay =
-      checkInAt.getHours() * 60 + checkInAt.getMinutes();
+    const checkInMinutesOfDay = minutesOfDayInCompanyTimeZone(checkInAt);
     const standard = policy.standardStartTime;
     const standardMinutesOfDay =
       standard.getUTCHours() * 60 + standard.getUTCMinutes();

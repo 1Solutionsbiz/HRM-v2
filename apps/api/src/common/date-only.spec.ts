@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, formatDateOnly, parseDateOnly, toDateOnly } from './date-only.js';
+import {
+  addDays,
+  formatDateOnly,
+  minutesOfDayInCompanyTimeZone,
+  parseDateOnly,
+  toDateOnly,
+} from './date-only.js';
 
 describe('toDateOnly', () => {
   it('resolves to the Asia/Kolkata calendar day, not the host process timezone', () => {
@@ -21,6 +27,24 @@ describe('toDateOnly', () => {
     // timezone resolution strategy is used.
     const result = toDateOnly(new Date('2026-09-14T09:00:00.000Z')); // 14:30 IST
     expect(formatDateOnly(result)).toBe('2026-09-14');
+  });
+});
+
+describe('minutesOfDayInCompanyTimeZone', () => {
+  it('resolves to the Asia/Kolkata wall clock, not the host process timezone', () => {
+    // The AttendanceService incident this guards against: a UTC-configured
+    // host previously read 12:28 UTC as if "12:28" were the wall-clock
+    // reading (via .getHours()), when the true IST wall clock was 17:58.
+    expect(minutesOfDayInCompanyTimeZone(new Date('2026-09-10T12:28:31.024Z'))).toBe(17 * 60 + 58);
+  });
+
+  it('is correct right at the IST midnight boundary (18:30 UTC)', () => {
+    expect(minutesOfDayInCompanyTimeZone(new Date('2026-09-10T18:29:59.999Z'))).toBe(23 * 60 + 59);
+    expect(minutesOfDayInCompanyTimeZone(new Date('2026-09-10T18:30:00.000Z'))).toBe(0);
+  });
+
+  it('matches a straightforward mid-morning IST reading', () => {
+    expect(minutesOfDayInCompanyTimeZone(new Date('2026-09-10T04:00:00.000Z'))).toBe(9 * 60 + 30); // 09:30 IST
   });
 });
 

@@ -271,13 +271,12 @@ describe('AttendanceService', () => {
     }
 
     it('marks a check-in on time and a full workday as PRESENT', async () => {
-      // Both timestamps built with local setHours so the test is robust to
-      // whatever timezone this happens to run in (computeLateMinutes reads
-      // local getters, same as the service).
-      const onTimeCheckIn = new Date();
-      onTimeCheckIn.setHours(9, 30, 0, 0);
-      const fullDayCheckOut = new Date(onTimeCheckIn);
-      fullDayCheckOut.setHours(onTimeCheckIn.getHours() + 9);
+      // Built as explicit UTC instants (09:30 IST = 04:00 UTC) rather than
+      // host-local setHours - computeLateMinutes now resolves the wall
+      // clock via Asia/Kolkata regardless of the host's own timezone, so
+      // the test must be independent of it too (see minutesOfDayInCompanyTimeZone).
+      const onTimeCheckIn = new Date('2026-08-04T04:00:00.000Z'); // 09:30 IST
+      const fullDayCheckOut = new Date('2026-08-04T13:00:00.000Z'); // 18:30 IST, 9h later
 
       prisma.attendanceDay.findUnique.mockResolvedValue({ id: 'day-1' });
       // checkOut()'s own existence check (has a CHECK_IN, no CHECK_OUT yet).
@@ -295,16 +294,35 @@ describe('AttendanceService', () => {
     });
 
     it('marks a check-in past the grace window as LATE with nonzero lateMinutes', async () => {
-      // Standard start 09:30 local, grace 15 min -> anything after 09:45 local is late.
-      const lateCheckIn = new Date();
-      lateCheckIn.setHours(10, 30, 0, 0); // 45 minutes past grace, in local time
+      // Standard start 09:30 IST, grace 15 min -> anything after 09:45 IST
+      // is late. 10:30 IST = 05:00 UTC, 45 minutes past grace.
+      const lateCheckIn = new Date('2026-08-04T05:00:00.000Z');
       prisma.attendanceDay.findUnique.mockResolvedValue({ id: 'day-1' });
       setupDay([{ id: 'e1', type: 'CHECK_IN', occurredAt: lateCheckIn }]);
 
       const result = await service.checkIn(actor, {}, {});
 
       expect(result.status).toBe('LATE');
-      expect(result.lateMinutes).toBeGreaterThan(0);
+      expect(result.lateMinutes).toBe(45);
+    });
+
+    /**
+     * Regression test pinning the real incident: Aditya's 2026-09-10
+     * check-in at 17:58 IST (12:28 UTC) was scored against a UTC-timezone
+     * host as if "12:28" were the IST wall clock, computing 0 lateMinutes
+     * shy of the truth by exactly 5.5h worth of minutes (330). Confirmed
+     * live against production before this fix: lateMinutes was 203 (using
+     * the buggy UTC-hour reading) instead of the correct value below.
+     */
+    it('resolves lateMinutes via the IST wall clock regardless of host timezone (production incident 2026-09-10)', async () => {
+      const checkInAt = new Date('2026-09-10T12:28:31.024Z'); // 17:58:31 IST
+      prisma.attendanceDay.findUnique.mockResolvedValue({ id: 'day-1' });
+      setupDay([{ id: 'e1', type: 'CHECK_IN', occurredAt: checkInAt }]);
+
+      const result = await service.checkIn(actor, {}, {});
+
+      // 17:58 IST vs 09:30 standard start + 15min grace (09:45) = 493 minutes late.
+      expect(result.lateMinutes).toBe(493);
     });
 
     it('marks a short day (below the half-day threshold) as HALF_DAY', async () => {
