@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -13,10 +14,7 @@ import { sumAmounts } from '../common/money.js';
 import type { AuthContext } from '../common/auth-context.js';
 import type { ReviseSalaryDto } from './dto/revise-salary.dto.js';
 import type { CreatePayslipDto } from './dto/create-payslip.dto.js';
-import {
-  DEDUCTION_TOTAL_DAYS,
-  classifyByMonthlyBudget,
-} from '../leave/leave-budget.util.js';
+import { classifyByMonthlyBudget } from '../leave/leave-budget.util.js';
 
 type DecimalLike = { toNumber(): number };
 
@@ -183,33 +181,34 @@ export class PayrollService {
   /**
    * Suggests, never applies, a full deduction breakdown for a period —
    * same "HR reviews every line item" rule as the rest of this module (see
-   * CreatePayslipDto). Policy, stated directly by the user (2026-09-15,
-   * superseding the flat "first 1 day free" rule ops gave 2026-09-08):
+   * CreatePayslipDto). Policy, stated directly by the user (2026-09-16,
+   * superseding the working-days-blind version from 2026-09-15):
    * - Late fine: any day with `lateMinutes > 0` (the grace period itself
    *   lives on `AttendancePolicy.graceMinutes`, currently 5 min — this
    *   method doesn't re-decide lateness, it just counts days already
    *   flagged by attendance recompute) costs a flat ₹100.
    * - Leave: each calendar month gives 1 free full-day-equivalent,
-   *   consumed by APPROVED leave requests in date order at BUDGET_WEIGHT
-   *   per duration (Full Day 1, Half Day 0.5, Short Leave ⅓ — see
-   *   leave-budget.util.ts). Requests beyond that are deducted at
-   *   DEDUCTION_TOTAL_DAYS per day (which for Short Leave is a
-   *   deliberately different fraction, ¼, than its budget weight).
-   *   Re-derived here from `dayType` over approved rows only, not read
-   *   from `leaveTypeId` — a request LeaveService stamped Loss of Pay at
-   *   apply time (because an earlier *pending* request had used the
-   *   budget) must not stay stamped that way if that earlier request is
-   *   later rejected or cancelled, so this always recomputes from
-   *   scratch rather than trusting the apply-time classification.
-   * - Absent: an ABSENT day (no attendance, no approved leave covering it)
-   *   costs a full day at the per-day rate, same as an unpaid leave day.
-   * - Per-day rate = monthly salary ÷ the actual number of days in that
-   *   calendar month (28–31), not a fixed 30 — rounded to 2dp *before*
-   *   multiplying by chargeable days, matching how ops does the math by
-   *   hand (verified against their own worked examples: a 30-day month at
-   *   ₹30,000 with 1 unpaid day nets ₹29,000; a 31-day month nets
-   *   ₹29,032.26, not ₹29,032.25 — that 1-paisa difference only comes out
-   *   right if the rate is rounded first).
+   *   consumed by APPROVED leave requests in date order at
+   *   budgetWeightForRequest per duration (Full Day scales by totalDays -
+   *   a real multi-day range consumes that many units, not 1 - Half Day
+   *   0.5, Short Leave ⅓ — see leave-budget.util.ts). A charged request's
+   *   deduction is its own `totalDays` (which already equals the right
+   *   weight for both a new single-day request and a real multi-day
+   *   range), not a fixed per-duration constant. Re-derived here from
+   *   `dayType`/`totalDays` over approved rows only, not read from
+   *   `leaveTypeId` — a request LeaveService stamped Loss of Pay at apply
+   *   time (because an earlier *pending* request had used the budget)
+   *   must not stay stamped that way if that earlier request is later
+   *   rejected or cancelled, so this always recomputes from scratch
+   *   rather than trusting the apply-time classification.
+   * - No absence-based deduction — confirmed with the user, only leave
+   *   overage reduces pay through payroll.
+   * - Per-day rate = monthly salary ÷ the month's *working* days (weekdays
+   *   per `AttendancePolicy.workingWeekdays`, minus active `Holiday` rows
+   *   in that month) — not calendar days, and not a fixed 30 — rounded to
+   *   2dp before multiplying by chargeable days, matching how ops does
+   *   the math by hand (the rounding-before-multiplying behavior itself
+   *   predates this change and is unaffected by it).
    */
   async getPayslipCalculationPreview(
     employeeId: string,
@@ -226,17 +225,16 @@ export class PayrollService {
     const monthlySalary = structure ? structure.currentAmount.toNumber() : 0;
 
     const daysInMonth = new Date(Date.UTC(periodYear, periodMonth, 0)).getUTCDate();
-    const perDayRate = Math.round((monthlySalary / daysInMonth) * 100) / 100;
+    const workingDaysInMonth = await this.getWorkingDaysInMonth(periodYear, periodMonth);
+    const perDayRate =
+      workingDaysInMonth > 0 ? Math.round((monthlySalary / workingDaysInMonth) * 100) / 100 : 0;
 
     const start = new Date(Date.UTC(periodYear, periodMonth - 1, 1));
     const end = new Date(Date.UTC(periodYear, periodMonth, 1));
 
-    const [lateDays, absentDays, leaveRequests] = await Promise.all([
+    const [lateDays, leaveRequests] = await Promise.all([
       this.prisma.attendanceDay.count({
         where: { employeeId, lateMinutes: { gt: 0 }, date: { gte: start, lt: end } },
-      }),
-      this.prisma.attendanceDay.count({
-        where: { employeeId, status: 'ABSENT', date: { gte: start, lt: end } },
       }),
       this.prisma.leaveRequest.findMany({
         where: {
@@ -252,35 +250,72 @@ export class PayrollService {
       leaveRequests.map((r) => r.totalDays.toNumber()),
     );
     const classification = classifyByMonthlyBudget(
-      leaveRequests.map((r) => ({ key: r.id, startDate: r.startDate, dayType: r.dayType })),
+      leaveRequests.map((r) => ({
+        key: r.id,
+        startDate: r.startDate,
+        dayType: r.dayType,
+        totalDays: r.totalDays.toNumber(),
+      })),
     );
     const chargeableLeaveDays = sumAmounts(
       leaveRequests
         .filter((r) => !classification.get(r.id))
-        .map((r) => DEDUCTION_TOTAL_DAYS[r.dayType]),
+        .map((r) => r.totalDays.toNumber()),
     );
 
     const lateFineAmount = lateDays * LATE_FINE_PER_DAY;
     const leaveDeductionAmount = sumAmounts([chargeableLeaveDays * perDayRate]);
-    const absentDeductionAmount = sumAmounts([absentDays * perDayRate]);
-    const totalDeductions = sumAmounts([
-      lateFineAmount,
-      leaveDeductionAmount,
-      absentDeductionAmount,
-    ]);
+    const totalDeductions = sumAmounts([lateFineAmount, leaveDeductionAmount]);
 
     return {
       daysInMonth,
+      workingDaysInMonth,
       perDayRate,
       lateDays,
       lateFineAmount,
       leaveDaysTaken,
       chargeableLeaveDays,
       leaveDeductionAmount,
-      absentDays,
-      absentDeductionAmount,
       totalDeductions,
     };
+  }
+
+  /**
+   * Weekdays per `AttendancePolicy.workingWeekdays`, minus active
+   * `Holiday` rows in that month - the per-day-rate denominator for
+   * payslip deductions. Reuses the exact isoWeekday/Holiday pattern
+   * already established per-day in AttendanceService.getHistoryForUser;
+   * no month-level aggregation of it existed anywhere before this.
+   */
+  private async getWorkingDaysInMonth(year: number, month: number): Promise<number> {
+    const policy = await this.prisma.attendancePolicy.findUnique({
+      where: { id: 'singleton' },
+    });
+    if (!policy) {
+      throw new InternalServerErrorException(
+        'AttendancePolicy is not seeded — run the seed script before using payroll features',
+      );
+    }
+    const workingWeekdays = new Set(policy.workingWeekdays as number[]);
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 1));
+    const holidays = await this.prisma.holiday.findMany({
+      where: { isActive: true, date: { gte: start, lt: end } },
+    });
+    const holidayDates = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
+
+    let count = 0;
+    for (
+      let cursor = new Date(start);
+      cursor < end;
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    ) {
+      const isoWeekday = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay();
+      if (workingWeekdays.has(isoWeekday) && !holidayDates.has(cursor.toISOString().slice(0, 10))) {
+        count++;
+      }
+    }
+    return count;
   }
 
   async getMyPayslips(userId: string) {
@@ -418,6 +453,32 @@ export class PayrollService {
     });
 
     return this.serializePayslip(updated);
+  }
+
+  /**
+   * Admin/HR correction path for a payslip generated in error (wrong
+   * period, wrong numbers before this got fixed, etc.) — cascade-deletes
+   * its PayslipLineItem rows per the schema (`onDelete: Cascade`).
+   * Deleting a PAID payslip removes the record only; it does not reverse
+   * whatever payment already happened outside this system, and the
+   * frontend warns about that distinction before confirming.
+   */
+  async deletePayslip(payslipId: string, actor: AuthContext): Promise<void> {
+    const payslip = await this.prisma.payslip.findUnique({
+      where: { id: payslipId },
+    });
+    if (!payslip) throw new NotFoundException('Payslip not found');
+
+    await this.prisma.payslip.delete({ where: { id: payslipId } });
+
+    await this.auditService.log({
+      eventType: 'OTHER',
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      targetType: 'Employee',
+      targetId: payslip.employeeId,
+      description: `Deleted payslip ${payslip.payslipNumber} (${payslip.periodMonth}/${payslip.periodYear})`,
+    });
   }
 
   /**

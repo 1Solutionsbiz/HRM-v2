@@ -17,23 +17,24 @@ import type { ApplyLeaveDto } from './dto/apply-leave.dto.js';
 import type { DecideLeaveRequestDto } from './dto/decide-leave-request.dto.js';
 import type { RevokeLeaveRequestDto } from './dto/revoke-leave-request.dto.js';
 import {
-  BUDGET_WEIGHT,
   DEDUCTION_TOTAL_DAYS,
   MONTHLY_FREE_BUDGET,
+  budgetWeightForRequest,
   classifyByMonthlyBudget,
 } from './leave-budget.util.js';
 
 const ACTIVE_REQUEST_STATUSES = ['PENDING', 'APPROVED'] as const;
 
-// Company policy (2026-09-15, not yet its own schema field): every leave
+// Company policy (2026-09-15, not yet its own schema field): a new leave
 // request is single-day, chosen by duration (Full/Half/Short) rather than
 // a picked type. Each calendar month gives 1 free full-day-equivalent,
-// consumed at BUDGET_WEIGHT per duration; once that's exhausted the new
-// request is auto-recorded as Loss of Pay instead of the free type
-// (Casual Leave), charged at DEDUCTION_TOTAL_DAYS - see leave-budget.util.ts
-// for why that's a deliberately different fraction than BUDGET_WEIGHT for
-// Short Leave. Supersedes the older Casual-Leave-only monthly cap this
-// generalizes from.
+// consumed at budgetWeightForRequest per duration (real historical
+// multi-day FULL_DAY requests scale by their totalDays); once that's
+// exhausted the new request is auto-recorded as Loss of Pay instead of
+// the free type (Casual Leave), charged at DEDUCTION_TOTAL_DAYS - see
+// leave-budget.util.ts for why that's a deliberately different fraction
+// than the budget weight for Short Leave. Supersedes the older
+// Casual-Leave-only monthly cap this generalizes from.
 const CASUAL_LEAVE_KEY = 'casual-leave-1-day';
 const LOSS_OF_PAY_KEY = 'loss-of-pay';
 
@@ -216,8 +217,8 @@ export class LeaveService {
     });
 
     // The Monthly free-budget row resets every month by construction - each
-    // month's requests are summed independently via BUDGET_WEIGHT (not
-    // cumulatively across the year, unlike the per-type rows above).
+    // month's requests are summed independently via budgetWeightForRequest
+    // (not cumulatively across the year, unlike the per-type rows above).
     const monthlyBudgetMonths = Array.from({ length: lastMonth }, (_, i) => {
       const month = i + 1;
       const monthRequests = requests.filter(
@@ -225,7 +226,10 @@ export class LeaveService {
       );
       let cumulativeBudget = 0;
       const requestsWithBalance = monthRequests.map((r) => {
-        cumulativeBudget += BUDGET_WEIGHT[r.dayType];
+        cumulativeBudget += budgetWeightForRequest({
+          dayType: r.dayType,
+          totalDays: r.totalDays.toNumber(),
+        });
         return {
           id: r.id,
           startDate: r.startDate,
@@ -254,8 +258,8 @@ export class LeaveService {
   /**
    * A synthetic balance row for the monthly free-leave budget - not backed
    * by any LeaveType/LeaveBalance row. `committedThisMonth` is the sum of
-   * BUDGET_WEIGHT over this employee's PENDING+APPROVED requests in the
-   * current calendar month (see getCurrentMonthCommittedBudget).
+   * budgetWeightForRequest over this employee's PENDING+APPROVED requests
+   * in the current calendar month (see getCurrentMonthCommittedBudget).
    */
   private buildMonthlyBudgetRow(committedThisMonth: number) {
     return {
@@ -280,9 +284,12 @@ export class LeaveService {
         status: { in: [...ACTIVE_REQUEST_STATUSES] },
         startDate: { gte: monthStart, lte: monthEnd },
       },
-      select: { dayType: true },
+      select: { dayType: true, totalDays: true },
     });
-    return requests.reduce((sum, r) => sum + BUDGET_WEIGHT[r.dayType], 0);
+    return requests.reduce(
+      (sum, r) => sum + budgetWeightForRequest({ dayType: r.dayType, totalDays: r.totalDays.toNumber() }),
+      0,
+    );
   }
 
   /** Batched version of getCurrentMonthCommittedBudget for a whole roster - one query instead of N. */
@@ -298,11 +305,12 @@ export class LeaveService {
         status: { in: [...ACTIVE_REQUEST_STATUSES] },
         startDate: { gte: monthStart, lte: monthEnd },
       },
-      select: { employeeId: true, dayType: true },
+      select: { employeeId: true, dayType: true, totalDays: true },
     });
     const byEmployee = new Map<string, number>();
     for (const r of requests) {
-      byEmployee.set(r.employeeId, (byEmployee.get(r.employeeId) ?? 0) + BUDGET_WEIGHT[r.dayType]);
+      const weight = budgetWeightForRequest({ dayType: r.dayType, totalDays: r.totalDays.toNumber() });
+      byEmployee.set(r.employeeId, (byEmployee.get(r.employeeId) ?? 0) + weight);
     }
     return byEmployee;
   }
@@ -379,15 +387,16 @@ export class LeaveService {
         status: { in: [...ACTIVE_REQUEST_STATUSES] },
         startDate: { gte: monthStart, lte: monthEnd },
       },
-      select: { id: true, startDate: true, dayType: true },
+      select: { id: true, startDate: true, dayType: true, totalDays: true },
     });
     const classification = classifyByMonthlyBudget([
       ...existingThisMonth.map((r) => ({
         key: r.id,
         startDate: r.startDate,
         dayType: r.dayType,
+        totalDays: r.totalDays.toNumber(),
       })),
-      { key: 'NEW', startDate, dayType },
+      { key: 'NEW', startDate, dayType, totalDays: DEDUCTION_TOTAL_DAYS[dayType] },
     ]);
     const isFree = classification.get('NEW')!;
 

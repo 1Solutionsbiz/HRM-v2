@@ -25,14 +25,33 @@ export const MONTHLY_FREE_BUDGET = 1;
 const BUDGET_EPSILON = 1e-9;
 
 /**
- * Walks entries in chronological order, accumulating BUDGET_WEIGHT, and
- * returns which are free vs. chargeable against the monthly allowance.
+ * Budget weight for one request. FULL_DAY scales by totalDays — a real
+ * multi-day range (legacy data predating the single-day-only apply flow,
+ * e.g. a 3-day Loss of Pay request) consumes 3 budget units, not 1. Found
+ * live (2026-09-16): a 3-day approved Loss of Pay request was scored as
+ * only 1 budget unit, so `getPayslipCalculationPreview` reported a $0
+ * leave deduction for someone who'd taken 3 real unpaid days.
+ * HALF_DAY/SHORT_LEAVE stay a fixed per-request weight: those durations
+ * are always single-day (enforced at apply time), and their totalDays
+ * already equals their DEDUCTION_TOTAL_DAYS value, not their budget
+ * weight — using it here for FULL_DAY only avoids double-scaling.
+ */
+export function budgetWeightForRequest(request: {
+  dayType: LeaveDayType;
+  totalDays: number;
+}): number {
+  return request.dayType === 'FULL_DAY' ? request.totalDays : BUDGET_WEIGHT[request.dayType];
+}
+
+/**
+ * Walks entries in chronological order, accumulating budgetWeightForRequest,
+ * and returns which are free vs. chargeable against the monthly allowance.
  * Shared by LeaveService.applyLeave (existing committed requests this month
  * plus the new one) and PayrollService's payslip preview (all approved
  * requests this month) so the two can never drift on the budget math.
  */
 export function classifyByMonthlyBudget<
-  T extends { key: string; startDate: Date; dayType: LeaveDayType },
+  T extends { key: string; startDate: Date; dayType: LeaveDayType; totalDays: number },
 >(entries: T[]): Map<string, boolean> {
   const sorted = [...entries].sort(
     (a, b) => a.startDate.getTime() - b.startDate.getTime(),
@@ -40,7 +59,7 @@ export function classifyByMonthlyBudget<
   let committed = 0;
   const result = new Map<string, boolean>();
   for (const entry of sorted) {
-    const weight = BUDGET_WEIGHT[entry.dayType];
+    const weight = budgetWeightForRequest(entry);
     result.set(entry.key, committed + weight <= MONTHLY_FREE_BUDGET + BUDGET_EPSILON);
     committed += weight;
   }

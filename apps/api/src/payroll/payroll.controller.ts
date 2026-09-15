@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -89,6 +90,12 @@ export class PayrollController {
   @RequirePermissions('payroll:manage')
   markPayslipPaid(@Param('id') id: string, @CurrentUser() actor: AuthContext) {
     return this.payrollService.markPayslipPaid(id, actor);
+  }
+
+  @Delete('payslips/:id')
+  @RequirePermissions('payroll:manage')
+  deletePayslip(@Param('id') id: string, @CurrentUser() actor: AuthContext) {
+    return this.payrollService.deletePayslip(id, actor);
   }
 
   @Get('committed')

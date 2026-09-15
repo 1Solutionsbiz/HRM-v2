@@ -133,16 +133,20 @@ export function markPayslipPaid(payslipId: string): Promise<Payslip> {
   return apiFetch<Payslip>(`/payroll/payslips/${payslipId}/mark-paid`, { method: "PATCH" });
 }
 
+/** Admin/HR correction path for a payslip generated in error - permanently removes it and its line items. */
+export function deletePayslip(payslipId: string): Promise<void> {
+  return apiFetch<void>(`/payroll/payslips/${payslipId}`, { method: "DELETE" });
+}
+
 export interface PayslipCalculationPreview {
   daysInMonth: number;
+  workingDaysInMonth: number;
   perDayRate: number;
   lateDays: number;
   lateFineAmount: number;
   leaveDaysTaken: number;
   chargeableLeaveDays: number;
   leaveDeductionAmount: number;
-  absentDays: number;
-  absentDeductionAmount: number;
   totalDeductions: number;
 }
 

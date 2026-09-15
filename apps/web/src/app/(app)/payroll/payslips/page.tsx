@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Plus, Trash2 } from "lucide-react";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -16,6 +16,7 @@ import {
   getEmployeePayslips,
   generatePayslip,
   markPayslipPaid,
+  deletePayslip,
   getPayslipCalculationPreview,
   monthName,
   type Payslip,
@@ -27,6 +28,7 @@ import { downloadPayslipPdf } from "@/lib/payslip-pdf";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
 import { EmployeePicker } from "@/components/hrm/employee-picker";
+import { ConfirmDialog } from "@/components/hrm/confirm-dialog";
 import { PayslipDocument } from "@/components/hrm/payslip-document";
 import { PayslipCardGrid } from "@/components/hrm/payslip-card-grid";
 import { CardSkeleton } from "@/components/hrm/loading-state";
@@ -114,8 +116,8 @@ function GeneratePayslipDialog({
   );
   const [leaveDeduction, setLeaveDeduction] = React.useState("0");
   const [lateDeduction, setLateDeduction] = React.useState("0");
-  const [absentDeduction, setAbsentDeduction] = React.useState("0");
   const [preview, setPreview] = React.useState<PayslipCalculationPreview | null>(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
@@ -124,18 +126,22 @@ function GeneratePayslipDialog({
   React.useEffect(() => {
     let ignore = false;
     setPreview(null);
+    setPreviewError(null);
     getPayslipCalculationPreview(employee.id, Number(periodMonth), Number(periodYear))
       .then((result) => {
         if (ignore) return;
         setPreview(result);
         setLateDeduction(String(result.lateFineAmount));
         setLeaveDeduction(String(result.leaveDeductionAmount));
-        setAbsentDeduction(String(result.absentDeductionAmount));
       })
-      .catch(() => {
-        // The computed preview is a convenience, not a requirement - leave
-        // the fields at whatever they already were and let HR enter them
-        // manually.
+      .catch((err) => {
+        if (ignore) return;
+        // Surfaced instead of silently leaving fields at "0" - that used
+        // to look identical to "correctly computed, nothing owed" and was
+        // the actual source of having to figure out deductions by hand.
+        setPreviewError(
+          err instanceof ApiError ? err.message : "Couldn't compute deductions automatically.",
+        );
       });
     return () => {
       ignore = true;
@@ -154,9 +160,6 @@ function GeneratePayslipDialog({
       }
       if (Number(lateDeduction) > 0) {
         lineItems.push({ type: "DEDUCTION", label: "Late Coming Fine", amount: Number(lateDeduction) });
-      }
-      if (Number(absentDeduction) > 0) {
-        lineItems.push({ type: "DEDUCTION", label: "Absent Deduction", amount: Number(absentDeduction) });
       }
       if (lineItems.length === 0) {
         setSaveError("Enter at least one earning amount.");
@@ -278,22 +281,20 @@ function GeneratePayslipDialog({
                   onChange={(e) => setLateDeduction(e.target.value)}
                 />
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm">Absent Deduction</span>
-                <Input
-                  type="number"
-                  className="w-32"
-                  value={absentDeduction}
-                  onChange={(e) => setAbsentDeduction(e.target.value)}
-                />
-              </div>
+              {previewError && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {previewError} Enter the deductions below manually for this period.
+                  </AlertDescription>
+                </Alert>
+              )}
               {preview && (
                 <p className="text-muted-foreground text-xs">
-                  {monthName(Number(periodMonth))} has {preview.daysInMonth} days (₹{preview.perDayRate}/day) ·{" "}
+                  {monthName(Number(periodMonth))} has {preview.workingDaysInMonth} working day
+                  {preview.workingDaysInMonth === 1 ? "" : "s"} (₹{preview.perDayRate}/day) ·{" "}
                   {preview.leaveDaysTaken} leave day{preview.leaveDaysTaken === 1 ? "" : "s"} taken (1 free,{" "}
                   {preview.chargeableLeaveDays} chargeable) · {preview.lateDays} late arrival
-                  {preview.lateDays === 1 ? "" : "s"} × ₹100 · {preview.absentDays} absent day
-                  {preview.absentDays === 1 ? "" : "s"} — computed automatically, edit if it&apos;s not right.
+                  {preview.lateDays === 1 ? "" : "s"} × ₹100 — computed automatically, edit if it&apos;s not right.
                 </p>
               )}
               <p className="text-muted-foreground text-xs">Left at 0, a deduction won&apos;t appear on the payslip.</p>
@@ -325,6 +326,7 @@ function EmployeePayslipsView({
   const [generateOpen, setGenerateOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Payslip | null>(null);
   const [marking, setMarking] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
   function handleDownload(p: Payslip) {
     downloadPayslipPdf(p);
@@ -342,6 +344,18 @@ function EmployeePayslipsView({
       toast.error(err instanceof ApiError ? err.message : "Couldn't mark this payslip as paid.");
     } finally {
       setMarking(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    try {
+      await deletePayslip(selected.id);
+      toast.success(`Deleted ${monthName(selected.periodMonth)} ${selected.periodYear} payslip`);
+      setSelected(null);
+      payslips.refetch();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't delete this payslip.");
     }
   }
 
@@ -431,11 +445,33 @@ function EmployeePayslipsView({
                     {marking ? "Marking…" : "Mark as paid"}
                   </Button>
                 )}
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Trash2 />
+                  Delete
+                </Button>
               </SheetFooter>
             </>
           )}
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Delete this payslip?"
+        description={
+          selected?.status === "PAID"
+            ? `This payslip is marked paid - deleting it does not reverse any actual payment, only the record. ${monthName(selected.periodMonth)} ${selected.periodYear} for ${employeeFullName(employee)} will be permanently removed.`
+            : `${selected ? `${monthName(selected.periodMonth)} ${selected.periodYear}` : "This payslip"} for ${employeeFullName(employee)} will be permanently removed.`
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

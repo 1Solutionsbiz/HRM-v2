@@ -144,7 +144,7 @@ describe('LeaveService', () => {
       prisma.leaveType.findMany.mockResolvedValue([]);
       prisma.leaveBalance.findMany.mockResolvedValue([]);
       prisma.leaveRequest.findMany.mockResolvedValue([
-        { dayType: 'HALF_DAY' },
+        { dayType: 'HALF_DAY', totalDays: decimal(0.5) },
       ]);
 
       const result = await service.getBalancesForUser('user-1');
@@ -218,7 +218,7 @@ describe('LeaveService', () => {
     it('assigns Loss of Pay once the monthly free budget is exhausted by an already-committed request', async () => {
       // A full day already committed this month uses up the entire budget.
       prisma.leaveRequest.findMany.mockResolvedValue([
-        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY' },
+        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY', totalDays: decimal(1) },
       ]);
 
       const result = await service.applyLeave('user-1', dto, actor);
@@ -233,7 +233,7 @@ describe('LeaveService', () => {
 
     it('a pending (not yet approved) request already counts toward the monthly budget', async () => {
       prisma.leaveRequest.findMany.mockResolvedValue([
-        { id: 'lr-pending', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY' },
+        { id: 'lr-pending', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY', totalDays: decimal(1) },
       ]);
       // The query itself is scoped to PENDING+APPROVED - assert it was called that way.
       await service.applyLeave('user-1', dto, actor);
@@ -245,7 +245,7 @@ describe('LeaveService', () => {
     it('stores totalDays as the deduction weight for the chosen duration, not the budget weight', async () => {
       // Exhaust the budget first so this Short Leave request gets charged.
       prisma.leaveRequest.findMany.mockResolvedValue([
-        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY' },
+        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'FULL_DAY', totalDays: decimal(1) },
       ]);
 
       await service.applyLeave('user-1', { ...dto, dayType: 'SHORT_LEAVE' }, actor);
@@ -259,7 +259,7 @@ describe('LeaveService', () => {
 
     it('2 half days in the same month are both free (within the shared budget)', async () => {
       prisma.leaveRequest.findMany.mockResolvedValue([
-        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'HALF_DAY' },
+        { id: 'lr-existing', startDate: new Date('2026-09-01'), dayType: 'HALF_DAY', totalDays: decimal(0.5) },
       ]);
 
       const result = await service.applyLeave(
