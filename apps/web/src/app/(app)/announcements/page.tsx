@@ -18,6 +18,7 @@ import {
   type AnnouncementCategory,
 } from "@/lib/api/announcements";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { titleCase } from "@/lib/api/employees";
 import { PageHeader } from "@/components/hrm/page-header";
 import { AsyncSection } from "@/components/hrm/async-section";
@@ -211,13 +212,23 @@ function AnnouncementsPageInner() {
           <EmptyState icon={Megaphone} title="No announcements right now" />
         ) : (
           <div className="space-y-3">
-            {(data ?? []).map((a) => {
+            {(data ?? []).map((a, index) => {
               const isRead = a.read || readIds.has(a.id);
+              const isLatest = index === 0;
               return (
                 <Card
                   key={a.id}
-                  className={isRead ? undefined : "border-primary/30"}
+                  className={cn(
+                    "relative",
+                    !isRead && "border-primary/30",
+                    isLatest && "border-warning bg-warning/10 animate-pulse",
+                  )}
                 >
+                  {isLatest && (
+                    <span className="bg-warning text-warning-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow">
+                      New
+                    </span>
+                  )}
                   <CardContent className="flex items-start justify-between gap-3 pt-6">
                     <button
                       type="button"
