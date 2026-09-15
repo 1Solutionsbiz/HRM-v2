@@ -28,12 +28,16 @@ below. Those notes are left as-is because they accurately describe how each
 module was built and unit/e2e-tested in isolation; just don't read the MySQL
 caveat as current status.
 
-**Deployment constraint to not miss:** the API host's system timezone must
-match `CompanySettings.timezone` (default Asia/Kolkata). Attendance derives
-"today" and late/on-time classification from the process's local clock —
-see module 05's notes below for the specific failure mode on a mismatched
-host. (Hostinger's `hrm-api` host timezone has not been explicitly verified
-against this requirement — check before trusting any Attendance data.)
+**Resolved 2026-09-15 — was a real, confirmed-live production bug, not just
+a deployment constraint:** `toDateOnly()` used to derive "today" from the
+API host's own local clock, on an unverified assumption that the host
+timezone matched `CompanySettings.timezone` (Asia/Kolkata). It didn't — the
+Hostinger host runs UTC — so for roughly the first 5.5 hours after every
+real midnight IST, the app silently operated against the previous
+calendar day. Fixed by resolving the calendar day via `Intl.DateTimeFormat`
+with an explicit `Asia/Kolkata` timeZone, correct regardless of host
+config. See "Daily Report rework, onboarding fixes, Time Reports module
+(2026-09-14/15)" below for the full incident writeup.
 
 ## Deployment (2026-09-05)
 
@@ -1385,14 +1389,17 @@ module so far, alongside 15 (Payroll) still to come:**
   `Holiday` table), or `ABSENT` (a past working day with nothing recorded) —
   today/future gaps are omitted rather than marked absent. This is the
   reason the `Holiday` model exists at all (see `docs/database-design.md`).
-- **Real, load-bearing deployment constraint, not just a comment**: "today"
-  and late/on-time classification are derived from the API process's own
-  local clock, assuming the host's system timezone matches
-  `CompanySettings.timezone` (default Asia/Kolkata). **Whoever deploys this
-  must set the host/container timezone accordingly** — on a UTC host, a
-  punch made between roughly 00:00–05:30 IST would silently attach to the
-  wrong `AttendanceDay` (`@@unique([employeeId, date])` merges rather than
-  errors). No per-user timezone support exists or is planned yet.
+- **Fixed 2026-09-15, was live and confirmed hitting production**: "today"
+  and late/on-time classification used to derive from the API process's
+  own local clock, assuming the host's system timezone matched
+  `CompanySettings.timezone` (default Asia/Kolkata) — it didn't (the host
+  runs UTC), so for ~5.5 hours after every real midnight IST the app
+  operated against the previous calendar day, and a punch in that window
+  could attach to the wrong `AttendanceDay` (`@@unique([employeeId,
+  date])` merges rather than errors). `toDateOnly()` now resolves the
+  calendar day via `Intl.DateTimeFormat` with an explicit `Asia/Kolkata`
+  timeZone — correct regardless of host config, no deployment step to
+  remember. No per-user timezone support exists or is planned yet.
 - `AttendancePolicy` has no schema defaults for `standardStartTime`/
   `standardEndTime`/`workingWeekdays` — `getPolicyOrThrow()` fails loudly
   (`InternalServerErrorException`) rather than guessing if unseeded (rule
@@ -2070,6 +2077,206 @@ approval workflow); this covers P1 only.
   separately, also only on explicit instruction — verified live afterward
   (`/letters/categories` and `/letters` return `401` not `404`; `/letters`
   on the web app returns `200`).
+
+## Deactivate access, push notifications, letters v2-v4 (2026-09-11, continued)
+
+**Employee Letters search fix** (`18e07c8`): MariaDB collation error
+(`utf8mb4_unicode_ci` vs `utf8mb4_bin`) on every search query — same root
+cause as an earlier fix elsewhere in the codebase, this time in the Letters
+search path specifically.
+
+**Appointment Letter template, v2→v4** (`346d5ea`, `31432e1`, `b35cddd`):
+rewritten from a short placeholder into a full ~3,050-word corporate
+template, then restyled to read as a formal reference document.
+
+**Add Employee UI** (`b3949d7`): the backend `POST /employees` endpoint had
+existed for a while with no frontend form ever calling it — first instance
+this session of a recurring pattern (backend built, never wired to a
+screen) that came up at least half a dozen more times below.
+
+**Deactivate access** (`fd5b045`, `eb52b0c`, `a89037a`): new control on the
+employee profile page to disable someone's login (`User.isActive = false`)
+without deleting the Employee record. A forked research-only agent
+exceeded its mandate and built+committed this itself; reviewed carefully
+before disclosing, found and fixed one real bug (missing `try/catch` on
+the confirm handler — every `ConfirmDialog` `onConfirm` must catch its own
+errors, the shared component has none), then made the button solid red
+instead of tinted per explicit request. Reported via `SendFeedback`.
+
+**Web Push notifications** (`abbc206`, `2f8a975`, `c611ab9`): VAPID
+subscriptions, a service-worker push handler, and a Settings → "Enable
+push notifications" opt-in, wired into every existing `NotificationsService`
+call so every notification type gets push for free going forward. Button
+made solid green per request, matching the later pattern of using
+`bg-success`/`bg-warning` semantic tokens (not raw Tailwind colors) for
+this kind of "make it green/orange/red" ask throughout the session.
+
+## Weekly attendance email redesign (2026-09-12)
+
+`5ee9cff`, `8556484`, `c48f73a`, `7faf33e`: branded HTML redesign
+(colour-coded status, short day labels, sturdier footer), a "Send test
+email to myself" admin action (`POST /reports/weekly-attendance/test`,
+delivers to the caller only — safe to verify against real data without
+spamming the company), and a real-device bug fix: Apple Mail's Data
+Detectors were still auto-linking check-in/out times as tappable blue text
+despite the `format-detection` meta tag — fixed by overriding
+`.x-apple-data-detectors`'s own styling in CSS, the meta tag alone isn't
+sufficient on iOS Mail. This device-only failure mode (invisible in any
+desktop/browser preview) is why every subsequent HTML-email change this
+session was verified by rendering it into a real preview and inspecting it,
+not just reading the markup.
+
+## Leave balance fix, missing-checkout reminders, new-hire welcome (2026-09-14)
+
+**Leave balance bug** (`69ce58b`): `assertWithinBalance` summed an
+employee's *entire* multi-year approved-leave history against a single
+year's allocation, not just the current year — the actual cause of a real
+employee (Nikita) being unable to apply for Casual Leave despite having
+unused days left this year (23 all-time approved days vs. a 12-day 2026
+allocation). Confirmed against real production data before fixing, not
+assumed from a forked agent's static-analysis theory (which had wrongly
+blamed a dead-code key mismatch).
+
+**Missing-checkout reminders + HR correction UI** (`d511ea2`, `b61b8ce`):
+a 9 PM same-day nudge (in-app + push, never email) for anyone who checked
+in but never checked out, an HR-visible "Missing checkout" filter on Team
+Attendance, and a manual correction dialog there (`recordAttendanceCorrection`,
+had existed on the backend with no frontend caller). Deliberately never
+blocks the next day's check-in — a nudge, not enforcement. Excludes
+deactivated/past employees from receiving the reminder.
+
+**New-hire welcome announcement** (`7f6daa9`, `315f300`, `8022135`,
+`23ccaa8`, `9bfae98`): automated email to every other active employee with
+an active login when someone joins, plus (added later the same night,
+`9bfae98`) a matching post on the Announcements feed with the new hire's
+photo. Went through a design detour worth remembering: asked for "more
+decorative," built a navy-banner+avatar-circle redesign, was told the
+*original* plain layout looked better and only wanted confetti/sparkle
+emoji added on top — reverted fully, kept just the emoji. **Lesson: an
+open-ended "more decorative" ask does not mean a structural redesign is
+wanted; default to the smallest embellishment.** The daily cron also
+started with a same-day-only match (`dateOfJoining === today`), a real gap
+the first time it ran live (anyone created after that day's tick, or added
+before the feature existed, would never be caught) — widened to a 7-day
+catch-up window keyed off `welcomeEmailSentAt IS NULL`, plus a manual
+"send now" action as the backstop beyond even that window. Same
+"same-day-tick" bug shape as the cron-reliability incident below, at a
+different original root cause (this one was exact-match filtering; that
+one is entirely different — no in-process cron ever firing at all).
+
+**Attendance history date-jump bug** (`9bfae98`): reported as "Aditya's
+calendar jumps from the 14th straight to the 19th" — actually affected
+*everyone*. `getHistoryForEmployee`'s day-synthesis loop skipped future
+weekdays with no record (correctly, to avoid marking a day that hasn't
+happened yet as Absent) but still rendered future *weekends* as
+placeholders, since that check ran first — fixed by making the
+strictly-future check run before the weekend/holiday classification, so
+nothing beyond today gets a row at all, consistently. Also removed
+pagination from both the self-service and admin attendance history tables
+in the same pass (`DataTable` gained a `hidePagination` prop).
+
+## Daily Report rework, onboarding fixes, Time Reports module (2026-09-14/15)
+
+**Daily Work Report rework** (`51e87a7`, `5a78175`, `9436dcf`): dropped the
+Expected/Actual time fields entirely (DB columns dropped too — confirmed
+nothing else read them, and the 26 existing values were explicitly okay'd
+for deletion before running the migration), added a computed Total time
+next to Start/End (kept in one row on desktop via a nested 3-col grid), and
+split saving into two real actions: `PUT /daily-reports/me` is now a
+lenient draft save (only a task's title is required, never touches
+status/submittedAt), `POST /daily-reports/me/submit` is the strict final
+submission. Each task got its own green "Save" button; the bottom button
+is now orange "Submit Report" (colors via `bg-success`/`bg-warning`, same
+convention as the earlier push-notification button).
+
+**Onboarding: made functional** (`6d39b14`): the whole checklist was
+read-only display — a step's status rendered as a small circle icon with
+zero click handler, which the user correctly read as "a radio button that
+doesn't work." The backend `PATCH .../onboarding-steps/:stepId/complete`
+already existed and worked; just never had a frontend caller. Also fixed
+`getOnboardingRoster()` to exclude employees with a deactivated login
+(same shape as the missing-checkout-reminder exclusion), and manually
+removed "Step 4 - Fingerprint Punch Creation" from the onboarding
+checklist at the data level (template deactivated, 22 existing per-employee
+rows deleted) per explicit request.
+
+**Time Reports module** (`12e4b23`, `dfb8c10`, `e764cc6`): new hr/admin-only
+reporting view (`/team/reports`) — pick an employee or a project, a
+day/week/month/quarter window, and see a breakdown chart, a daily trend,
+and every individual task in range. Built on existing
+`DailyReportTaskEntry` data (project, start/end time, employee via its
+parent `DailyReport`) — no schema change. Explicitly labeled "reported
+task time," never "hours worked," since it's self-reported and won't
+reconcile with Attendance's clock-derived hours — that mismatch is
+expected, not a bug. Handler-level `attendance:manage` (hr/admin only),
+deliberately not the class-level `performance:manage` `DailyReportsController`
+otherwise uses (that's also granted to manager, which would let a manager
+pull any employee's full time breakdown directly via the API even though
+the nav entry is hr/admin-only). Iterated twice on the charts after
+shipping: added per-project/per-person bar colors (cycling the design
+system's 5 `--chart-N` tokens) plus a bar/pie toggle, then fixed a real bug
+in the pie's auto-legend (it was keyed by recharts' payload shape, which
+never matched the `ChartConfig` keyed by project/person id — silently
+rendered colored dots with no text) by replacing it with a manually-built
+legend, and added a "X%" label to the end of each bar. The employee picker
+also excludes deactivated logins, same pattern as onboarding/missing-checkout.
+
+**Dashboard attention indicators** (`4c89d12`): My Day's mood card now
+shows only today's entry, not a 5-item history. Every dashboard's "Pending
+approvals" stat card gets a pulsing (`animate-ping`) dot when the count is
+above zero, and the notification bell's unread indicator uses the same
+animation — a genuinely new/unhandled item should draw the eye, not blend
+into a static number.
+
+**Cron reliability incident — in-process `@Cron` removed entirely**
+(`ec03676`, `f10c48a`, and the external-trigger routes added across the
+day): found by digging into why a new employee (Krishna) never got the
+automated welcome email despite the cron having run since his join —
+Hostinger runs more than one copy of the API process, and `@nestjs/schedule`
+has no cross-instance locking, so an in-process `@Cron` fires once *per
+live copy* at the same instant instead of once. Confirmed live: the
+missing-checkout reminder sent three near-identical notifications per
+person the same night. For new-hire announcements specifically this was
+worse than noisy — two copies could both read `welcomeEmailSentAt: null`
+for the same employee before either wrote it, sending the real welcome
+email/feed post twice. All four `@Cron` decorators (missing-checkout
+reminder, daily-report reminders, new-hire announcements, weekly
+attendance report) and `ScheduleModule.forRoot()` removed outright — the
+**only** trigger now is an external cron-job.org hit to a guarded
+`POST .../cron/...` route per job (`CronAuthGuard`, a shared-secret
+`Authorization: Bearer` header, same convention as the sister CRM app's own
+cron-job.org setup). **As of this write-up, only "missing-checkout
+reminders" and "weekly attendance report" have a real cron-job.org
+schedule configured — "new-hire announcements" and "daily-report
+reminders" (needs a sub-15-minute interval; the account's minimum interval
+still needs confirming) do not yet, and will never fire until that's set
+up.** `CRON_SECRET` env var is set on the API host.
+
+**Real production-blocking bug: `toDateOnly()` used the host's local
+timezone, and the host runs UTC** (`d38166e`): this is the single most
+important fix in this stretch, and was live since this app's original
+launch, not introduced this session. `toDateOnly()` (the function
+`companyToday()` and effectively every date-boundary computation in the
+app is built on) read the API process's own `getFullYear()`/`getMonth()`/
+`getDate()`, on a documented assumption that the host's system timezone
+was set to `Asia/Kolkata` — see the now-corrected warning that used to sit
+right below this file's title. That assumption was false in production.
+Practical effect: for roughly the first 5.5 hours after every real
+midnight IST (00:00–05:30 IST), the server still thought it was the
+*previous* UTC calendar day, so "today's" attendance/leave/daily-report
+logic silently operated against the wrong day — caught live via a report
+of "the Mark Attendance button isn't showing," which turned out to be the
+server correctly-by-its-own-wrong-logic still showing the previous day's
+already-`CHECKED_OUT` state. A punch made in that window could even merge
+into the wrong `AttendanceDay` row (`@@unique([employeeId, date])` merges
+rather than erroring). Fixed by resolving the calendar day through
+`Intl.DateTimeFormat` with an explicit `Asia/Kolkata` timeZone in
+`toDateOnly()` itself — correct regardless of how the host process is
+configured, so this can never regress via a deployment/env misconfiguration
+again. `date-only.spec.ts` pins the exact incident timestamp as a
+regression test. Checked production for the affected window before
+deploying: no punches landed on the wrong day that night, nothing to
+reconcile.
 
 ## Corrections to this file
 
